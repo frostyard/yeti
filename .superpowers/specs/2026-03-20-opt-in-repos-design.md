@@ -44,6 +44,7 @@ In `src/config.ts`:
 - Add `allowedRepos?: string[]` to `ConfigFile`
 - Parse with env var `YETI_ALLOWED_REPOS` (comma-separated), fallback to `file.allowedRepos ?? null`
 - `null` means field is absent → no filtering. `[]` means explicit empty list → only self-repo.
+- Env var semantics: if `YETI_ALLOWED_REPOS` is set (even to empty string), filtering activates. There is no env-var way to express the `null` (no filtering) state — unset the env var to disable filtering.
 - Export as `ALLOWED_REPOS: readonly string[] | null`
 - Include in `reloadConfig()`
 
@@ -61,7 +62,7 @@ All tests target `listRepos()` in `github.test.ts`:
 
 ## Deployment
 
-Add `allowedRepos` to the bootstrap config template in `deploy/install.sh`, defaulting to `[]`.
+Add `allowedRepos` to the bootstrap config template in `deploy/install.sh`, defaulting to `[]`. Fresh installs are conservative — only the self-repo is processed until the admin explicitly opts in other repos.
 
 ## Documentation
 
