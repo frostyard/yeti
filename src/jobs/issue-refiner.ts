@@ -6,7 +6,6 @@ import * as log from "../log.js";
 import * as db from "../db.js";
 import { reportError } from "../error-reporter.js";
 import { processTextForImages } from "../images.js";
-import { extractGameId, REPORT_HEADER as KWYJIBO_REPORT_HEADER } from "./triage-kwyjibo-errors.js";
 import { extractFingerprint, REPORT_HEADER as YETI_ERROR_REPORT_HEADER } from "./triage-yeti-errors.js";
 
 const PLAN_HEADER = "## Implementation Plan";
@@ -387,13 +386,6 @@ export async function run(repos: Repo[]): Promise<void> {
         if (extractFingerprint(issue.title) !== null) {
           const comments = await gh.getIssueComments(repo.fullName, issue.number);
           const hasReport = comments.some((c) => c.body.includes(YETI_ERROR_REPORT_HEADER));
-          if (!hasReport) continue;
-        }
-
-        // Triage-before-refinement: skip game-ID issues without triage report
-        if (issue.body && extractGameId(issue.body) !== null) {
-          const comments = await gh.getIssueComments(repo.fullName, issue.number);
-          const hasReport = comments.some((c) => c.body.includes(KWYJIBO_REPORT_HEADER));
           if (!hasReport) continue;
         }
 

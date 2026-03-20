@@ -42,11 +42,6 @@ const { mockGh } = vi.hoisted(() => ({
 
 vi.mock("../github.js", () => mockGh);
 
-vi.mock("./triage-kwyjibo-errors.js", () => ({
-  extractGameId: vi.fn().mockReturnValue(null),
-  REPORT_HEADER: "## Bug Investigation Report",
-}));
-
 vi.mock("./triage-yeti-errors.js", () => ({
   extractFingerprint: vi.fn().mockReturnValue(null),
   REPORT_HEADER: "## Yeti Error Investigation Report",
@@ -61,7 +56,6 @@ vi.mock("../plan-parser.js", () => ({
 
 import { run, classifyIssue } from "./issue-auditor.js";
 import { reportError } from "../error-reporter.js";
-import { extractGameId } from "./triage-kwyjibo-errors.js";
 import { extractFingerprint } from "./triage-yeti-errors.js";
 import * as log from "../log.js";
 
@@ -80,7 +74,6 @@ describe("issue-auditor", () => {
     mockGh.listMergedPRsForIssue.mockResolvedValue([]);
     mockFindPlanComment.mockReturnValue(null);
     mockParsePlan.mockReturnValue({ preamble: "", phases: [], totalPhases: 0 });
-    vi.mocked(extractGameId).mockReturnValue(null);
     vi.mocked(extractFingerprint).mockReturnValue(null);
   });
 
@@ -108,17 +101,6 @@ describe("issue-auditor", () => {
     const issue = mockIssue({ title: "[yeti-error] something" });
     mockGh.listOpenIssues.mockResolvedValueOnce([issue]);
     vi.mocked(extractFingerprint).mockReturnValue("something");
-    mockGh.getIssueComments.mockResolvedValue([]);
-
-    await run([repo]);
-
-    expect(mockGh.addLabel).not.toHaveBeenCalled();
-  });
-
-  it("skips game-ID issues without investigation report", async () => {
-    const issue = mockIssue({ body: "game id: 12345678-1234-1234-1234-123456789abc" });
-    mockGh.listOpenIssues.mockResolvedValueOnce([issue]);
-    vi.mocked(extractGameId).mockReturnValue("12345678-1234-1234-1234-123456789abc");
     mockGh.getIssueComments.mockResolvedValue([]);
 
     await run([repo]);

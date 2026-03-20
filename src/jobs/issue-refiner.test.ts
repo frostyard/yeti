@@ -62,17 +62,12 @@ vi.mock("../images.js", () => ({
   processTextForImages: mockProcessTextForImages,
 }));
 
-vi.mock("./triage-kwyjibo-errors.js", () => ({
-  extractGameId: vi.fn().mockReturnValue(null),
-}));
-
 vi.mock("./triage-yeti-errors.js", () => ({
   extractFingerprint: vi.fn().mockReturnValue(null),
 }));
 
 import { run } from "./issue-refiner.js";
 import { reportError } from "../error-reporter.js";
-import { extractGameId } from "./triage-kwyjibo-errors.js";
 import { extractFingerprint } from "./triage-yeti-errors.js";
 
 describe("issue-refiner", () => {
@@ -95,7 +90,6 @@ describe("issue-refiner", () => {
     mockGh.editIssueComment.mockResolvedValue(undefined);
     mockGh.getIssueComments.mockResolvedValue([]);
     mockGh.populateQueueCache.mockReturnValue(undefined);
-    vi.mocked(extractGameId).mockReturnValue(null);
     vi.mocked(extractFingerprint).mockReturnValue(null);
   });
 
@@ -283,19 +277,6 @@ describe("issue-refiner", () => {
     );
     const prompt = mockClaude.runClaude.mock.calls[0][0] as string;
     expect(prompt).toContain("(No description provided)");
-  });
-
-  it("does not crash on no-body issue with game-ID title", async () => {
-    const issue = mockIssue({ body: "" });
-    mockGh.listOpenIssues.mockResolvedValueOnce([issue]);
-    // extractGameId should not be called when body is empty
-    vi.mocked(extractGameId).mockReturnValue("some-game-id");
-
-    await run([repo]);
-
-    // extractGameId is not called because the body guard short-circuits
-    expect(extractGameId).not.toHaveBeenCalled();
-    expect(mockClaude.createWorktree).toHaveBeenCalled();
   });
 
   it("ci-unrelated issue — auto-adds Refined label after first plan", async () => {
