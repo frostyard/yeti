@@ -36,7 +36,7 @@ Yeti is a self-hosted GitHub automation daemon that polls repositories on timers
 
 ### Core modules
 
-- **`main.ts`** — Entry point. Initializes SQLite DB, recovers orphaned tasks from prior crashes, registers ~16 jobs with the scheduler, starts the HTTP server, sets up live config reload and graceful shutdown (SIGINT/SIGTERM).
+- **`main.ts`** — Entry point. Initializes SQLite DB, recovers orphaned tasks from prior crashes, registers ~10 jobs with the scheduler, starts the HTTP server, sets up live config reload and graceful shutdown (SIGINT/SIGTERM).
 - **`scheduler.ts`** — Interval/daily-hour job runner with skip-if-busy semantics (no queue pile-up). Supports pause/resume, manual trigger, live interval updates.
 - **`claude.ts`** — Bounded concurrent queue (default 2 workers) for `claude` CLI processes. Also manages git worktree lifecycle (`createWorktree`/`removeWorktree`/`ensureClone`). Each process has a configurable timeout (default 20min) with SIGTERM→SIGKILL escalation.
 - **`github.ts`** — All GitHub interaction via `gh` CLI (never HTTP API directly). Exponential-backoff retry on transient errors, rate-limit circuit breaker (60s cooldown), TTL cache with in-flight dedup.

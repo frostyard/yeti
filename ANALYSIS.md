@@ -9,7 +9,6 @@
 - **TypeScript** (strict, ES2022) on **Node.js 22**
 - **SQLite** (better-sqlite3, WAL mode) for task tracking
 - **Baileys** for WhatsApp Web integration
-- **ImapFlow/Nodemailer** for email monitoring
 - External CLIs: `gh`, `claude`, `git`
 - ~11,800 lines of TypeScript across ~47 source files
 
@@ -23,7 +22,7 @@ GitHub Issues → [issue-refiner] plans → Human adds "Refined" label →
 [review-addresser] addresses feedback → [auto-merger] squash-merges
 ```
 
-### 16 Jobs (14 scheduled, 1 event-driven, 1 startup-only)
+### 10 Jobs (9 scheduled, 1 event-driven)
 
 | Job | Interval | Purpose |
 |-----|----------|---------|
@@ -32,17 +31,11 @@ GitHub Issues → [issue-refiner] plans → Human adds "Refined" label →
 | ci-fixer | 10m | Fix failing CI & merge conflicts |
 | review-addresser | 5m | Push fixes for review comments |
 | auto-merger | 10m | Merge Dependabot/approved/doc PRs |
-| triage-kwyjibo-errors | 10m | Investigate prod bugs |
 | triage-yeti-errors | 10m | Investigate internal errors |
-| idea-suggester | Daily 4AM | Generate feature ideas → Slack |
-| idea-collector | 30m | Poll Slack reactions → GH issues |
 | doc-maintainer | Daily 1AM | Auto-update docs |
 | repo-standards | Daily 2AM | Sync labels |
 | improvement-identifier | Daily 3AM | Find & implement improvements |
 | issue-auditor | Daily 5AM | Audit label state |
-| runner-monitor | 10m | SSH to self-hosted runners |
-| ubuntu-latest-scanner | Daily 6AM | Detect non-self-hosted runners |
-| email-monitor | 5m | Convert emails → GH issues |
 | whatsapp-handler | Event-driven | WhatsApp → GH issues |
 
 ### Key Patterns
@@ -105,11 +98,9 @@ Priority: environment variables > `~/.yeti/config.json` > hardcoded defaults. Li
 |---------|---------|-------------|
 | GitHub API | Issue/PR management | `gh` CLI with retry/circuit-breaker |
 | GitHub Actions | CI/CD | Check runs API, workflow logs |
-| Slack | Notifications & ideas | Incoming webhooks + bot API |
+| Slack | Notifications | Incoming webhooks + bot API |
 | WhatsApp | Real-time issue creation | Baileys (XMPP-based client) |
-| Gmail IMAP | Email monitoring | ImapFlow + nodemailer |
 | OpenAI API | Voice transcription | Whisper for WhatsApp voice notes |
-| Kwyjibo API | Game issue triage | Debug data for prod errors |
 | Claude CLI | AI execution | Spawned subprocess, streamed I/O |
 
 ### Error Handling

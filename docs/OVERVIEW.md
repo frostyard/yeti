@@ -27,8 +27,6 @@ src/
 ├── plan-parser.ts       Parses multi-PR implementation plans into phases
 ├── shutdown.ts          Graceful shutdown flag + ShutdownError class (shared across modules)
 ├── test-helpers.ts      Test factories (mockRepo, mockIssue, mockPR)
-├── resources/
-│   └── marketing.ts     Marketing knowledge resource for idea-suggester prompts
 ├── pages/
 │   ├── dashboard.ts     Main status page HTML builder
 │   ├── queue.ts         Work queue page HTML builder
@@ -42,18 +40,13 @@ src/
     ├── issue-worker.ts         Implements issues labelled "Refined" as PRs
     ├── ci-fixer.ts             Fixes failing CI and resolves merge conflicts
     ├── review-addresser.ts     Addresses review comments on Yeti PRs
-    ├── triage-kwyjibo-errors.ts     Investigates prod bug reports (game-ID issues)
     ├── triage-yeti-errors.ts       Investigates internal Yeti errors ([yeti-error] issues)
     ├── doc-maintainer.ts       Nightly documentation generation/update
     ├── auto-merger.ts          Auto-merges Dependabot and approved Yeti PRs
     ├── repo-standards.ts       Syncs labels and cleans legacy labels
     ├── improvement-identifier.ts  Identifies codebase improvements via Claude, implements as PRs
-    ├── idea-suggester.ts       Suggests new ideas per repo, posts to Slack for reaction-based review
-    ├── idea-collector.ts       Collects Slack reactions on ideas, creates GH issues and collection PRs
     ├── issue-auditor.ts        Daily audit ensuring no issues fall between the cracks
-    ├── whatsapp-handler.ts     Interprets WhatsApp messages via Claude, creates GitHub issues
-    ├── runner-monitor.ts       Monitors self-hosted GH Actions runners via SSH
-    └── ubuntu-latest-scanner.ts  Scans workflows for non-self-hosted runners, creates alert issues
+    └── whatsapp-handler.ts     Interprets WhatsApp messages via Claude, creates GitHub issues
 
 deploy/
 ├── yeti.service           systemd service unit
@@ -68,7 +61,7 @@ deploy/
 
 **`main.ts`** — Wires everything together. Initializes the SQLite database,
 recovers orphaned tasks from a previous crash (cleans up dangling worktrees,
-marks tasks failed), prunes old logs, registers all 15 jobs with the scheduler
+marks tasks failed), prunes old logs, registers all 10 jobs with the scheduler
 (interval jobs staggered by 2 seconds to prevent thundering herd), starts the
 HTTP server, sets up live config reloading (interval and schedule changes
 propagated to the scheduler without restart), initializes the WhatsApp gateway
@@ -138,7 +131,7 @@ parallel; (2) git worktree helpers — `ensureClone`, `createWorktree`,
 use and on subsequent calls runs `git fetch --all --prune` followed by
 `git checkout origin/<defaultBranch> --force` to refresh the main clone's
 working directory — this ensures any code reading directly from the main clone
-(e.g. ubuntu-latest-scanner) sees the latest remote state. The queue rejects
+sees the latest remote state. The queue rejects
 new tasks when the system is shutting down (via `shutdown.ts`, throwing
 `ShutdownError`). Active Claude child processes are tracked for signal-based
 cancellation (`cancelCurrentTask`). Concurrent clones to the same repo are
@@ -229,7 +222,7 @@ file context.
 
 ## Jobs
 
-Fifteen scheduled jobs run on timers or schedules, plus one event-driven handler.
+Ten scheduled jobs run on timers or schedules, plus one event-driven handler.
 See [Jobs](jobs.md) for detailed behavior of each.
 
 | Job | Trigger | Interval | Summary |
@@ -238,18 +231,13 @@ See [Jobs](jobs.md) for detailed behavior of each.
 | `issue-worker` | Label `Refined` | 5 min | Implements the issue, creates a PR |
 | `ci-fixer` | Any open PR with failing checks | 10 min | Resolves merge conflicts, fixes CI failures |
 | `review-addresser` | Yeti PRs with unreacted review comments | 5 min | Fetches unresolved review comments, pushes fix commits, reacts with thumbsup to track addressed comments |
-| `triage-kwyjibo-errors` | Open issues with game-ID in body | 10 min | Fetches debug data from Kwyjibo API, posts investigation report |
 | `triage-yeti-errors` | `[yeti-error]` issues in `SELF_REPO` | 10 min | Investigates internal Yeti errors, deduplicates by fingerprint, posts report |
 | `doc-maintainer` | Daily at 1 AM | Scheduled | Updates `docs/` to reflect current codebase |
 | `auto-merger` | Dependabot PRs + LGTM'd Yeti PRs + doc PRs | 10 min | Squash-merges PRs when conditions are met |
 | `repo-standards` | Daily at 2 AM (+ on startup) | Scheduled | Syncs labels and cleans legacy labels |
 | `improvement-identifier` | Daily at 3 AM | Scheduled | Analyzes codebase via Claude, implements improvements as PRs |
-| `idea-suggester` | Daily at 4 AM | Scheduled | Suggests new ideas per repo, posts to Slack thread for reaction-based review |
-| `idea-collector` | Pending ideas with reactions | 30 min | Polls Slack reactions, creates GH issues for accepted ideas, batches results into collection PR |
 | `issue-auditor` | Daily at 5 AM | Scheduled | Reconciles issue states, manages Ready and In Review labels |
 | `whatsapp-handler` | WhatsApp message | Event-driven | Interprets messages via Claude, creates GitHub issues |
-| `runner-monitor` | Self-hosted GH Actions runners | 10 min | SSHes to runners, checks service health, restarts dead services, cleans disk |
-| `ubuntu-latest-scanner` | Daily at 6 AM | Scheduled | Scans workflow files for non-self-hosted runners, creates alert issues |
 
 ## Key Patterns
 
@@ -269,7 +257,6 @@ Issues:
   Unreacted feedback     →  (refiner refines plan)       →  Ready label re-added
   Open PR + follow-up Q  →  (refiner posts response)     →  👍 reactions added (no label changes)
   Refined label          →  (worker creates PR)          →  Refined removed, Ready removed, In Review added
-  Game-ID in body        →  (triage-kwyjibo-errors)      →  investigation report posted
   [yeti-error] title    →  (triage-yeti-errors)        →  investigation report posted
 
 PRs:
@@ -382,22 +369,6 @@ the PR would stall indefinitely in a loop of filing redundant issues and
 reverting fix attempts. Errors on these PRs are posted as comments directly
 on the PR rather than creating `[yeti-error]` issues.
 
-### CI Infrastructure Monitoring
-
-Two jobs monitor CI infrastructure health:
-
-- **runner-monitor**: SSHes to configured self-hosted GitHub Actions runner
-  hosts on a 10-minute interval. Checks service health (restarts dead `svc.sh`
-  services), detects zombie/stale Runner.Worker processes (kills orphaned
-  processes older than 6 hours only if the runner service is down), and
-  monitors disk usage (cleans temp files when above 90%). Actions taken are
-  reported via Slack. Runner hosts are configured with baked-in defaults
-  (two Hetzner servers, overridable via `runners` in `config.json`).
-- **ubuntu-latest-scanner**: Daily scan of `.github/workflows/*.yml` files in
-  all cloned repos. Detects `runs-on:` values that are not `self-hosted` and
-  creates a deduped alert issue in the offending repo. Skips commented-out
-  lines and handles both direct string and array forms of `runs-on`.
-
 ### Image & Attachment Context
 
 When processing issues or PR reviews, `images.ts` extracts embedded image
@@ -408,19 +379,10 @@ prompt. This is used by issue-refiner, issue-worker, and review-addresser.
 
 ### Documentation as Context
 
-Issue-refiner, issue-worker, improvement-identifier, idea-suggester, and
-triage-yeti-errors prompts instruct Claude to read `docs/OVERVIEW.md`
-(and linked docs) before starting work. This gives Claude accumulated
-architectural context about each repository.
-
-### Prompt Resource Injection
-
-The idea-suggester's `buildPrompt()` accepts a `resources` parameter for
-injecting reference material into prompts. Currently used to provide
-marketing strategy knowledge (from `src/resources/marketing.ts`, sourced
-from the Marketing-for-Founders repository) so Claude considers marketing
-tactics when suggesting ideas. The resource is inlined as a TypeScript string
-constant to avoid runtime file I/O and build-path issues.
+Issue-refiner, issue-worker, improvement-identifier, and triage-yeti-errors
+prompts instruct Claude to read `docs/OVERVIEW.md` (and linked docs) before
+starting work. This gives Claude accumulated architectural context about each
+repository.
 
 ### Branch Naming
 
@@ -428,12 +390,9 @@ constant to avoid runtime file I/O and build-path issues.
 |-----|---------|
 | issue-refiner | `yeti/plan-<N>-<hex4>` |
 | issue-worker | `yeti/issue-<N>-<hex4>` |
-| triage-kwyjibo-errors | `yeti/investigate-<N>-<hex4>` |
 | triage-yeti-errors | `yeti/investigate-error-<N>-<hex4>` |
 | doc-maintainer | `yeti/docs-<YYYYMMDD>-<hex4>` |
 | improvement-identifier | `yeti/improve-<hex4>` |
-| idea-suggester | `yeti/ideas-<hex4>` |
-| idea-collector | `yeti/ideas-collect-<hex4>` |
 | ci-fixer / review-addresser | Uses existing PR branch |
 
 ### PR Title Conventions
@@ -442,7 +401,6 @@ constant to avoid runtime file I/O and build-path issues.
 - `fix(#N): <phase title> (X/Y)` — multi-PR issue phases
 - `refactor: <title>` — automated improvements
 - `docs: update documentation for <repo>` — doc maintenance
-- `[yeti-ideas] Collected idea responses for <repo>` — idea collection
 
 ### Duplicate PR Guards
 
@@ -451,8 +409,6 @@ prevent pile-up when previous PRs haven't been merged:
 
 - **doc-maintainer**: Skips if an open `yeti/docs-*` PR exists
 - **improvement-identifier**: Skips if any open `yeti/improve-*` PR exists
-- **idea-suggester**: Skips if a pending ideas file exists (previous batch
-  still awaiting collection)
 - **ci-fixer**: Uses consolidated per-repo `[ci-unrelated]` issues rather
   than per-fingerprint issues, so all unrelated CI failures for a repo
   are tracked in a single issue
@@ -485,29 +441,20 @@ defaults.
 | Config key | Env variable | Default |
 |---|---|---|
 | `slackWebhook` | `YETI_SLACK_WEBHOOK` | *(empty — must be set)* |
-| `slackBotToken` | `YETI_SLACK_BOT_TOKEN` | *(empty — needed for idea threads)* |
-| `slackIdeasChannel` | `YETI_SLACK_IDEAS_CHANNEL` | *(empty — needed for idea threads)* |
+| `slackBotToken` | `YETI_SLACK_BOT_TOKEN` | *(empty — optional for Slack notifications)* |
 | `githubOwners` | `YETI_GITHUB_OWNERS` | `["frostyard","frostyard"]` |
 | `selfRepo` | `YETI_SELF_REPO` | `frostyard/yeti` |
 | `port` | `PORT` | `9384` |
-| `kwyjiboBaseUrl` | `KWYJIBO_BASE_URL` | `https://kwyjibo.vercel.app` |
-| `kwyjiboApiKey` | `KWYJIBO_AUTOMATION_API_KEY` | *(empty)* |
 | `intervals.issueWorkerMs` | — | `300000` (5 min) |
 | `intervals.issueRefinerMs` | — | `300000` (5 min) |
 | `intervals.ciFixerMs` | — | `600000` (10 min) |
 | `intervals.reviewAddresserMs` | — | `300000` (5 min) |
-| `intervals.triageKwyjiboErrorsMs` | — | `600000` (10 min) |
 | `intervals.autoMergerMs` | — | `600000` (10 min) |
 | `intervals.triageYetiErrorsMs` | — | `600000` (10 min) |
-| `intervals.ideaCollectorMs` | — | `1800000` (30 min) |
-| `intervals.runnerMonitorMs` | — | `600000` (10 min) |
 | `schedules.docMaintainerHour` | — | `1` (1 AM local time) |
 | `schedules.repoStandardsHour` | — | `2` (2 AM local time) |
 | `schedules.improvementIdentifierHour` | — | `3` (3 AM local time) |
-| `schedules.ideaSuggesterHour` | — | `4` (4 AM local time) |
 | `schedules.issueAuditorHour` | — | `5` (5 AM local time) |
-| `schedules.ubuntuLatestScannerHour` | — | `6` (6 AM local time) |
-| `runners` | — | Two default self-hosted runner hosts (see config) |
 | `logRetentionDays` | — | `14` |
 | `logRetentionPerJob` | — | `20` |
 | `whatsappEnabled` | `WHATSAPP_ENABLED` | `false` |
@@ -557,8 +504,6 @@ The WhatsApp gateway requires a one-time QR-code pairing step. See
 ├── env                  Environment overrides (loaded by systemd)
 ├── yeti.db             SQLite database
 ├── whatsapp-auth/       Baileys auth state (created on first QR pairing)
-├── pending-ideas/       Transient state for ideas awaiting Slack reaction collection
-│   └── <owner>-<repo>.json
 ├── repos/
 │   └── <owner>/<repo>/  Main clone per repository
 └── worktrees/

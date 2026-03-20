@@ -8,9 +8,8 @@ Most jobs follow the same lifecycle:
 3. Errors are caught per-item (one failure doesn't block processing of other
    items) and reported via `error-reporter.ts`
 
-Exceptions: `auto-merger`, `repo-standards`, `runner-monitor`, and
-`ubuntu-latest-scanner` do not invoke Claude or create worktrees.
-`whatsapp-handler` is event-driven (not scheduled).
+Exceptions: `auto-merger` and `repo-standards` do not invoke Claude or create
+worktrees. `whatsapp-handler` is event-driven (not scheduled).
 
 ## issue-refiner
 
@@ -209,30 +208,6 @@ Scans all open PRs. For each PR with a `yeti/` branch prefix:
 - Reacts 👍 to each addressed comment (both issue comments and review comments)
 - Adds the `Ready` label (signals "Yeti is done, your turn")
 
-## triage-kwyjibo-errors
-
-**Source**: `src/jobs/triage-kwyjibo-errors.ts`
-**Trigger**: Open issues with a game UUID in the body (content-based discovery)
-**Interval**: 10 minutes
-
-Specialized for the Kwyjibo game application. Discovers issues by scanning
-open issues for game UUIDs — no trigger label required. Skips issues that
-already have a `## Bug Investigation Report` comment.
-
-- Extracts a game UUID from the issue body (tries URL pattern, labelled
-  pattern, then bare UUID)
-- Fetches debug data from the Kwyjibo API:
-  - `GET /api/games/<id>/debug-logs` — public endpoint
-  - `GET /api/games/<id>/turns` — public endpoint
-  - `GET /api/games/<id>/pg-net-errors` — requires `KWYJIBO_AUTOMATION_API_KEY`
-- Debug logs are truncated if they exceed 50KB (keeps first and last 25KB)
-- Reads `docs/debugging-games.md` from the repo if it exists
-- Creates a worktree on branch `yeti/investigate-<N>-<hex4>`
-- Passes all data to Claude for analysis (no code changes, report only)
-- Posts the report as a comment prefixed with `## Bug Investigation Report`
-- Populates queue cache: `needs-triage` for uninvestigated issues,
-  `needs-refinement` for already-investigated issues
-
 ## triage-yeti-errors
 
 **Source**: `src/jobs/triage-yeti-errors.ts`
@@ -393,99 +368,6 @@ documentation suggestions. "No improvements found" is acceptable.
 
 PRs created include a footer: *"Automated improvement by yeti improvement-identifier"*
 
-## idea-suggester
-
-**Source**: `src/jobs/idea-suggester.ts`
-**Trigger**: Daily schedule
-**Schedule**: Runs at hour configured by `schedules.ideaSuggesterHour`
-(default: 4 AM local time)
-**Requires**: `slackBotToken` and `slackIdeasChannel` configured
-
-Only processes repos that Yeti has previously cloned (checks for
-`~/.yeti/repos/<owner>/<repo>`). Workspace presence = opt-in, matching
-the pattern used by doc-maintainer, improvement-identifier, and
-repo-standards.
-
-- Skips if Slack bot is not configured (both `slackBotToken` and
-  `slackIdeasChannel` must be set)
-- Skips if a pending ideas file already exists for this repo (previous
-  batch still awaiting collection)
-- Loads all `.md` files from the repo's `ideas/` directory as dedup
-  context (capped at ~50KB) — includes previously suggested, accepted,
-  and rejected ideas
-- Fetches open issue and PR titles for additional dedup
-- Creates a worktree on branch `yeti/ideas-<hex4>`
-- Injects reference material via the `resources` prompt parameter — currently
-  marketing strategy knowledge from `src/resources/marketing.ts`
-- Instructs Claude to read `docs/OVERVIEW.md` (if it exists), analyze
-  the repo, identify focus areas, and suggest ideas grouped by those areas
-- Claude responds with structured JSON containing `focusAreas` (ordered
-  list of area names) and `ideas` (a map of area name to idea arrays);
-  empty results are acceptable
-- If suggestions exist:
-  - Posts a header message to the configured Slack channel
-  - Posts each idea as a thread reply with title, description, focus area,
-    and reaction instructions (✅ accept | 🤔 potential | ❌ reject)
-  - Writes a pending ideas JSON file to `~/.yeti/pending-ideas/<owner>-<repo>.json`
-    containing thread metadata and message timestamps
-  - A 1-second delay between posts respects Slack rate limits
-
-### History tracking
-
-All files in the `ideas/` directory (including `rejected.md`) are read
-and passed to Claude as context, so it avoids re-suggesting previously
-triaged ideas. No database schema changes needed.
-
-### Reaction workflow
-
-Ideas are reviewed via Slack emoji reactions on each thread reply:
-- ✅ (`white_check_mark`) — Accept: create a GitHub issue, record in ideas directory
-- 🤔 (`thinking_face`) — Potential: record in `ideas/potential.md`
-- ❌ (`x`) — Reject: record in `ideas/rejected.md`
-
-The `idea-collector` job polls for these reactions and processes the results.
-
-## idea-collector
-
-**Source**: `src/jobs/idea-collector.ts`
-**Trigger**: Pending ideas files in `~/.yeti/pending-ideas/`
-**Interval**: 30 minutes (configurable via `intervals.ideaCollectorMs`)
-
-Scans `~/.yeti/pending-ideas/` for JSON files written by idea-suggester.
-For each pending file:
-
-1. **Polls reactions** on each idea message via the Slack API
-2. **Checks completeness** — if all ideas have a disposition reaction, or
-   if 24 hours have elapsed since posting (timeout)
-3. If not ready, skips to next run
-4. If ready, processes the batch:
-
-### Processing
-
-- **Accepted ideas** (✅): Creates a GitHub issue for each, records in
-  the focus-area file (e.g. `ideas/ux.md`) with the issue number
-- **Potential ideas** (🤔, or unreacted after timeout): Records in
-  `ideas/potential.md`
-- **Rejected ideas** (❌): Records title in `ideas/rejected.md`
-
-When multiple reaction types are present on a message, priority applies:
-✅ > ❌ > 🤔
-
-### Output
-
-- Creates a single PR per repo titled
-  `[yeti-ideas] Collected idea responses for <repo>` with a disposition
-  table in the body
-- Posts a summary reply to the original Slack thread
-- Deletes the pending ideas file after successful processing
-
-### Edge cases
-
-- If `getReactions` fails (Slack API error), logs warning and retries next run
-- If `createIssue` fails for one idea, logs error but continues with others
-- If the pending file references a repo not in the current repos list, skips
-- Unreacted ideas after 24h timeout become "potential"
-
 ## issue-auditor
 
 **Source**: `src/jobs/issue-auditor.ts`
@@ -542,69 +424,3 @@ Not a scheduled job — registered as a callback on the WhatsApp client via
 
 See [WhatsApp Setup](whatsapp-setup.md) for configuration and pairing.
 
-## runner-monitor
-
-**Source**: `src/jobs/runner-monitor.ts`
-**Trigger**: Interval-based
-**Interval**: 10 minutes (configurable via `intervals.runnerMonitorMs`)
-
-Monitors self-hosted GitHub Actions runner hosts via SSH. Unlike most jobs,
-this does not operate on GitHub repos — it directly manages infrastructure.
-Runner hosts are configured with baked-in defaults (two Hetzner servers),
-overridable via the `runners` array in `config.json`.
-
-For each configured runner (sequential, with per-host error reporting):
-
-### 1. Service health check
-
-- Runs `sudo ./svc.sh status` in the runner's `actionsDir`
-- If the service is not active: stops it, starts it, and verifies recovery
-- Records action for Slack notification
-
-### 2. Zombie/stale process detection
-
-- Scans for `Runner.Worker` and `Runner.Listener` processes older than 6 hours
-- Only auto-kills if the runner service itself is dead (orphaned workers)
-- Logs a warning for long-running processes when the service is healthy
-  (avoids killing legitimate long CI runs)
-
-### 3. Disk space check
-
-- Reads disk usage via `df`
-- If above 90%: cleans up `/tmp/_github_*` and `_work/_temp/*`
-- Records action for Slack notification
-
-**SSH configuration**: Uses `BatchMode=yes` (fails rather than prompting),
-`ConnectTimeout=10`, `StrictHostKeyChecking=accept-new`, and a 30-second
-command timeout. Supports custom ports and identity files per host.
-
-**Notifications**: A single Slack notification is sent at the end of each run
-if any actions were taken. Healthy hosts are logged at info level only.
-
-Does not create worktrees, PRs, or invoke Claude — purely infrastructure
-monitoring via SSH.
-
-## ubuntu-latest-scanner
-
-**Source**: `src/jobs/ubuntu-latest-scanner.ts`
-**Trigger**: Daily schedule
-**Schedule**: Runs at hour configured by `schedules.ubuntuLatestScannerHour`
-(default: 6 AM local time)
-
-Scans GitHub Actions workflow files in all cloned repos for `runs-on:` values
-that are not `self-hosted`. Creates a deduped alert issue in the offending
-repo.
-
-- Only processes repos that Yeti has previously cloned
-- Reads `.github/workflows/*.yml` and `*.yaml` from the local clone
-- Scans each file line-by-line for `runs-on:` directives
-- Skips commented-out lines (leading `#`)
-- Detects both direct string form (`runs-on: ubuntu-latest`) and array form
-  (`runs-on: [ubuntu-latest]`), matching any non-self-hosted runner
-- Deduplicates by searching for an existing open issue before creating a new one
-- Issue title: `Alert: workflows using non-self-hosted runners`
-- Issue body includes a table of offending workflow files with line numbers
-  and specific `runs-on` values
-
-Does not create worktrees, PRs, or invoke Claude — purely a filesystem scan
-with issue creation via the `gh` CLI.
