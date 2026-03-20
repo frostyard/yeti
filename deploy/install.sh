@@ -77,11 +77,13 @@ if [[ ! -f "$CONFIG_FILE" ]]; then
   "logRetentionPerJob": 20,
   "pausedJobs": [],
   "skippedItems": [],
-  "prioritizedItems": []
+  "prioritizedItems": [],
+  "enabledJobs": []
 }
 CONF
   chmod 600 "$CONFIG_FILE"
   log "Created $CONFIG_FILE — edit it to configure your instance"
+  log "Available jobs for enabledJobs: issue-worker, issue-refiner, ci-fixer, review-addresser, doc-maintainer, auto-merger, repo-standards, improvement-identifier, issue-auditor, triage-yeti-errors"
 fi
 
 # Bootstrap env file if it doesn't exist (never overwrite user values)

@@ -75,6 +75,7 @@ export interface ConfigFile {
   pausedJobs?: string[];
   skippedItems?: Array<{ repo: string; number: number }>;
   prioritizedItems?: Array<{ repo: string; number: number }>;
+  enabledJobs?: string[];
 }
 
 function loadConfig() {
@@ -166,6 +167,7 @@ function loadConfig() {
   const pausedJobs = file.pausedJobs ?? [];
   const skippedItems = file.skippedItems ?? [];
   const prioritizedItems = file.prioritizedItems ?? [];
+  const enabledJobs = file.enabledJobs ?? [];
 
   if (!slackWebhook) {
     console.warn(
@@ -173,7 +175,7 @@ function loadConfig() {
     );
   }
 
-  return { slackWebhook, slackBotToken, slackIdeasChannel, githubOwners, selfRepo, port, intervals, schedules, logRetentionDays, logRetentionPerJob, whatsappEnabled, whatsappAllowedNumbers, whatsappAuthDir, openaiApiKey, discordBotToken, discordChannelId, discordAllowedUsers, authToken, maxClaudeWorkers, claudeTimeoutMs, pausedJobs, skippedItems, prioritizedItems };
+  return { slackWebhook, slackBotToken, slackIdeasChannel, githubOwners, selfRepo, port, intervals, schedules, logRetentionDays, logRetentionPerJob, whatsappEnabled, whatsappAllowedNumbers, whatsappAuthDir, openaiApiKey, discordBotToken, discordChannelId, discordAllowedUsers, authToken, maxClaudeWorkers, claudeTimeoutMs, pausedJobs, skippedItems, prioritizedItems, enabledJobs };
 }
 
 const config = loadConfig();
@@ -198,6 +200,7 @@ export let CLAUDE_TIMEOUT_MS = config.claudeTimeoutMs;
 export let PAUSED_JOBS: readonly string[] = config.pausedJobs;
 export let SKIPPED_ITEMS: ReadonlyArray<{ repo: string; number: number }> = config.skippedItems;
 export let PRIORITIZED_ITEMS: ReadonlyArray<{ repo: string; number: number }> = config.prioritizedItems;
+export let ENABLED_JOBS: readonly string[] = config.enabledJobs;
 // Immutable — requires restart (bot connection)
 export const DISCORD_BOT_TOKEN = config.discordBotToken;
 export const DISCORD_CHANNEL_ID = config.discordChannelId;
@@ -248,6 +251,7 @@ export function reloadConfig(): void {
   PAUSED_JOBS = fresh.pausedJobs;
   SKIPPED_ITEMS = fresh.skippedItems;
   PRIORITIZED_ITEMS = fresh.prioritizedItems;
+  ENABLED_JOBS = fresh.enabledJobs;
   DISCORD_ALLOWED_USERS = fresh.discordAllowedUsers;
   notifyListeners();
 }

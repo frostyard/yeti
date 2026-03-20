@@ -1,7 +1,7 @@
 import { execFile } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
-import { INTERVALS, SCHEDULES, LOG_RETENTION_DAYS, LOG_RETENTION_PER_JOB, WORK_DIR, WHATSAPP_ENABLED, onConfigChange } from "./config.js";
+import { INTERVALS, SCHEDULES, LOG_RETENTION_DAYS, LOG_RETENTION_PER_JOB, WORK_DIR, WHATSAPP_ENABLED, ENABLED_JOBS, onConfigChange } from "./config.js";
 import * as config from "./config.js";
 import * as log from "./log.js";
 import * as gh from "./github.js";
@@ -187,13 +187,34 @@ const jobs: Job[] = [
   },
 ];
 
-const scheduler = startJobs(jobs, config.PAUSED_JOBS);
+// ── Job filtering ──
+
+const knownJobNames = new Set(jobs.map(j => j.name));
+for (const name of ENABLED_JOBS) {
+  if (!knownJobNames.has(name)) {
+    log.warn(`Unknown job in enabledJobs: "${name}" — ignoring`);
+  }
+}
+
+const enabledSet = new Set(ENABLED_JOBS);
+const enabledJobs = jobs.filter(j => enabledSet.has(j.name));
+const skippedJobs = jobs.filter(j => !enabledSet.has(j.name));
+
+if (skippedJobs.length > 0) {
+  log.info(`Skipping disabled jobs: ${skippedJobs.map(j => j.name).join(", ")}`);
+}
+if (enabledJobs.length === 0) {
+  log.warn("No jobs enabled — yeti is running but idle. Set enabledJobs in config.");
+}
+
+const scheduler = startJobs(enabledJobs, config.PAUSED_JOBS);
 const server = createServer(scheduler);
 
 // ── Live config reload ──
 
 let prevIntervals = { ...INTERVALS };
 let prevSchedules = { ...SCHEDULES };
+let prevEnabledJobs = new Set(ENABLED_JOBS);
 
 onConfigChange(() => {
   gh.clearRepoCache();
@@ -229,6 +250,28 @@ onConfigChange(() => {
   for (const name of schedulerPaused) {
     if (!configPaused.has(name)) scheduler.resumeJob(name);
   }
+
+  // Sync enabled jobs
+  const newEnabled = new Set(config.ENABLED_JOBS);
+
+  for (const name of newEnabled) {
+    if (!prevEnabledJobs.has(name)) {
+      const job = jobs.find(j => j.name === name);
+      if (job) {
+        scheduler.addJob(job);
+        log.info(`Enabled job: ${name}`);
+      }
+    }
+  }
+
+  for (const name of prevEnabledJobs) {
+    if (!newEnabled.has(name)) {
+      scheduler.removeJob(name);
+      log.info(`Disabled job: ${name}`);
+    }
+  }
+
+  prevEnabledJobs = newEnabled;
 });
 
 // ── WhatsApp gateway ──
