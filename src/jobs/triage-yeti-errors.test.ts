@@ -60,7 +60,7 @@ import { reportError } from "../error-reporter.js";
 const ERROR_BODY = [
   "**Auto-created by Yeti error reporter**",
   "",
-  "**Fingerprint:** `kwyjibo-bug-investigator:list-issues`",
+  "**Fingerprint:** `ci-fixer:list-issues`",
   "**Context:** test-org/test-repo",
   "**Timestamp:** 2025-01-15T10:30:00.000Z",
   "",
@@ -91,7 +91,7 @@ describe("triage-yeti-errors", () => {
   describe("parseYetiError", () => {
     it("extracts all fields from well-formed body", () => {
       const result = parseYetiError(ERROR_BODY);
-      expect(result.fingerprint).toBe("kwyjibo-bug-investigator:list-issues");
+      expect(result.fingerprint).toBe("ci-fixer:list-issues");
       expect(result.context).toBe("test-org/test-repo");
       expect(result.timestamp).toBe("2025-01-15T10:30:00.000Z");
       expect(result.errorText).toContain("Error: gh issue list failed: 502");
@@ -126,8 +126,8 @@ describe("triage-yeti-errors", () => {
 
   describe("extractFingerprint", () => {
     it("extracts fingerprint from [yeti-error] title", () => {
-      expect(extractFingerprint("[yeti-error] kwyjibo-bug-investigator:list-issues"))
-        .toBe("kwyjibo-bug-investigator:list-issues");
+      expect(extractFingerprint("[yeti-error] ci-fixer:list-issues"))
+        .toBe("ci-fixer:list-issues");
     });
 
     it("returns null for titles without the prefix", () => {
@@ -239,7 +239,7 @@ describe("triage-yeti-errors", () => {
 
       const prompt = buildInvestigationPrompt(issue, details, []);
 
-      expect(prompt).toContain("kwyjibo-bug-investigator:list-issues");
+      expect(prompt).toContain("ci-fixer:list-issues");
       expect(prompt).toContain("Error: gh issue list failed: 502");
       expect(prompt).toContain("docs/OVERVIEW.md");
       expect(prompt).toContain("Run verification commands");
@@ -258,12 +258,12 @@ describe("triage-yeti-errors", () => {
     });
 
     it("maps fingerprint to source file path", () => {
-      const issue = mockIssue({ number: 1, title: "[yeti-error] kwyjibo-bug-investigator:list-issues", body: ERROR_BODY });
+      const issue = mockIssue({ number: 1, title: "[yeti-error] ci-fixer:list-issues", body: ERROR_BODY });
       const details = parseYetiError(ERROR_BODY);
 
       const prompt = buildInvestigationPrompt(issue, details, []);
 
-      expect(prompt).toContain("src/jobs/kwyjibo-bug-investigator.ts");
+      expect(prompt).toContain("src/jobs/ci-fixer.ts");
     });
 
     it("instructs reading docs/OVERVIEW.md and linked docs", () => {

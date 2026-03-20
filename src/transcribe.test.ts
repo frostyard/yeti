@@ -53,17 +53,17 @@ describe("transcribe", () => {
   it("includes prompt in form data when provided", async () => {
     const mockFetch = vi.fn().mockResolvedValue({
       ok: true,
-      json: () => Promise.resolve({ text: "Kwyjibo is broken" }),
+      json: () => Promise.resolve({ text: "Claws is broken" }),
     });
     vi.stubGlobal("fetch", mockFetch);
 
     const audio = Buffer.from("fake-audio-data");
-    const result = await transcribe(audio, "voice-note.ogg", "Kwyjibo, Yeti");
+    const result = await transcribe(audio, "voice-note.ogg", "Claws, Yeti");
 
-    expect(result).toBe("Kwyjibo is broken");
+    expect(result).toBe("Claws is broken");
     const [, opts] = mockFetch.mock.calls[0] as [string, RequestInit];
     const body = opts.body as FormData;
-    expect(body.get("prompt")).toBe("Kwyjibo, Yeti");
+    expect(body.get("prompt")).toBe("Claws, Yeti");
   });
 
   it("throws when no API key is set", async () => {
