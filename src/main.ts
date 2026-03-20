@@ -13,18 +13,12 @@ import * as issueWorker from "./jobs/issue-worker.js";
 import * as issueRefiner from "./jobs/issue-refiner.js";
 import * as ciFixer from "./jobs/ci-fixer.js";
 import * as reviewAddresser from "./jobs/review-addresser.js";
-import * as triageKwyjiboErrors from "./jobs/triage-kwyjibo-errors.js";
 import * as docMaintainer from "./jobs/doc-maintainer.js";
 import * as autoMerger from "./jobs/auto-merger.js";
 import * as repoStandards from "./jobs/repo-standards.js";
 import * as improvementIdentifier from "./jobs/improvement-identifier.js";
-import * as ideaSuggester from "./jobs/idea-suggester.js";
-import * as ideaCollector from "./jobs/idea-collector.js";
 import * as triageYetiErrors from "./jobs/triage-yeti-errors.js";
 import * as issueAuditor from "./jobs/issue-auditor.js";
-import * as runnerMonitor from "./jobs/runner-monitor.js";
-import * as ubuntuLatestScanner from "./jobs/ubuntu-latest-scanner.js";
-import * as emailMonitor from "./jobs/email-monitor.js";
 import * as whatsapp from "./whatsapp.js";
 import { createHandler as createWhatsAppHandler } from "./jobs/whatsapp-handler.js";
 import { setShuttingDown } from "./shutdown.js";
@@ -137,14 +131,6 @@ const jobs: Job[] = [
     },
   },
   {
-    name: "triage-kwyjibo-errors",
-    intervalMs: INTERVALS.triageKwyjiboErrorsMs,
-    async run() {
-      const repos = await gh.listRepos();
-      await triageKwyjiboErrors.run(repos);
-    },
-  },
-  {
     name: "doc-maintainer",
     intervalMs: 0,
     scheduledHour: SCHEDULES.docMaintainerHour,
@@ -181,23 +167,6 @@ const jobs: Job[] = [
     },
   },
   {
-    name: "idea-suggester",
-    intervalMs: 0,
-    scheduledHour: SCHEDULES.ideaSuggesterHour,
-    async run() {
-      const repos = await gh.listRepos();
-      await ideaSuggester.run(repos);
-    },
-  },
-  {
-    name: "idea-collector",
-    intervalMs: INTERVALS.ideaCollectorMs,
-    async run() {
-      const repos = await gh.listRepos();
-      await ideaCollector.run(repos);
-    },
-  },
-  {
     name: "issue-auditor",
     intervalMs: 0,
     scheduledHour: SCHEDULES.issueAuditorHour,
@@ -212,29 +181,6 @@ const jobs: Job[] = [
     async run() {
       const repos = await gh.listRepos();
       await triageYetiErrors.run(repos);
-    },
-  },
-  {
-    name: "runner-monitor",
-    intervalMs: INTERVALS.runnerMonitorMs,
-    async run() {
-      await runnerMonitor.run();
-    },
-  },
-  {
-    name: "ubuntu-latest-scanner",
-    intervalMs: 0,
-    scheduledHour: SCHEDULES.ubuntuLatestScannerHour,
-    async run() {
-      const repos = await gh.listRepos();
-      await ubuntuLatestScanner.run(repos);
-    },
-  },
-  {
-    name: "email-monitor",
-    intervalMs: INTERVALS.emailMonitorMs,
-    async run() {
-      await emailMonitor.run();
     },
   },
 ];
