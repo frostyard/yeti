@@ -50,6 +50,9 @@ export interface ConfigFile {
   whatsappEnabled?: boolean;
   whatsappAllowedNumbers?: string[];
   openaiApiKey?: string;
+  discordBotToken?: string;
+  discordChannelId?: string;
+  discordAllowedUsers?: string[];
   authToken?: string;
   maxClaudeWorkers?: number;
   claudeTimeoutMs?: number;
@@ -132,6 +135,16 @@ function loadConfig() {
   const openaiApiKey =
     process.env["OPENAI_API_KEY"] ?? file.openaiApiKey ?? "";
 
+  const discordBotToken =
+    process.env["YETI_DISCORD_BOT_TOKEN"] ?? file.discordBotToken ?? "";
+
+  const discordChannelId =
+    process.env["YETI_DISCORD_CHANNEL_ID"] ?? file.discordChannelId ?? "";
+
+  const discordAllowedUsers = process.env["YETI_DISCORD_ALLOWED_USERS"]
+    ? process.env["YETI_DISCORD_ALLOWED_USERS"].split(",").map((s) => s.trim()).filter(Boolean)
+    : file.discordAllowedUsers ?? [];
+
   const authToken =
     process.env["YETI_AUTH_TOKEN"] ?? file.authToken ?? "";
 
@@ -160,7 +173,7 @@ function loadConfig() {
     );
   }
 
-  return { slackWebhook, slackBotToken, slackIdeasChannel, githubOwners, selfRepo, port, intervals, schedules, logRetentionDays, logRetentionPerJob, whatsappEnabled, whatsappAllowedNumbers, whatsappAuthDir, openaiApiKey, authToken, maxClaudeWorkers, claudeTimeoutMs, pausedJobs, skippedItems, prioritizedItems };
+  return { slackWebhook, slackBotToken, slackIdeasChannel, githubOwners, selfRepo, port, intervals, schedules, logRetentionDays, logRetentionPerJob, whatsappEnabled, whatsappAllowedNumbers, whatsappAuthDir, openaiApiKey, discordBotToken, discordChannelId, discordAllowedUsers, authToken, maxClaudeWorkers, claudeTimeoutMs, pausedJobs, skippedItems, prioritizedItems };
 }
 
 const config = loadConfig();
@@ -185,6 +198,11 @@ export let CLAUDE_TIMEOUT_MS = config.claudeTimeoutMs;
 export let PAUSED_JOBS: readonly string[] = config.pausedJobs;
 export let SKIPPED_ITEMS: ReadonlyArray<{ repo: string; number: number }> = config.skippedItems;
 export let PRIORITIZED_ITEMS: ReadonlyArray<{ repo: string; number: number }> = config.prioritizedItems;
+// Immutable — requires restart (bot connection)
+export const DISCORD_BOT_TOKEN = config.discordBotToken;
+export const DISCORD_CHANNEL_ID = config.discordChannelId;
+// Live-reloadable
+export let DISCORD_ALLOWED_USERS: readonly string[] = config.discordAllowedUsers;
 
 // ── Change notification system ──
 
@@ -230,10 +248,11 @@ export function reloadConfig(): void {
   PAUSED_JOBS = fresh.pausedJobs;
   SKIPPED_ITEMS = fresh.skippedItems;
   PRIORITIZED_ITEMS = fresh.prioritizedItems;
+  DISCORD_ALLOWED_USERS = fresh.discordAllowedUsers;
   notifyListeners();
 }
 
-const SENSITIVE_KEYS = new Set(["slackWebhook", "slackBotToken", "openaiApiKey", "authToken"]);
+const SENSITIVE_KEYS = new Set(["slackWebhook", "slackBotToken", "openaiApiKey", "authToken", "discordBotToken"]);
 
 function maskValue(value: string): string {
   if (!value) return "Not configured";
