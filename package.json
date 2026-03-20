@@ -13,6 +13,7 @@
   "dependencies": {
     "baileys": "^7.0.0-rc.1",
     "better-sqlite3": "^12",
+    "discord.js": "^14.25.1",
     "qrcode": "^1.5.4",
     "yaml": "^2.8.2"
   },
