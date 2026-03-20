@@ -21,6 +21,8 @@ import * as triageYetiErrors from "./jobs/triage-yeti-errors.js";
 import * as issueAuditor from "./jobs/issue-auditor.js";
 import * as whatsapp from "./whatsapp.js";
 import { createHandler as createWhatsAppHandler } from "./jobs/whatsapp-handler.js";
+import * as discord from "./discord.js";
+import { isDiscordConfigured } from "./discord.js";
 import { setShuttingDown } from "./shutdown.js";
 import { cancelQueuedTasks, cancelCurrentTask } from "./claude.js";
 import { reportError } from "./error-reporter.js";
@@ -240,6 +242,16 @@ if (WHATSAPP_ENABLED) {
   log.info("WhatsApp gateway enabled");
 }
 
+// ── Discord bot ──
+
+if (isDiscordConfigured()) {
+  discord.start(scheduler).catch((err) => {
+    log.error(`[discord] Failed to start: ${err}`);
+    reportError("discord:start", "Discord bot failed to start", err).catch(() => {});
+  });
+  log.info("Discord bot enabled");
+}
+
 let shuttingDown = false;
 
 async function shutdown() {
@@ -252,6 +264,10 @@ async function shutdown() {
 
   if (WHATSAPP_ENABLED) {
     await whatsapp.stop();
+  }
+
+  if (isDiscordConfigured()) {
+    await discord.stop();
   }
 
   cancelQueuedTasks();
