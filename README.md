@@ -119,16 +119,61 @@ These tools must be installed and authenticated on the host — they are **not**
 | `gh` CLI | `gh auth login` — must have access to all repos in `githubOwners` |
 | `claude` CLI | Follow [Claude CLI setup](https://docs.anthropic.com/en/docs/claude-cli) |
 
+## Jobs
+
+Yeti runs 10 jobs on timers. Each job scans all repos under the configured `githubOwners`. Understanding what triggers each job is important — **most jobs do not require labels** and will discover work based on PR/issue state.
+
+### Jobs that require labels
+
+| Job | Trigger | What it does |
+|-----|---------|--------------|
+| **issue-worker** | `Refined` label on issue | Implements the issue in an isolated worktree, submits a PR |
+
+### Jobs that act on existing Yeti work
+
+These only fire when Yeti has already created branches or issues:
+
+| Job | Trigger | What it does |
+|-----|---------|--------------|
+| **review-addresser** | `yeti/` branch PR with review comments | Addresses reviewer feedback on Yeti-created PRs |
+| **triage-yeti-errors** | Issue with `[yeti-error]` in title | Investigates Yeti error issues |
+| **repo-standards** | Periodic (daily) | Syncs label definitions — does not create PRs or issues |
+
+### Jobs that act on ANY matching issue or PR
+
+These scan all open issues/PRs and will do work without any Yeti-specific labels:
+
+| Job | Trigger | What it does |
+|-----|---------|--------------|
+| **issue-refiner** | Any open issue without a plan comment | Generates an implementation plan comment |
+| **ci-fixer** | Any PR with failing checks or merge conflicts | Attempts to fix CI failures and conflicts |
+| **improvement-identifier** | Periodic scan of codebase | Creates PRs for code improvement opportunities |
+| **issue-auditor** | All open issues | Audits and classifies issue state, applies labels |
+| **doc-maintainer** | Code changes since last doc update | Updates documentation (only on already-cloned repos) |
+
+### Auto-merge behaviour
+
+The **auto-merger** job will merge PRs without human approval in these cases:
+
+| PR type | Human review required? | Conditions for auto-merge |
+|---------|----------------------|---------------------------|
+| **Dependabot PRs** | No | All checks passing |
+| **Doc PRs** (`yeti/docs-*`) | No | Only `.md` or `yeti/` files changed; checks pass or no checks configured |
+| **Issue PRs** (`yeti/issue-*`) | **Yes** — requires LGTM | A valid LGTM comment must be posted after the latest commit |
+
+All other PRs (non-Yeti, non-Dependabot) are ignored by auto-merger.
+
 ### Label workflow
 
 Issues move through labels to track state:
 
 ```
-Needs Refinement  →  (refiner runs)  →  Plan Produced
-Refined           →  (worker runs)   →  PR created
+(new issue)       →  (refiner runs)  →  Plan comment posted
+Refined           →  (worker runs)   →  PR created  →  In Review
+In Review + LGTM  →  (merger runs)   →  PR merged
 ```
 
-PRs with failing CI are automatically patched. If the fix doesn't resolve the failure, the ci-fixer will retry on the next cycle.
+The `Priority` label is used for queue ordering across all jobs but does not trigger any job on its own.
 
 ## Project structure
 
@@ -140,9 +185,21 @@ src/
 ├── github.ts            gh CLI wrapper
 ├── claude.ts            Claude CLI runner + git worktree helpers
 ├── log.ts               Timestamped logging
+├── db.ts                SQLite for task tracking and job logs
+├── server.ts            HTTP dashboard
+├── error-reporter.ts    Deduplicating error reporter (Slack + GitHub issues)
+├── discord.ts           Discord bot for notifications and commands
+├── notify.ts            Fan-out notifications (Slack + Discord)
 └── jobs/
-    ├── issue-refiner.ts   Refines issues into implementation plans
-    ├── issue-worker.ts    Implements issues as PRs
-    └── ci-fixer.ts        Fixes failing CI on PRs
+    ├── issue-refiner.ts           Refines issues into implementation plans
+    ├── issue-worker.ts            Implements issues as PRs
+    ├── ci-fixer.ts                Fixes failing CI on PRs
+    ├── auto-merger.ts             Auto-merges approved PRs
+    ├── review-addresser.ts        Addresses PR review comments
+    ├── improvement-identifier.ts  Identifies code improvements
+    ├── issue-auditor.ts           Audits and classifies issues
+    ├── doc-maintainer.ts          Keeps documentation up to date
+    ├── repo-standards.ts          Syncs label definitions
+    └── triage-yeti-errors.ts      Investigates yeti error issues
 ```
 
