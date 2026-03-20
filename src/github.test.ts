@@ -21,6 +21,7 @@ vi.mock("./config.js", () => ({
     "Priority": { color: "d93f0b", description: "High-priority — processed first in all Yeti queues" },
   },
   SELF_REPO: "test-org/test-repo",
+  ALLOWED_REPOS: null as readonly string[] | null,
   SKIPPED_ITEMS: [],
   PRIORITIZED_ITEMS: [],
 }));
@@ -40,6 +41,8 @@ vi.mock("./notify.js", () => ({
 }));
 
 import { notify } from "./notify.js";
+import * as config from "./config.js";
+import * as log from "./log.js";
 
 import {
   listRepos,
@@ -1519,6 +1522,77 @@ describe("repo cache", () => {
 
     await listRepos();
     expect(mockExecFile).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe("allowedRepos filtering", () => {
+  const threeRepos = [
+    { nameWithOwner: "test-owner/repo-a", name: "repo-a", owner: { login: "test-owner" }, defaultBranchRef: { name: "main" }, isArchived: false },
+    { nameWithOwner: "test-owner/repo-b", name: "repo-b", owner: { login: "test-owner" }, defaultBranchRef: { name: "main" }, isArchived: false },
+    { nameWithOwner: "test-org/test-repo", name: "test-repo", owner: { login: "test-org" }, defaultBranchRef: { name: "main" }, isArchived: false },
+  ];
+
+  beforeEach(() => {
+    mockExecFile.mockReset();
+    clearRepoCache();
+    clearRateLimitState();
+    mockExecFile.mockImplementation((_cmd: string, _args: string[], _opts: any, cb: any) => {
+      cb(null, JSON.stringify(threeRepos), "");
+    });
+  });
+
+  it("returns all repos when ALLOWED_REPOS is null (no filtering)", async () => {
+    (config as any).ALLOWED_REPOS = null;
+    const repos = await listRepos();
+    expect(repos).toHaveLength(3);
+  });
+
+  it("filters to allowed repos plus self-repo", async () => {
+    (config as any).ALLOWED_REPOS = ["repo-a"];
+    const repos = await listRepos();
+    expect(repos).toHaveLength(2);
+    expect(repos.map(r => r.name).sort()).toEqual(["repo-a", "test-repo"]);
+  });
+
+  it("empty allow-list returns only self-repo", async () => {
+    (config as any).ALLOWED_REPOS = [];
+    const repos = await listRepos();
+    expect(repos).toHaveLength(1);
+    expect(repos[0].name).toBe("test-repo");
+  });
+
+  it("self-repo included even when not in allow-list", async () => {
+    (config as any).ALLOWED_REPOS = ["repo-b"];
+    const repos = await listRepos();
+    expect(repos.map(r => r.name).sort()).toEqual(["repo-b", "test-repo"]);
+  });
+
+  it("matches repo names case-insensitively", async () => {
+    (config as any).ALLOWED_REPOS = ["Repo-A"];
+    const repos = await listRepos();
+    expect(repos).toHaveLength(2);
+    expect(repos.map(r => r.name).sort()).toEqual(["repo-a", "test-repo"]);
+  });
+
+  it("warns about allow-list entries that don't match any repo", async () => {
+    (config as any).ALLOWED_REPOS = ["nonexistent-repo"];
+    await listRepos();
+    expect(log.warn).toHaveBeenCalledWith(
+      expect.stringContaining('"nonexistent-repo" does not match any discovered repository'),
+    );
+  });
+
+  it("applies new filter after cache clear", async () => {
+    (config as any).ALLOWED_REPOS = ["repo-a"];
+    const first = await listRepos();
+    expect(first).toHaveLength(2);
+
+    (config as any).ALLOWED_REPOS = ["repo-b"];
+    clearRepoCache();
+
+    const second = await listRepos();
+    expect(second).toHaveLength(2);
+    expect(second.map(r => r.name).sort()).toEqual(["repo-b", "test-repo"]);
   });
 });
 
