@@ -40,15 +40,6 @@ export interface Repo {
   defaultBranch: string;
 }
 
-export interface RunnerHost {
-  name?: string;
-  host: string;
-  user?: string;
-  port?: number;
-  identityFile?: string;
-  actionsDir: string;
-}
-
 export interface ConfigFile {
   slackWebhook?: string;
   slackBotToken?: string;
@@ -56,39 +47,25 @@ export interface ConfigFile {
   githubOwners?: string[];
   selfRepo?: string;
   port?: number;
-  kwyjiboBaseUrl?: string;
-  kwyjiboApiKey?: string;
   whatsappEnabled?: boolean;
   whatsappAllowedNumbers?: string[];
   openaiApiKey?: string;
   authToken?: string;
   maxClaudeWorkers?: number;
   claudeTimeoutMs?: number;
-  runners?: RunnerHost[];
-  emailEnabled?: boolean;
-  emailUser?: string;
-  emailAppPassword?: string;
-  emailRecipient?: string;
-  emailVegBoxSender?: string;
   intervals?: {
     issueWorkerMs?: number;
     issueRefinerMs?: number;
     ciFixerMs?: number;
     reviewAddresserMs?: number;
-    triageKwyjiboErrorsMs?: number;
     autoMergerMs?: number;
     triageYetiErrorsMs?: number;
-    ideaCollectorMs?: number;
-    runnerMonitorMs?: number;
-    emailMonitorMs?: number;
   };
   schedules?: {
     docMaintainerHour?: number;
     repoStandardsHour?: number;
     improvementIdentifierHour?: number;
-    ideaSuggesterHour?: number;
     issueAuditorHour?: number;
-    ubuntuLatestScannerHour?: number;
   };
   logRetentionDays?: number;
   logRetentionPerJob?: number;
@@ -96,17 +73,6 @@ export interface ConfigFile {
   skippedItems?: Array<{ repo: string; number: number }>;
   prioritizedItems?: Array<{ repo: string; number: number }>;
 }
-
-const DEFAULT_RUNNERS: RunnerHost[] = [
-  {
-    name: "runner-1",
-    host: "0.0.0.0",
-    user: "runner",
-    port: 22,
-    identityFile: "~/.ssh/id_ed25519",
-    actionsDir: "/home/runner/actions-runner",
-  },
-];
 
 function loadConfig() {
   let file: ConfigFile = {};
@@ -138,49 +104,20 @@ function loadConfig() {
     10,
   );
 
-  const kwyjiboBaseUrl =
-    process.env["KWYJIBO_BASE_URL"] ?? file.kwyjiboBaseUrl ?? "https://kwyjibo.vercel.app";
-
-  const kwyjiboApiKey =
-    process.env["KWYJIBO_AUTOMATION_API_KEY"] ?? file.kwyjiboApiKey ?? "";
-
-  const runners = file.runners ?? DEFAULT_RUNNERS;
-
-  const emailEnabled =
-    process.env["YETI_EMAIL_ENABLED"] === "true" || file.emailEnabled === true;
-
-  const emailUser =
-    process.env["YETI_EMAIL_USER"] ?? file.emailUser ?? "";
-
-  const emailAppPassword =
-    process.env["YETI_EMAIL_APP_PASSWORD"] ?? file.emailAppPassword ?? "";
-
-  const emailRecipient =
-    process.env["YETI_EMAIL_RECIPIENT"] ?? file.emailRecipient ?? "";
-
-  const emailVegBoxSender =
-    file.emailVegBoxSender ?? "";
-
   const intervals = {
     issueWorkerMs: file.intervals?.issueWorkerMs ?? 5 * 60 * 1000,
     issueRefinerMs: file.intervals?.issueRefinerMs ?? 5 * 60 * 1000,
     ciFixerMs: file.intervals?.ciFixerMs ?? 10 * 60 * 1000,
     reviewAddresserMs: file.intervals?.reviewAddresserMs ?? 5 * 60 * 1000,
-    triageKwyjiboErrorsMs: file.intervals?.triageKwyjiboErrorsMs ?? 10 * 60 * 1000,
     autoMergerMs: file.intervals?.autoMergerMs ?? 10 * 60 * 1000,
     triageYetiErrorsMs: file.intervals?.triageYetiErrorsMs ?? 10 * 60 * 1000,
-    ideaCollectorMs: file.intervals?.ideaCollectorMs ?? 30 * 60 * 1000,
-    runnerMonitorMs: file.intervals?.runnerMonitorMs ?? 10 * 60 * 1000,
-    emailMonitorMs: file.intervals?.emailMonitorMs ?? 5 * 60 * 1000,
   };
 
   const schedules = {
     docMaintainerHour: file.schedules?.docMaintainerHour ?? 1, // 1 AM local time
     repoStandardsHour: file.schedules?.repoStandardsHour ?? 2, // 2 AM local time
     improvementIdentifierHour: file.schedules?.improvementIdentifierHour ?? 3, // 3 AM local time
-    ideaSuggesterHour: file.schedules?.ideaSuggesterHour ?? 4, // 4 AM local time
     issueAuditorHour: file.schedules?.issueAuditorHour ?? 5, // 5 AM local time
-    ubuntuLatestScannerHour: file.schedules?.ubuntuLatestScannerHour ?? 6, // 6 AM local time
   };
 
   const whatsappEnabled =
@@ -223,7 +160,7 @@ function loadConfig() {
     );
   }
 
-  return { slackWebhook, slackBotToken, slackIdeasChannel, githubOwners, selfRepo, port, kwyjiboBaseUrl, kwyjiboApiKey, runners, intervals, schedules, logRetentionDays, logRetentionPerJob, whatsappEnabled, whatsappAllowedNumbers, whatsappAuthDir, openaiApiKey, authToken, maxClaudeWorkers, claudeTimeoutMs, pausedJobs, skippedItems, prioritizedItems, emailEnabled, emailUser, emailAppPassword, emailRecipient, emailVegBoxSender };
+  return { slackWebhook, slackBotToken, slackIdeasChannel, githubOwners, selfRepo, port, intervals, schedules, logRetentionDays, logRetentionPerJob, whatsappEnabled, whatsappAllowedNumbers, whatsappAuthDir, openaiApiKey, authToken, maxClaudeWorkers, claudeTimeoutMs, pausedJobs, skippedItems, prioritizedItems };
 }
 
 const config = loadConfig();
@@ -234,9 +171,6 @@ export let SLACK_IDEAS_CHANNEL = config.slackIdeasChannel;
 export let GITHUB_OWNERS: readonly string[] = config.githubOwners;
 export let SELF_REPO = config.selfRepo;
 export const SERVER_PORT = config.port; // immutable — requires restart
-export let KWYJIBO_BASE_URL = config.kwyjiboBaseUrl;
-export let KWYJIBO_API_KEY = config.kwyjiboApiKey;
-export let RUNNER_HOSTS: readonly RunnerHost[] = config.runners;
 export let INTERVALS = config.intervals;
 export let SCHEDULES = config.schedules;
 export let LOG_RETENTION_DAYS = config.logRetentionDays;
@@ -251,11 +185,6 @@ export let CLAUDE_TIMEOUT_MS = config.claudeTimeoutMs;
 export let PAUSED_JOBS: readonly string[] = config.pausedJobs;
 export let SKIPPED_ITEMS: ReadonlyArray<{ repo: string; number: number }> = config.skippedItems;
 export let PRIORITIZED_ITEMS: ReadonlyArray<{ repo: string; number: number }> = config.prioritizedItems;
-export const EMAIL_ENABLED = config.emailEnabled; // immutable — requires restart
-export let EMAIL_USER = config.emailUser;
-export let EMAIL_APP_PASSWORD = config.emailAppPassword;
-export let EMAIL_RECIPIENT = config.emailRecipient;
-export let EMAIL_VEG_BOX_SENDER = config.emailVegBoxSender;
 
 // ── Change notification system ──
 
@@ -289,9 +218,6 @@ export function reloadConfig(): void {
   SLACK_IDEAS_CHANNEL = fresh.slackIdeasChannel;
   GITHUB_OWNERS = fresh.githubOwners;
   SELF_REPO = fresh.selfRepo;
-  KWYJIBO_BASE_URL = fresh.kwyjiboBaseUrl;
-  KWYJIBO_API_KEY = fresh.kwyjiboApiKey;
-  RUNNER_HOSTS = fresh.runners;
   INTERVALS = fresh.intervals;
   SCHEDULES = fresh.schedules;
   LOG_RETENTION_DAYS = fresh.logRetentionDays;
@@ -304,14 +230,10 @@ export function reloadConfig(): void {
   PAUSED_JOBS = fresh.pausedJobs;
   SKIPPED_ITEMS = fresh.skippedItems;
   PRIORITIZED_ITEMS = fresh.prioritizedItems;
-  EMAIL_USER = fresh.emailUser;
-  EMAIL_APP_PASSWORD = fresh.emailAppPassword;
-  EMAIL_RECIPIENT = fresh.emailRecipient;
-  EMAIL_VEG_BOX_SENDER = fresh.emailVegBoxSender;
   notifyListeners();
 }
 
-const SENSITIVE_KEYS = new Set(["slackWebhook", "slackBotToken", "kwyjiboApiKey", "openaiApiKey", "authToken", "emailAppPassword"]);
+const SENSITIVE_KEYS = new Set(["slackWebhook", "slackBotToken", "openaiApiKey", "authToken"]);
 
 function maskValue(value: string): string {
   if (!value) return "Not configured";
