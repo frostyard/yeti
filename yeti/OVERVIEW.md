@@ -76,8 +76,10 @@ close the database.
 `ready`, `priority`, `inReview`), `LABEL_SPECS` (synced to all repos by
 repo-standards — includes colors and descriptions for all four labels),
 `LEGACY_LABELS` (set of old labels cleaned up as stale, including
-`yeti-mergeable` and `yeti-error`), `INTERVALS`, `SCHEDULES`, and
-connection strings. `WORK_DIR` is always `~/.yeti`.
+`yeti-mergeable` and `yeti-error`), `INTERVALS`, `SCHEDULES`, `ENABLED_JOBS`,
+and connection strings. `WORK_DIR` is always `~/.yeti`. Jobs must be listed in
+`ENABLED_JOBS` (the `enabledJobs` config field) to be registered with the
+scheduler — an empty or missing `enabledJobs` means no jobs start.
 
 **`scheduler.ts`** — Manages job lifecycle. Each job runs immediately on
 startup, then repeats on its interval. If a prior run is still active, the
@@ -473,8 +475,20 @@ defaults.
 | `claudeTimeoutMs` | `YETI_CLAUDE_TIMEOUT_MS` | `1200000` (20 min, minimum 60s) |
 | `authToken` | `YETI_AUTH_TOKEN` | *(empty — auth disabled)* |
 | `pausedJobs` | — | `[]` (job names to pause on startup) |
+| `enabledJobs` | — | `[]` (job names to register with the scheduler; empty = no jobs run) |
 | `skippedItems` | — | `[]` (array of `{repo, number}` excluded from processing) |
 | `prioritizedItems` | — | `[]` (array of `{repo, number}` processed first) |
+
+### enabledJobs
+
+Controls which jobs are registered with the scheduler at startup.
+
+- **Field**: `enabledJobs` (string array)
+- **Default**: `[]` — no jobs run if the field is absent or empty
+- **Live-reloadable**: yes (changes take effect without restart)
+- **Available values**: `issue-worker`, `issue-refiner`, `ci-fixer`, `review-addresser`, `doc-maintainer`, `auto-merger`, `repo-standards`, `improvement-identifier`, `issue-auditor`, `triage-yeti-errors`
+
+**Migration note**: existing configs without `enabledJobs` will have no jobs start after upgrading. Add the desired job names to `enabledJobs` in `~/.yeti/config.json` before upgrading.
 
 Config changes made via the web UI (`POST /config`) take effect immediately
 at runtime — no restart required. The config module uses ESM live bindings
