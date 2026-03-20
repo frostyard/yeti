@@ -95,9 +95,6 @@ export const YETI_COMMENT_MARKER = "<!-- yeti-automated -->";
 /** Visible header prepended to every comment Yeti posts so conversations read naturally. */
 export const YETI_VISIBLE_HEADER = "*— Automated by Yeti —*";
 
-/** Previous visible header — kept for backward compatibility with old comments. */
-const LEGACY_VISIBLE_HEADER = "*— Automated by YETI —*";
-
 /** Check whether a comment body was posted by Yeti. */
 export function isYetiComment(body: string): boolean {
   return body.includes(YETI_COMMENT_MARKER);
@@ -105,7 +102,7 @@ export function isYetiComment(body: string): boolean {
 
 /** Strip the hidden Yeti marker and visible header from a comment body. */
 export function stripYetiMarker(body: string): string {
-  return body.replace(YETI_COMMENT_MARKER, "").replace(YETI_VISIBLE_HEADER, "").replace(LEGACY_VISIBLE_HEADER, "").trim();
+  return body.replace(YETI_COMMENT_MARKER, "").replace(YETI_VISIBLE_HEADER, "").trim();
 }
 
 // ── Repo cache (shared across all jobs) ──
