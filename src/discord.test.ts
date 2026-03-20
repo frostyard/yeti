@@ -29,6 +29,7 @@ const { mockConfig, mockClient, mockEventHandlers, mockChannel } = vi.hoisted(()
       DISCORD_BOT_TOKEN: "",
       DISCORD_CHANNEL_ID: "",
       DISCORD_ALLOWED_USERS: [] as string[],
+      GITHUB_OWNERS: ["frostyard"],
     },
     mockClient,
     mockEventHandlers,
@@ -55,9 +56,25 @@ vi.mock("./log.js", () => ({
 
 vi.mock("./claude.js", () => ({
   queueStatus: vi.fn().mockReturnValue({ pending: 2, active: 1 }),
+  enqueue: vi.fn((fn: () => Promise<string>) => fn()),
+  runClaude: vi.fn(() => Promise.resolve("This issue is about fixing a bug.")),
+}));
+
+vi.mock("./github.js", () => ({
+  listRepos: vi.fn(() => Promise.resolve([
+    { owner: "frostyard", name: "snosi", fullName: "frostyard/snosi", defaultBranch: "main" },
+  ])),
+  createIssue: vi.fn(() => Promise.resolve(42)),
+  addLabel: vi.fn(() => Promise.resolve()),
+  getIssueBody: vi.fn(() => Promise.resolve("Issue body text")),
+  getIssueComments: vi.fn(() => Promise.resolve([
+    { id: 1, body: "A comment", login: "user1" },
+  ])),
 }));
 
 import { isDiscordConfigured, discordStatus, notify, start, stop } from "./discord.js";
+import * as gh from "./github.js";
+import { runClaude } from "./claude.js";
 import type { Scheduler } from "./scheduler.js";
 
 function makeMessage(overrides: Partial<{
@@ -330,6 +347,128 @@ describe("start and commands", () => {
       expect(msg.reply).toHaveBeenCalled();
     });
     expect(msg.reply).toHaveBeenCalledWith(expect.stringContaining("Unknown command: **foobar**"));
+  });
+
+  // ── issue command ──
+
+  it("!yeti issue creates issue with valid repo and title", async () => {
+    const scheduler = makeScheduler();
+    await start(scheduler);
+    const msg = makeMessage({ content: "!yeti issue snosi Fix bug" });
+    mockEventHandlers["messageCreate"](msg);
+    await vi.waitFor(() => {
+      expect(msg.reply).toHaveBeenCalled();
+    });
+    expect(gh.createIssue).toHaveBeenCalledWith("frostyard/snosi", "Fix bug", "", []);
+    expect(msg.reply).toHaveBeenCalledWith("Created **frostyard/snosi#42**: Fix bug");
+  });
+
+  it("!yeti issue shows usage when missing repo", async () => {
+    const scheduler = makeScheduler();
+    await start(scheduler);
+    const msg = makeMessage({ content: "!yeti issue" });
+    mockEventHandlers["messageCreate"](msg);
+    await vi.waitFor(() => {
+      expect(msg.reply).toHaveBeenCalled();
+    });
+    expect(msg.reply).toHaveBeenCalledWith("Usage: `!yeti issue <repo> <title>`");
+  });
+
+  it("!yeti issue shows usage when missing title", async () => {
+    const scheduler = makeScheduler();
+    await start(scheduler);
+    const msg = makeMessage({ content: "!yeti issue snosi" });
+    mockEventHandlers["messageCreate"](msg);
+    await vi.waitFor(() => {
+      expect(msg.reply).toHaveBeenCalled();
+    });
+    expect(msg.reply).toHaveBeenCalledWith("Usage: `!yeti issue <repo> <title>`");
+  });
+
+  it("!yeti issue shows unknown repo for bad repo", async () => {
+    const scheduler = makeScheduler();
+    await start(scheduler);
+    const msg = makeMessage({ content: "!yeti issue badrepo Fix bug" });
+    mockEventHandlers["messageCreate"](msg);
+    await vi.waitFor(() => {
+      expect(msg.reply).toHaveBeenCalled();
+    });
+    expect(msg.reply).toHaveBeenCalledWith("Unknown repo: **badrepo**");
+  });
+
+  // ── look command ──
+
+  it("!yeti look fetches issue data and returns summary", async () => {
+    const scheduler = makeScheduler();
+    await start(scheduler);
+    const msg = makeMessage({ content: "!yeti look snosi#10" });
+    mockEventHandlers["messageCreate"](msg);
+    await vi.waitFor(() => {
+      expect(msg.reply).toHaveBeenCalledTimes(2);
+    });
+    expect(gh.getIssueBody).toHaveBeenCalledWith("frostyard/snosi", 10);
+    expect(gh.getIssueComments).toHaveBeenCalledWith("frostyard/snosi", 10);
+    expect(runClaude).toHaveBeenCalled();
+    expect(msg.reply).toHaveBeenCalledWith("Looking into **frostyard/snosi#10**...");
+    expect(msg.reply).toHaveBeenCalledWith("This issue is about fixing a bug.");
+  });
+
+  it("!yeti look shows usage for invalid format", async () => {
+    const scheduler = makeScheduler();
+    await start(scheduler);
+    const msg = makeMessage({ content: "!yeti look snosi10" });
+    mockEventHandlers["messageCreate"](msg);
+    await vi.waitFor(() => {
+      expect(msg.reply).toHaveBeenCalled();
+    });
+    expect(msg.reply).toHaveBeenCalledWith("Usage: `!yeti look <repo>#<number>`");
+  });
+
+  it("!yeti look shows unknown repo for bad repo", async () => {
+    const scheduler = makeScheduler();
+    await start(scheduler);
+    const msg = makeMessage({ content: "!yeti look badrepo#5" });
+    mockEventHandlers["messageCreate"](msg);
+    await vi.waitFor(() => {
+      expect(msg.reply).toHaveBeenCalled();
+    });
+    expect(msg.reply).toHaveBeenCalledWith("Unknown repo: **badrepo**");
+  });
+
+  // ── assign command ──
+
+  it("!yeti assign labels issue as Refined", async () => {
+    const scheduler = makeScheduler();
+    await start(scheduler);
+    const msg = makeMessage({ content: "!yeti assign snosi#7" });
+    mockEventHandlers["messageCreate"](msg);
+    await vi.waitFor(() => {
+      expect(msg.reply).toHaveBeenCalled();
+    });
+    expect(gh.addLabel).toHaveBeenCalledWith("frostyard/snosi", 7, "Refined");
+    expect(msg.reply).toHaveBeenCalledWith("Labeled **frostyard/snosi#7** as Refined");
+  });
+
+  it("!yeti assign shows usage for invalid format", async () => {
+    const scheduler = makeScheduler();
+    await start(scheduler);
+    const msg = makeMessage({ content: "!yeti assign snosi" });
+    mockEventHandlers["messageCreate"](msg);
+    await vi.waitFor(() => {
+      expect(msg.reply).toHaveBeenCalled();
+    });
+    expect(msg.reply).toHaveBeenCalledWith("Usage: `!yeti assign <repo>#<number>`");
+  });
+
+  it("!yeti assign shows unknown repo for bad repo", async () => {
+    const scheduler = makeScheduler();
+    await start(scheduler);
+    const msg = makeMessage({ content: "!yeti assign badrepo#3" });
+    mockEventHandlers["messageCreate"](msg);
+    await vi.waitFor(() => {
+      expect(msg.reply).toHaveBeenCalled();
+    });
+    expect(msg.reply).toHaveBeenCalledWith("Unknown repo: **badrepo**");
   });
 
   it("stop destroys client", async () => {
