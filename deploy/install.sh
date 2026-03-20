@@ -90,10 +90,20 @@ if [[ ! -f "$ENV_FILE" ]]; then
   mkdir -p "$CONFIG_DIR"
   cat > "$ENV_FILE" << 'CONF'
 # Environment variables loaded by the yeti systemd unit.
-# Uncomment and set values as needed.
+# Uncomment and set values as needed. These override config.json.
+
+# Slack
 # YETI_SLACK_WEBHOOK=https://hooks.slack.com/services/T.../B.../xxx
-# KWYJIBO_BASE_URL=https://kwyjibo.vercel.app
-# KWYJIBO_AUTOMATION_API_KEY=
+# YETI_SLACK_BOT_TOKEN=xoxb-...
+
+# Discord
+# YETI_DISCORD_BOT_TOKEN=
+
+# OpenAI (used for WhatsApp voice transcription)
+# OPENAI_API_KEY=
+
+# Dashboard auth
+# YETI_AUTH_TOKEN=
 CONF
   chmod 600 "$ENV_FILE"
   log "Created $ENV_FILE — edit it to set environment overrides"
