@@ -77,7 +77,8 @@ if [[ ! -f "$CONFIG_FILE" ]]; then
   "logRetentionPerJob": 20,
   "pausedJobs": [],
   "skippedItems": [],
-  "prioritizedItems": []
+  "prioritizedItems": [],
+  "allowedRepos": []
 }
 CONF
   chmod 600 "$CONFIG_FILE"
