@@ -1,5 +1,5 @@
 import type { Theme } from "./layout.js";
-import { PAGE_CSS, escapeHtml, repoShortName, itemLogsUrl, formatUptime, formatRelativeTime, formatCountdown, htmlOpenTag, buildNav, THEME_SCRIPT, slackLabel, slackBotLabel, whatsappLabel, emailLabel } from "./layout.js";
+import { PAGE_CSS, escapeHtml, repoShortName, itemLogsUrl, formatUptime, formatRelativeTime, formatCountdown, htmlOpenTag, buildNav, THEME_SCRIPT, slackLabel, slackBotLabel, whatsappLabel, emailLabel, discordLabel } from "./layout.js";
 import { msUntilHour } from "../scheduler.js";
 
 interface RunningTaskInfo {
@@ -18,6 +18,7 @@ export function buildStatusPage(
   slackBot: { configured: boolean },
   wa: { configured: boolean; connected: boolean; pairingRequired: boolean },
   email: { configured: boolean; lastCheck: string | null; lastError: string | null },
+  discord: { configured: boolean; connected: boolean; lastResult: "ok" | "error" | null },
   runningTasks: RunningTaskInfo[],
   latestRuns: Map<string, { runId: string; status: string; startedAt: string; completedAt: string | null }>,
   theme: Theme,
@@ -29,6 +30,7 @@ export function buildStatusPage(
   const sbl = slackBotLabel(slackBot);
   const wl = whatsappLabel(wa);
   const el = emailLabel(email);
+  const dc = discordLabel(discord);
 
   // Build a map of job name → running task detail for the jobs table
   const taskByJob = new Map<string, RunningTaskInfo>();
@@ -146,6 +148,8 @@ ${htmlOpenTag(theme)}
     <dd id="wa-status" class="${wl.cls}">${wl.link ? `<a href="/whatsapp">${wl.text}</a>` : wl.text}</dd>
     <dt>Email</dt>
     <dd id="email-status" class="${el.cls}">${el.text}</dd>
+    <dt>Discord</dt>
+    <dd id="discord-status" class="${dc.cls}">${dc.text}</dd>
   </dl>
   <h2>Jobs</h2>
   <table>
@@ -275,6 +279,14 @@ ${htmlOpenTag(theme)}
             else if (data.email.lastError) { em.textContent = 'Error'; em.className = 'slack-error'; }
             else if (data.email.lastCheck) { em.textContent = 'Connected'; em.className = 'running'; }
             else { em.textContent = 'Configured (untested)'; em.className = 'slack-untested'; }
+          }
+          var dc = document.getElementById('discord-status');
+          if (data.discord) {
+            if (!data.discord.configured) { dc.textContent = 'Not configured'; dc.className = 'idle'; }
+            else if (!data.discord.connected) { dc.textContent = 'Disconnected'; dc.className = 'slack-error'; }
+            else if (data.discord.lastResult === 'error') { dc.textContent = 'Error'; dc.className = 'slack-error'; }
+            else if (data.discord.lastResult === 'ok') { dc.textContent = 'Connected'; dc.className = 'running'; }
+            else { dc.textContent = 'Connected (untested)'; dc.className = 'slack-untested'; }
           }
           var pausedSet = {};
           if (data.pausedJobs) data.pausedJobs.forEach(function(n) { pausedSet[n] = true; });

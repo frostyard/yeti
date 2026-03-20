@@ -10,6 +10,7 @@ import type { Scheduler } from "./scheduler.js";
 import { msUntilHour } from "./scheduler.js";
 import { slackStatus, isSlackBotConfigured } from "./slack.js";
 import { whatsappStatus, isPairing, startPairing, stopPairing, cancelPairing, unpair } from "./whatsapp.js";
+import { discordStatus } from "./discord.js";
 import { VERSION } from "./version.js";
 import { buildStatusPage } from "./pages/dashboard.js";
 import { buildQueuePage } from "./pages/queue.js";
@@ -327,6 +328,11 @@ async function handleRequest(req: http.IncomingMessage, res: http.ServerResponse
       updates.whatsappAllowedNumbers = params["whatsappAllowedNumbers"].split(",").map(s => s.trim()).filter(Boolean);
     }
     if (params["openaiApiKey"] !== undefined) updates.openaiApiKey = params["openaiApiKey"];
+    if (params["discordBotToken"] !== undefined) updates.discordBotToken = params["discordBotToken"];
+    if (params["discordChannelId"] !== undefined) updates.discordChannelId = params["discordChannelId"];
+    if (params["discordAllowedUsers"] !== undefined) {
+      updates.discordAllowedUsers = params["discordAllowedUsers"].split(",").map(s => s.trim()).filter(Boolean);
+    }
     // Intervals
     const intervalUpdates: Record<string, number> = {};
     for (const [key, value] of Object.entries(params)) {
@@ -455,6 +461,7 @@ async function handleRequest(req: http.IncomingMessage, res: http.ServerResponse
         slackBot: { configured: isSlackBotConfigured() },
         whatsapp: WHATSAPP_ENABLED ? whatsappStatus() : { configured: false, connected: false, pairingRequired: false },
         email: { configured: false, lastCheck: null, lastError: null },
+        discord: discordStatus(),
       }),
     );
     return;
@@ -485,6 +492,7 @@ async function handleRequest(req: http.IncomingMessage, res: http.ServerResponse
       { configured: isSlackBotConfigured() },
       WHATSAPP_ENABLED ? whatsappStatus() : { configured: false, connected: false, pairingRequired: false },
       { configured: false, lastCheck: null, lastError: null },
+      discordStatus(),
       runningTasks,
       latestRuns,
       theme,

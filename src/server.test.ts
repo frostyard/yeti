@@ -56,6 +56,10 @@ vi.mock("./whatsapp.js", () => ({
   whatsappStatus: vi.fn().mockReturnValue({ configured: false, connected: false }),
 }));
 
+vi.mock("./discord.js", () => ({
+  discordStatus: vi.fn(() => ({ configured: false, connected: false, lastResult: null })),
+}));
+
 vi.mock("./github.js", () => ({
   getQueueSnapshot: vi.fn().mockReturnValue({ items: [], oldestFetchAt: null }),
   enrichQueueItemsWithPRStatus: vi.fn().mockResolvedValue(undefined),

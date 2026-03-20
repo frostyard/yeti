@@ -20,6 +20,9 @@ export function buildConfigPage(saved: boolean, theme: Theme): string {
     whatsappEnabled: "WHATSAPP_ENABLED",
     whatsappAllowedNumbers: "WHATSAPP_ALLOWED_NUMBERS",
     openaiApiKey: "OPENAI_API_KEY",
+    discordBotToken: "YETI_DISCORD_BOT_TOKEN",
+    discordChannelId: "YETI_DISCORD_CHANNEL_ID",
+    discordAllowedUsers: "YETI_DISCORD_ALLOWED_USERS",
     authToken: "YETI_AUTH_TOKEN",
   };
 
@@ -102,6 +105,21 @@ ${htmlOpenTag(theme)}
     <input type="password" name="openaiApiKey" id="openaiApiKey" placeholder="${escapeHtml(String(cfg.openaiApiKey ?? ""))}"${isDisabled("openaiApiKey") ? " disabled" : ""}>
     ${envNote("openaiApiKey")}
     <div class="field-note">Leave empty to keep current value</div>
+
+    <h2>Discord</h2>
+    <label for="discordBotToken">Discord Bot Token</label>
+    <input type="password" name="discordBotToken" id="discordBotToken" placeholder="${escapeHtml(String(cfg.discordBotToken ?? ""))}"${isDisabled("discordBotToken") ? " disabled" : ""}>
+    ${envNote("discordBotToken")}
+    <div class="field-note">Leave empty to keep current value. Requires restart.</div>
+
+    <label for="discordChannelId">Discord Channel ID</label>
+    <input type="text" name="discordChannelId" id="discordChannelId" value="${escapeHtml(String(cfg.discordChannelId ?? ""))}"${isDisabled("discordChannelId") ? " disabled" : ""}>
+    ${envNote("discordChannelId")}
+    <div class="field-note">Requires restart</div>
+
+    <label for="discordAllowedUsers">Discord Allowed Users (comma-separated IDs)</label>
+    <input type="text" name="discordAllowedUsers" id="discordAllowedUsers" value="${escapeHtml(Array.isArray(cfg.discordAllowedUsers) ? (cfg.discordAllowedUsers as string[]).join(", ") : "")}"${isDisabled("discordAllowedUsers") ? " disabled" : ""}>
+    ${envNote("discordAllowedUsers")}
 
     <h2>Intervals (minutes)</h2>
     ${Object.entries(intervals).map(([key, value]) =>

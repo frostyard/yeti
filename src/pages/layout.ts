@@ -501,3 +501,15 @@ export function whatsappLabel(wa: {
   if (wa.pairingRequired) return { text: "Pairing required", cls: "slack-error", link: true };
   return { text: "Disconnected", cls: "slack-error", link: true };
 }
+
+export function discordLabel(discord: {
+  configured: boolean;
+  connected: boolean;
+  lastResult: "ok" | "error" | null;
+}): { text: string; cls: string } {
+  if (!discord.configured) return { text: "Not configured", cls: "idle" };
+  if (!discord.connected) return { text: "Disconnected", cls: "slack-error" };
+  if (discord.lastResult === "error") return { text: "Error", cls: "slack-error" };
+  if (discord.lastResult === "ok") return { text: "Connected", cls: "running" };
+  return { text: "Connected (untested)", cls: "slack-untested" };
+}
