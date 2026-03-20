@@ -33,10 +33,8 @@ beforeEach(() => {
   delete process.env["YETI_SLACK_WEBHOOK"];
   delete process.env["YETI_AUTH_TOKEN"];
   delete process.env["OPENAI_API_KEY"];
-  delete process.env["KWYJIBO_AUTOMATION_API_KEY"];
   delete process.env["YETI_GITHUB_OWNERS"];
   delete process.env["YETI_SELF_REPO"];
-  delete process.env["KWYJIBO_BASE_URL"];
   delete process.env["WHATSAPP_ENABLED"];
   delete process.env["WHATSAPP_ALLOWED_NUMBERS"];
   delete process.env["PORT"];
@@ -71,7 +69,6 @@ describe("config", () => {
       cp,
       JSON.stringify({
         slackWebhook: "https://hooks.slack.com/services/T123/B456/abcdef",
-        kwyjiboApiKey: "sk-kwyjibo-secret-key-12345",
         openaiApiKey: "sk-openai-key-98765",
         authToken: "my-secret-token-xyz",
         githubOwners: ["owner1"],
@@ -83,7 +80,6 @@ describe("config", () => {
 
     // Sensitive fields should be masked (last 4 chars visible)
     expect(display.slackWebhook).toBe("****cdef");
-    expect(display.kwyjiboApiKey).toBe("****2345");
     expect(display.openaiApiKey).toBe("****8765");
     expect(display.authToken).toBe("****-xyz");
 
@@ -102,11 +98,9 @@ describe("config", () => {
     delete process.env["YETI_SLACK_WEBHOOK"];
     delete process.env["YETI_AUTH_TOKEN"];
     delete process.env["OPENAI_API_KEY"];
-    delete process.env["KWYJIBO_AUTOMATION_API_KEY"];
-
+  
     const display = getConfigForDisplay();
     expect(display.slackWebhook).toBe("Not configured");
-    expect(display.kwyjiboApiKey).toBe("Not configured");
     expect(display.openaiApiKey).toBe("Not configured");
     expect(display.authToken).toBe("Not configured");
   });

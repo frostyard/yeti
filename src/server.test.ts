@@ -17,8 +17,6 @@ vi.mock("./config.js", () => ({
     slackWebhook: "****cdef",
     githubOwners: ["owner1"],
     selfRepo: "owner1/repo1",
-    kwyjiboBaseUrl: "https://kwyjibo.vercel.app",
-    kwyjiboApiKey: "Not configured",
     openaiApiKey: "Not configured",
     authToken: "Not configured",
     port: 9384,
@@ -32,7 +30,6 @@ vi.mock("./config.js", () => ({
   writeConfig: vi.fn(),
   SKIPPED_ITEMS: [],
   PRIORITIZED_ITEMS: [],
-  EMAIL_ENABLED: false,
 }));
 
 vi.mock("./log.js", () => ({
@@ -57,10 +54,6 @@ vi.mock("./slack.js", () => ({
 
 vi.mock("./whatsapp.js", () => ({
   whatsappStatus: vi.fn().mockReturnValue({ configured: false, connected: false }),
-}));
-
-vi.mock("./jobs/email-monitor.js", () => ({
-  getEmailStatus: vi.fn().mockReturnValue({ configured: false, lastCheck: null, lastError: null }),
 }));
 
 vi.mock("./github.js", () => ({
