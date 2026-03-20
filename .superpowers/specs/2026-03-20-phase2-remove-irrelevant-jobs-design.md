@@ -175,12 +175,12 @@ Remove the 6 job registration blocks for all removed jobs from the jobs array.
 
 ## Documentation Cleanup
 
-### `docs/jobs.md`
+### `yeti/jobs.md`
 
 - Remove entire sections for: triage-kwyjibo-errors, idea-suggester, idea-collector, runner-monitor, ubuntu-latest-scanner
 - Remove any exception notes mentioning removed jobs
 
-### `docs/OVERVIEW.md`
+### `yeti/OVERVIEW.md`
 
 - Remove from job tree listing
 - Update job counts (~16 → ~10)

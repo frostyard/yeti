@@ -241,7 +241,7 @@ describe("triage-yeti-errors", () => {
 
       expect(prompt).toContain("ci-fixer:list-issues");
       expect(prompt).toContain("Error: gh issue list failed: 502");
-      expect(prompt).toContain("docs/OVERVIEW.md");
+      expect(prompt).toContain("yeti/OVERVIEW.md");
       expect(prompt).toContain("Run verification commands");
     });
 
@@ -266,13 +266,13 @@ describe("triage-yeti-errors", () => {
       expect(prompt).toContain("src/jobs/ci-fixer.ts");
     });
 
-    it("instructs reading docs/OVERVIEW.md and linked docs", () => {
+    it("instructs reading yeti/OVERVIEW.md and linked docs", () => {
       const issue = mockIssue({ number: 1, body: ERROR_BODY });
       const details = parseYetiError(ERROR_BODY);
 
       const prompt = buildInvestigationPrompt(issue, details, []);
 
-      expect(prompt).toContain("Read `docs/OVERVIEW.md` first");
+      expect(prompt).toContain("Read `yeti/OVERVIEW.md` first");
       expect(prompt).toContain("follow and read any linked documents");
     });
   });

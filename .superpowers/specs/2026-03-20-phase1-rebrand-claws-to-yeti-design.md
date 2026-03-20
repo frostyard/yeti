@@ -151,10 +151,10 @@ The `brendan` replacement is scoped to `deploy/` files only (`.service` file, `i
 
 ## Documentation
 
-All docs get the mechanical rename — this includes `CLAUDE.md`, `README.md`, `ANALYSIS.md`, `docs/OVERVIEW.md`, `docs/jobs.md`, `docs/database-schema.md`, `docs/whatsapp-setup.md`, `docs/refinements/71.doc.md`, the `ideas/` folder, and `.github/workflows/`. Additionally:
+All docs get the mechanical rename — this includes `CLAUDE.md`, `README.md`, `ANALYSIS.md`, `yeti/OVERVIEW.md`, `yeti/jobs.md`, `yeti/database-schema.md`, `yeti/whatsapp-setup.md`, `yeti/refinements/71.doc.md`, the `ideas/` folder, and `.github/workflows/`. Additionally:
 
 - **`LEGACY_VISIBLE_HEADER`** — removed entirely (no backward compat in a fresh fork)
-- **`docs/blog-post.md`** — removed (artifact of original project)
+- **`yeti/blog-post.md`** — removed (artifact of original project)
 - **`ANALYSIS.md`** — kept and rebranded (contains security recommendations for a later phase)
 
 ## Scope Boundaries
@@ -163,7 +163,7 @@ All docs get the mechanical rename — this includes `CLAUDE.md`, `README.md`, `
 - All renames/rebrands described above (including all source, tests, deploy scripts, docs, ideas/, workflows)
 - 5 file renames
 - `deploy/uninstall.sh` content updates (no filename change needed)
-- Removing `LEGACY_VISIBLE_HEADER` and `docs/blog-post.md`
+- Removing `LEGACY_VISIBLE_HEADER` and `yeti/blog-post.md`
 - Release tarball rename (`claws.tar.gz` → `yeti.tar.gz`)
 - Build verification (`npm run build` passes)
 - Test verification (`npm test` passes)

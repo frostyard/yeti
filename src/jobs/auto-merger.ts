@@ -31,7 +31,7 @@ export async function run(repos: Repo[]): Promise<void> {
           if (isDocPR) {
             const files = await gh.getPRChangedFiles(repo.fullName, pr.number);
             const allDocs = files.length > 0 && files.every(
-              (f) => f.startsWith("docs/") || f.endsWith(".md"),
+              (f) => f.startsWith("yeti/") || f.endsWith(".md"),
             );
             if (!allDocs) {
               log.warn(`[auto-merger] Doc PR ${repo.fullName}#${pr.number} contains non-doc changes, skipping`);

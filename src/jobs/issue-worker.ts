@@ -31,7 +31,7 @@ function buildPrompt(
           : `Comment by @${c.login}:`;
         return [`---`, label, gh.stripYetiMarker(c.body), ``];
       }),
-      `If \`docs/OVERVIEW.md\` exists, read it first (and any linked documents that seem relevant to the issue) for context about the codebase.`,
+      `If \`yeti/OVERVIEW.md\` exists, read it first (and any linked documents that seem relevant to the issue) for context about the codebase.`,
       ``,
       `Please implement the changes needed to resolve this issue.`,
       `Make commits with clear messages as you work.`,
@@ -44,7 +44,7 @@ function buildPrompt(
     `You are working on PR ${currentPhase} of ${totalPhases} for issue #${issue.number} in ${fullName}.`,
     `Issue: ${issue.title}`,
     ``,
-    `If \`docs/OVERVIEW.md\` exists, read it first (and any linked documents that seem relevant to the issue) for context about the codebase.`,
+    `If \`yeti/OVERVIEW.md\` exists, read it first (and any linked documents that seem relevant to the issue) for context about the codebase.`,
     ``,
     `## Full Plan`,
     plan.preamble,

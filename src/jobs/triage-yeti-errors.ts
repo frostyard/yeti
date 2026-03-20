@@ -217,7 +217,7 @@ export function buildInvestigationPrompt(
     ``,
     `## Instructions`,
     ``,
-    `1. **Read \`docs/OVERVIEW.md\` first** for architectural context about the Yeti codebase, then follow and read any linked documents relevant to this error.`,
+    `1. **Read \`yeti/OVERVIEW.md\` first** for architectural context about the Yeti codebase, then follow and read any linked documents relevant to this error.`,
   ];
 
   const fileHint = mapFingerprintToFile(errorDetails.fingerprint);

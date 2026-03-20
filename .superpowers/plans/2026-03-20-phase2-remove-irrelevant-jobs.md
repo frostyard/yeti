@@ -387,13 +387,13 @@ git commit -m "refactor: remove dead config/mock references from test files"
 Update all docs to remove references to deleted jobs and dead config.
 
 **Files:**
-- Modify: `docs/jobs.md`
-- Modify: `docs/OVERVIEW.md`
+- Modify: `yeti/jobs.md`
+- Modify: `yeti/OVERVIEW.md`
 - Modify: `CLAUDE.md`
 - Modify: `ANALYSIS.md`
 - Modify: `ideas/features.md`
 
-- [ ] **Step 1: Clean up docs/jobs.md**
+- [ ] **Step 1: Clean up yeti/jobs.md**
 
 Remove entire sections for these jobs:
 - triage-kwyjibo-errors
@@ -404,7 +404,7 @@ Remove entire sections for these jobs:
 
 Also remove any exception notes mentioning these jobs.
 
-- [ ] **Step 2: Clean up docs/OVERVIEW.md**
+- [ ] **Step 2: Clean up yeti/OVERVIEW.md**
 
 - Remove deleted jobs from the job tree listing
 - Update job counts (~16 → ~10)
@@ -434,7 +434,7 @@ Also remove any exception notes mentioning these jobs.
 - [ ] **Step 6: Commit**
 
 ```bash
-git add docs/ CLAUDE.md ANALYSIS.md ideas/
+git add yeti/ CLAUDE.md ANALYSIS.md ideas/
 git commit -m "docs: remove references to deleted jobs"
 ```
 

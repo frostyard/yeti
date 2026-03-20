@@ -4,12 +4,12 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Agent Planning
 
-**superpowers planning docs** Save plans to .superpowers/plans instead of docs/plans/
-**superpowers spec docs** Save specs to .superpowers/specs/ instead of docs/specs/
+**superpowers planning docs** Save plans to .superpowers/plans instead of yeti/plans/
+**superpowers spec docs** Save specs to .superpowers/specs/ instead of yeti/specs/
 
 ## Documentation
 
-**update documentation** After any change to source code, update relevant documentation in CLAUDE.md, README.md and the docs/ folder. A task is not complete without reviewing and updating relevant documentation.
+**update documentation** After any change to source code, update relevant documentation in CLAUDE.md, README.md and the yeti/ folder. A task is not complete without reviewing and updating relevant documentation.
 
 ## Build & Run Commands
 

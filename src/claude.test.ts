@@ -527,7 +527,7 @@ describe("generateDocsPRDescription", () => {
   it("returns claude-generated description for docs", async () => {
     mockExecFile.mockImplementation((_cmd, args: any, _opts: any, cb: any) => {
       if (args?.includes("diff") && !args?.includes("--stat")) {
-        cb(null, "diff --git a/docs/OVERVIEW.md b/docs/OVERVIEW.md\n+new docs", "");
+        cb(null, "diff --git a/yeti/OVERVIEW.md b/yeti/OVERVIEW.md\n+new docs", "");
       }
       return undefined as any;
     });

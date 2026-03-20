@@ -70,7 +70,7 @@ To iterate on a plan: post feedback comments on the issue. The refiner will
 detect unreacted comments and update its plan. Repeat until satisfied, then add
 `Refined` to trigger implementation.
 
-All prompts instruct Claude to read `docs/OVERVIEW.md` first if it exists.
+All prompts instruct Claude to read `yeti/OVERVIEW.md` first if it exists.
 Images embedded in issue bodies are downloaded and provided to Claude for
 visual context.
 
@@ -83,7 +83,7 @@ visual context.
 - Removes the `Ready` label (work starting)
 - Creates a worktree on branch `yeti/issue-<N>-<hex4>`
 - Provides the issue title, body, and all comments as context
-- Instructs Claude to read `docs/OVERVIEW.md` for codebase context
+- Instructs Claude to read `yeti/OVERVIEW.md` for codebase context
 - Claude implements the changes and makes commits
 - If commits were produced: pushes the branch, generates a PR description
   (via a second Claude call with the diff, falling back to a diffstat if that
@@ -239,7 +239,7 @@ For each canonical (non-duplicate) issue:
   and stack trace
 - Creates a worktree on branch `yeti/investigate-error-<N>-<hex4>`
 - Passes error details and other open error issues to Claude with instructions
-  to read `docs/OVERVIEW.md`, find the relevant source code, run diagnostic
+  to read `yeti/OVERVIEW.md`, find the relevant source code, run diagnostic
   commands, and produce a root cause analysis
 - Claude's output includes a `RELATED_ISSUES:` line identifying issues that
   share the same root cause
@@ -275,7 +275,7 @@ For each canonical (non-duplicate) issue:
   decisions, and patterns from these plans into the documentation
 - The `.plans/` directory is cleaned up after Claude runs and is never
   committed
-- Instructs Claude to create/update `docs/OVERVIEW.md` and supporting docs
+- Instructs Claude to create/update `yeti/OVERVIEW.md` and supporting docs
 - If commits were produced: pushes and creates a PR titled
   `docs: update documentation for <repo>` (auto-merged by the auto-merger
   job once checks pass, with a safety guard ensuring only doc files are
@@ -298,7 +298,7 @@ Scans all open PRs per repo. For each PR:
   invalidate an existing LGTM. Other substantive commits pushed after the
   LGTM invalidate it and another LGTM is required.
 - **Doc PRs** (`yeti/docs-` branch prefix): merges without requiring LGTM.
-  Safety guards: verifies all changed files are doc-only (`docs/**` or
+  Safety guards: verifies all changed files are doc-only (`yeti/**` or
   `*.md`) — if any non-doc files are present, the PR is skipped with a
   warning. Since doc-only PRs skip CI (via `paths-ignore` in workflows),
   accepts both "passing" checks and "no checks" (CI never ran). Rejects
@@ -345,7 +345,7 @@ Two-phase approach per repo:
 
 - Fetches all open issue and PR titles for deduplication context
 - Creates a worktree on branch `yeti/improve-<hex4>`
-- Instructs Claude to read `docs/OVERVIEW.md` (if it exists) and analyze
+- Instructs Claude to read `yeti/OVERVIEW.md` (if it exists) and analyze
   the codebase for actionable improvements (duplicate logic, dead code,
   performance issues, security concerns, missing error handling, stale TODOs)
 - Claude responds with structured JSON listing improvements

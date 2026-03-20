@@ -163,7 +163,7 @@ describe("auto-merger", () => {
   it("merges doc PR when no checks exist and files are doc-only", async () => {
     const pr = mockPR({ headRefName: "yeti/docs-ab12" });
     mockGh.listPRs.mockResolvedValue([pr]);
-    mockGh.getPRChangedFiles.mockResolvedValue(["docs/OVERVIEW.md", "docs/api.md"]);
+    mockGh.getPRChangedFiles.mockResolvedValue(["yeti/OVERVIEW.md", "yeti/api.md"]);
     mockGh.getPRCheckStatus.mockResolvedValue("none");
 
     await run([repo]);
@@ -174,7 +174,7 @@ describe("auto-merger", () => {
   it("merges doc PR when checks are passing and files are doc-only", async () => {
     const pr = mockPR({ headRefName: "yeti/docs-ab12" });
     mockGh.listPRs.mockResolvedValue([pr]);
-    mockGh.getPRChangedFiles.mockResolvedValue(["docs/OVERVIEW.md", "README.md"]);
+    mockGh.getPRChangedFiles.mockResolvedValue(["yeti/OVERVIEW.md", "README.md"]);
     mockGh.getPRCheckStatus.mockResolvedValue("passing");
 
     await run([repo]);
@@ -185,7 +185,7 @@ describe("auto-merger", () => {
   it("skips doc PR when checks are failing", async () => {
     const pr = mockPR({ headRefName: "yeti/docs-ab12" });
     mockGh.listPRs.mockResolvedValue([pr]);
-    mockGh.getPRChangedFiles.mockResolvedValue(["docs/OVERVIEW.md"]);
+    mockGh.getPRChangedFiles.mockResolvedValue(["yeti/OVERVIEW.md"]);
     mockGh.getPRCheckStatus.mockResolvedValue("failing");
 
     await run([repo]);
@@ -199,7 +199,7 @@ describe("auto-merger", () => {
   it("skips doc PR when checks are pending", async () => {
     const pr = mockPR({ headRefName: "yeti/docs-ab12" });
     mockGh.listPRs.mockResolvedValue([pr]);
-    mockGh.getPRChangedFiles.mockResolvedValue(["docs/OVERVIEW.md"]);
+    mockGh.getPRChangedFiles.mockResolvedValue(["yeti/OVERVIEW.md"]);
     mockGh.getPRCheckStatus.mockResolvedValue("pending");
 
     await run([repo]);
@@ -210,7 +210,7 @@ describe("auto-merger", () => {
   it("skips doc PR with non-doc file changes", async () => {
     const pr = mockPR({ headRefName: "yeti/docs-ab12" });
     mockGh.listPRs.mockResolvedValue([pr]);
-    mockGh.getPRChangedFiles.mockResolvedValue(["docs/OVERVIEW.md", "src/index.ts"]);
+    mockGh.getPRChangedFiles.mockResolvedValue(["yeti/OVERVIEW.md", "src/index.ts"]);
 
     await run([repo]);
 
@@ -234,7 +234,7 @@ describe("auto-merger", () => {
   it("does not require LGTM for doc PRs", async () => {
     const pr = mockPR({ headRefName: "yeti/docs-ab12" });
     mockGh.listPRs.mockResolvedValue([pr]);
-    mockGh.getPRChangedFiles.mockResolvedValue(["docs/OVERVIEW.md"]);
+    mockGh.getPRChangedFiles.mockResolvedValue(["yeti/OVERVIEW.md"]);
     mockGh.getPRCheckStatus.mockResolvedValue("none");
 
     await run([repo]);

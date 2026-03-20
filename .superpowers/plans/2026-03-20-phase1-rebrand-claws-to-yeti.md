@@ -20,7 +20,7 @@
 - Rename: `deploy/claws-updater.timer` → `deploy/yeti-updater.timer`
 - Rename: `src/jobs/triage-claws-errors.ts` → `src/jobs/triage-yeti-errors.ts`
 - Rename: `src/jobs/triage-claws-errors.test.ts` → `src/jobs/triage-yeti-errors.test.ts`
-- Delete: `docs/blog-post.md`
+- Delete: `yeti/blog-post.md`
 
 - [ ] **Step 1: Create feature branch**
 
@@ -46,7 +46,7 @@ git mv src/jobs/triage-claws-errors.test.ts src/jobs/triage-yeti-errors.test.ts
 - [ ] **Step 4: Delete blog post**
 
 ```bash
-git rm docs/blog-post.md
+git rm yeti/blog-post.md
 ```
 
 - [ ] **Step 5: Commit file renames**
@@ -303,11 +303,11 @@ Apply the same ordered replacements to all documentation files, CLAUDE.md, READM
 - Modify: `CLAUDE.md`
 - Modify: `README.md`
 - Modify: `ANALYSIS.md`
-- Modify: `docs/OVERVIEW.md`
-- Modify: `docs/jobs.md`
-- Modify: `docs/database-schema.md`
-- Modify: `docs/whatsapp-setup.md`
-- Modify: `docs/refinements/71.doc.md`
+- Modify: `yeti/OVERVIEW.md`
+- Modify: `yeti/jobs.md`
+- Modify: `yeti/database-schema.md`
+- Modify: `yeti/whatsapp-setup.md`
+- Modify: `yeti/refinements/71.doc.md`
 - Modify: `ideas/overview.md`, `ideas/features.md`, `ideas/growth.md`, `ideas/rejected.md`
 
 - [ ] **Step 1: Run ordered replacements on docs and markdown files**
@@ -322,12 +322,12 @@ for f in CLAUDE.md README.md ANALYSIS.md; do
   sed -i 's/claws/yeti/g' "$f"
 done
 
-find docs/ -name '*.md' -exec sed -i 's/St-John-Software\/claws/frostyard\/yeti/g' {} +
-find docs/ -name '*.md' -exec sed -i 's/St-John-Software/frostyard/g' {} +
-find docs/ -name '*.md' -exec sed -i 's/stjohnb/frostyard/g' {} +
-find docs/ -name '*.md' -exec sed -i 's/CLAWS/YETI/g' {} +
-find docs/ -name '*.md' -exec sed -i 's/Claws/Yeti/g' {} +
-find docs/ -name '*.md' -exec sed -i 's/claws/yeti/g' {} +
+find yeti/ -name '*.md' -exec sed -i 's/St-John-Software\/claws/frostyard\/yeti/g' {} +
+find yeti/ -name '*.md' -exec sed -i 's/St-John-Software/frostyard/g' {} +
+find yeti/ -name '*.md' -exec sed -i 's/stjohnb/frostyard/g' {} +
+find yeti/ -name '*.md' -exec sed -i 's/CLAWS/YETI/g' {} +
+find yeti/ -name '*.md' -exec sed -i 's/Claws/Yeti/g' {} +
+find yeti/ -name '*.md' -exec sed -i 's/claws/yeti/g' {} +
 
 find ideas/ -name '*.md' -exec sed -i 's/Claws/Yeti/g' {} +
 find ideas/ -name '*.md' -exec sed -i 's/claws/yeti/g' {} +
@@ -336,7 +336,7 @@ find ideas/ -name '*.md' -exec sed -i 's/CLAWS/YETI/g' {} +
 
 - [ ] **Step 2: Update port references in docs (3000 → 9384)**
 
-Only change port-related `3000` in docs. These are in CLAUDE.md, README.md, docs/OVERVIEW.md, and docs/whatsapp-setup.md.
+Only change port-related `3000` in docs. These are in CLAUDE.md, README.md, yeti/OVERVIEW.md, and yeti/whatsapp-setup.md.
 
 ```bash
 # CLAUDE.md - health check port
@@ -346,11 +346,11 @@ sed -i 's/port 3000/port 9384/g' CLAUDE.md
 sed -i 's/localhost:3000/localhost:9384/g' README.md
 sed -i "s/| \`3000\`/| \`9384\`/g" README.md
 
-# docs/OVERVIEW.md - config table
-sed -i "s/| \`3000\`/| \`9384\`/g" docs/OVERVIEW.md
+# yeti/OVERVIEW.md - config table
+sed -i "s/| \`3000\`/| \`9384\`/g" yeti/OVERVIEW.md
 
-# docs/whatsapp-setup.md - localhost URLs
-sed -i 's/localhost:3000/localhost:9384/g' docs/whatsapp-setup.md
+# yeti/whatsapp-setup.md - localhost URLs
+sed -i 's/localhost:3000/localhost:9384/g' yeti/whatsapp-setup.md
 ```
 
 - [ ] **Step 3: Update brendan references in docs**
@@ -366,7 +366,7 @@ Only apply to ANALYSIS.md — other docs reference brendan only in the deploy co
 - [ ] **Step 4: Verify no remaining old references**
 
 ```bash
-grep -ri 'claws\|St-John\|stjohnb' CLAUDE.md README.md ANALYSIS.md docs/ ideas/
+grep -ri 'claws\|St-John\|stjohnb' CLAUDE.md README.md ANALYSIS.md yeti/ ideas/
 ```
 
 Expected: No output (the spec file in .superpowers/ will still contain old references — that's fine, it's the spec documenting the change).
@@ -374,7 +374,7 @@ Expected: No output (the spec file in .superpowers/ will still contain old refer
 - [ ] **Step 5: Commit**
 
 ```bash
-git add CLAUDE.md README.md ANALYSIS.md docs/ ideas/
+git add CLAUDE.md README.md ANALYSIS.md yeti/ ideas/
 git commit -m "refactor: rename all claws references to yeti in documentation"
 ```
 

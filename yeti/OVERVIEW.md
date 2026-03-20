@@ -238,7 +238,7 @@ See [Jobs](jobs.md) for detailed behavior of each.
 | `ci-fixer` | Any open PR with failing checks | 10 min | Resolves merge conflicts, fixes CI failures |
 | `review-addresser` | Yeti PRs with unreacted review comments | 5 min | Fetches unresolved review comments, pushes fix commits, reacts with thumbsup to track addressed comments |
 | `triage-yeti-errors` | `[yeti-error]` issues in `SELF_REPO` | 10 min | Investigates internal Yeti errors, deduplicates by fingerprint, posts report |
-| `doc-maintainer` | Daily at 1 AM | Scheduled | Updates `docs/` to reflect current codebase |
+| `doc-maintainer` | Daily at 1 AM | Scheduled | Updates `yeti/` to reflect current codebase |
 | `auto-merger` | Dependabot PRs + LGTM'd Yeti PRs + doc PRs | 10 min | Squash-merges PRs when conditions are met |
 | `repo-standards` | Daily at 2 AM (+ on startup) | Scheduled | Syncs labels and cleans legacy labels |
 | `improvement-identifier` | Daily at 3 AM | Scheduled | Analyzes codebase via Claude, implements improvements as PRs |
@@ -342,7 +342,7 @@ Errors flow through two stages:
 2. **Triage** (`triage-yeti-errors.ts`) — Discovers `[yeti-error]` issues
    by title pattern (no label required), runs two-phase deduplication (by
    fingerprint before investigation, then by root cause after), and posts an
-   investigation report. Reads `docs/OVERVIEW.md` for context and identifies
+   investigation report. Reads `yeti/OVERVIEW.md` for context and identifies
    related issues that share the same root cause.
 
 ### CI-Fixer Two-Phase Design
@@ -386,7 +386,7 @@ prompt. This is used by issue-refiner, issue-worker, and review-addresser.
 ### Documentation as Context
 
 Issue-refiner, issue-worker, improvement-identifier, and triage-yeti-errors
-prompts instruct Claude to read `docs/OVERVIEW.md` (and linked docs) before
+prompts instruct Claude to read `yeti/OVERVIEW.md` (and linked docs) before
 starting work. This gives Claude accumulated architectural context about each
 repository.
 

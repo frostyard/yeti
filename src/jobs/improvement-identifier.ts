@@ -23,7 +23,7 @@ function buildPrompt(fullName: string, openIssueTitles: string[], openPRTitles: 
   return [
     `You are analyzing the repository ${fullName} for opportunities to improve the codebase.`,
     ``,
-    `Read the codebase thoroughly. If \`docs/OVERVIEW.md\` exists, read it first`,
+    `Read the codebase thoroughly. If \`yeti/OVERVIEW.md\` exists, read it first`,
     `(and any linked documents) for context about the architecture and patterns.`,
     ``,
     `Look for meaningful opportunities such as:`,
@@ -76,7 +76,7 @@ function buildImplementationPrompt(fullName: string, improvement: Improvement): 
     `**Improvement: ${improvement.title}**`,
     improvement.body,
     ``,
-    `If \`docs/OVERVIEW.md\` exists, read it first (and any linked documents) for context.`,
+    `If \`yeti/OVERVIEW.md\` exists, read it first (and any linked documents) for context.`,
     ``,
     `Implement this improvement. Make clean, focused commits with clear messages.`,
     `Do not make changes beyond what is described above.`,

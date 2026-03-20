@@ -63,7 +63,7 @@ function buildRefinementPrompt(
         ]
       : [`No specific feedback comments were provided. Re-evaluate the plan for completeness and correctness.`, ``]),
     ``,
-    `If \`docs/OVERVIEW.md\` exists in the repository, read it first (and any linked documents that seem relevant to the issue) for context about the codebase architecture and patterns.`,
+    `If \`yeti/OVERVIEW.md\` exists in the repository, read it first (and any linked documents that seem relevant to the issue) for context about the codebase architecture and patterns.`,
     ``,
     `Please produce an updated implementation plan that addresses the feedback.`,
     `Include:`,
@@ -108,7 +108,7 @@ function buildFollowUpPrompt(
       return [`---`, label, gh.stripYetiMarker(f.body), ``];
     }),
     ``,
-    `If \`docs/OVERVIEW.md\` exists in the repository, read it first (and any linked documents that seem relevant) for context about the codebase architecture and patterns.`,
+    `If \`yeti/OVERVIEW.md\` exists in the repository, read it first (and any linked documents that seem relevant) for context about the codebase architecture and patterns.`,
     ``,
     `Please respond to the follow-up comments above. Answer questions, provide clarifications, or address concerns.`,
     `Do NOT produce a new implementation plan — the implementation is already in progress via PR #${openPRNumber}.`,
@@ -131,7 +131,7 @@ function buildNewPlanPrompt(fullName: string, issue: gh.Issue, comments: gh.Issu
         : `Comment by @${c.login}:`;
       return [`---`, label, gh.stripYetiMarker(c.body), ``];
     }),
-    `If \`docs/OVERVIEW.md\` exists in the repository, read it first (and any linked documents that seem relevant to the issue) for context about the codebase architecture and patterns.`,
+    `If \`yeti/OVERVIEW.md\` exists in the repository, read it first (and any linked documents that seem relevant to the issue) for context about the codebase architecture and patterns.`,
     ``,
     `Please produce a detailed implementation plan for this issue.`,
     `Include:`,
