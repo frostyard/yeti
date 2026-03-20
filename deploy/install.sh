@@ -44,15 +44,44 @@ if [[ ! -f "$CONFIG_FILE" ]]; then
   mkdir -p "$CONFIG_DIR"
   cat > "$CONFIG_FILE" << 'CONF'
 {
-  "slackWebhook": "",
-  "githubOwners": ["frostyard", "frostyard"],
+  "githubOwners": ["frostyard"],
   "selfRepo": "frostyard/yeti",
-  "kwyjiboBaseUrl": "https://kwyjibo.vercel.app",
-  "kwyjiboApiKey": ""
+  "port": 9384,
+  "slackWebhook": "",
+  "slackBotToken": "",
+  "slackIdeasChannel": "",
+  "discordBotToken": "",
+  "discordChannelId": "",
+  "discordAllowedUsers": [],
+  "whatsappEnabled": false,
+  "whatsappAllowedNumbers": [],
+  "openaiApiKey": "",
+  "authToken": "",
+  "maxClaudeWorkers": 2,
+  "claudeTimeoutMs": 1200000,
+  "intervals": {
+    "issueWorkerMs": 300000,
+    "issueRefinerMs": 300000,
+    "ciFixerMs": 600000,
+    "reviewAddresserMs": 300000,
+    "autoMergerMs": 600000,
+    "triageYetiErrorsMs": 600000
+  },
+  "schedules": {
+    "docMaintainerHour": 1,
+    "repoStandardsHour": 2,
+    "improvementIdentifierHour": 3,
+    "issueAuditorHour": 5
+  },
+  "logRetentionDays": 14,
+  "logRetentionPerJob": 20,
+  "pausedJobs": [],
+  "skippedItems": [],
+  "prioritizedItems": []
 }
 CONF
   chmod 600 "$CONFIG_FILE"
-  log "Created $CONFIG_FILE — edit it to set your Slack webhook URL"
+  log "Created $CONFIG_FILE — edit it to configure your instance"
 fi
 
 # Bootstrap env file if it doesn't exist (never overwrite user values)
