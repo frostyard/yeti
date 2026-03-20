@@ -19,6 +19,8 @@ src/
 ├── server.ts            HTTP server — dashboard, health, status, manual triggers
 ├── log.ts               Timestamped logging + Slack error escalation
 ├── slack.ts             Slack incoming-webhook notifier
+├── notify.ts            Fan-out notifier — forwards to Slack and Discord
+├── discord.ts           Discord bot — notifications + job control commands (!yeti …)
 ├── error-reporter.ts    Deduplicating GitHub issue-based error reporter (filters ShutdownError, RateLimitError)
 ├── images.ts            Image/attachment extraction + download for issue/PR context
 ├── whatsapp.ts          WhatsApp Web client (Baileys) — QR pairing, message routing, transient error filtering
@@ -219,6 +221,10 @@ URLs, and binary attachment types. The main entry point `processTextForImages()`
 runs both pipelines and returns a combined prompt section. Used by
 issue-refiner, issue-worker, and review-addresser to give Claude visual and
 file context.
+
+**`notify.ts`** — Fan-out notification module. Calls both `slack.ts` and `discord.ts` so callers only need one import. All internal modules that send notifications import from `notify.ts`.
+
+**`discord.ts`** — Discord bot integration using discord.js. Connects as a bot user, sends notifications to a configured channel, and handles `!yeti` commands from authorised users. Commands: `status`, `jobs`, `trigger <job>`, `pause <job>`, `resume <job>`, `help`. Requires `discordBotToken`, `discordChannelId`, and `discordAllowedUsers` in config. Only processes messages from the configured channel and from users in the allow-list. Uses `console.log` for its own error output to avoid recursive notify loops. The scheduler reference is injected at startup to enable job control commands. See [Discord Setup](discord-setup.md).
 
 ## Jobs
 
@@ -459,6 +465,9 @@ defaults.
 | `logRetentionPerJob` | — | `20` |
 | `whatsappEnabled` | `WHATSAPP_ENABLED` | `false` |
 | `whatsappAllowedNumbers` | `WHATSAPP_ALLOWED_NUMBERS` | `[]` |
+| `discordBotToken` | `YETI_DISCORD_BOT_TOKEN` | *(empty — Discord disabled if unset)* |
+| `discordChannelId` | `YETI_DISCORD_CHANNEL_ID` | *(empty)* |
+| `discordAllowedUsers` | `YETI_DISCORD_ALLOWED_USERS` | `[]` (comma-separated user IDs) |
 | `openaiApiKey` | `OPENAI_API_KEY` | *(empty)* |
 | `maxClaudeWorkers` | `YETI_MAX_CLAUDE_WORKERS` | `2` |
 | `claudeTimeoutMs` | `YETI_CLAUDE_TIMEOUT_MS` | `1200000` (20 min, minimum 60s) |
@@ -484,6 +493,9 @@ not manage their credentials.
 
 The WhatsApp gateway requires a one-time QR-code pairing step. See
 [WhatsApp Setup](whatsapp-setup.md) for the full walkthrough.
+
+The Discord integration requires creating a Discord application, bot token, and private channel. See
+[Discord Setup](discord-setup.md) for the full walkthrough.
 
 ## Technology Stack
 

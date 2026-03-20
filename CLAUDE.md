@@ -44,6 +44,8 @@ Yeti is a self-hosted GitHub automation daemon that polls repositories on timers
 - **`db.ts`** — SQLite (`~/.yeti/yeti.db`) with tables: `tasks`, `job_runs`, `job_logs`. Log capture via `AsyncLocalStorage` run context.
 - **`server.ts`** — HTTP dashboard with job status, work queue, log viewer, config editor, WhatsApp pairing. Token-based auth when `authToken` is set.
 - **`error-reporter.ts`** — Deduplicating error reporter: logs + Slack + GitHub issues (`[yeti-error]`). 30-min cooldown per fingerprint. Filters `ShutdownError` and `RateLimitError`.
+- **`discord.ts`** — Discord bot integration for notifications and job control commands. Uses discord.js.
+- **`notify.ts`** — Fan-out notification module. Forwards messages to both Slack and Discord.
 
 ### Jobs (`src/jobs/`)
 
