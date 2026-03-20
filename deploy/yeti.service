@@ -1,14 +1,14 @@
 [Unit]
-Description=Claws - GitHub Automation Service
+Description=Yeti - GitHub Automation Service
 After=network.target
 
 [Service]
 Type=simple
-User=brendan
-Group=brendan
-WorkingDirectory=/opt/claws
-EnvironmentFile=-/home/brendan/.claws/env
-ExecStart=/usr/bin/node /opt/claws/dist/main.js
+User=yeti
+Group=yeti
+WorkingDirectory=/opt/yeti
+EnvironmentFile=-/home/yeti/.yeti/env
+ExecStart=/usr/bin/node /opt/yeti/dist/main.js
 Restart=on-failure
 RestartSec=5
 KillSignal=SIGTERM

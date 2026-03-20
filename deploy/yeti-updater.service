@@ -1,8 +1,8 @@
 [Unit]
-Description=Claws auto-updater
+Description=Yeti auto-updater
 After=network.target
 
 [Service]
 Type=oneshot
 User=root
-ExecStart=/opt/claws/deploy/deploy.sh
+ExecStart=/opt/yeti/deploy/deploy.sh

@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-REPO="St-John-Software/claws"
-INSTALL_DIR="/opt/claws"
+REPO="frostyard/yeti"
+INSTALL_DIR="/opt/yeti"
 VERSION_FILE="$INSTALL_DIR/.current-version"
 STAGING_DIR="$INSTALL_DIR/staging"
 SKIP_FILE="$INSTALL_DIR/.skipped-versions"
@@ -10,15 +10,15 @@ SKIP_FILE="$INSTALL_DIR/.skipped-versions"
 log() { echo "$(date -Iseconds) [deploy] $*"; }
 
 # Resolve config path from the service user's home directory
-CURRENT_UNIT="/etc/systemd/system/claws.service"
+CURRENT_UNIT="/etc/systemd/system/yeti.service"
 if [[ -f "$CURRENT_UNIT" ]]; then
-  CLAWS_USER=$(grep '^User=' "$CURRENT_UNIT" | cut -d= -f2)
-  CLAWS_HOME=$(getent passwd "$CLAWS_USER" | cut -d: -f6)
+  YETI_USER=$(grep '^User=' "$CURRENT_UNIT" | cut -d= -f2)
+  YETI_HOME=$(getent passwd "$YETI_USER" | cut -d: -f6)
 else
-  CLAWS_HOME="$HOME"
+  YETI_HOME="$HOME"
 fi
-CONFIG_FILE="$CLAWS_HOME/.claws/config.json"
-ENV_FILE="$CLAWS_HOME/.claws/env"
+CONFIG_FILE="$YETI_HOME/.yeti/config.json"
+ENV_FILE="$YETI_HOME/.yeti/env"
 if [[ -f "$ENV_FILE" ]]; then
   set -a
   source "$ENV_FILE"
@@ -26,13 +26,13 @@ if [[ -f "$ENV_FILE" ]]; then
 fi
 
 CONFIG_SLACK_WEBHOOK=$(node -e "try{console.log(JSON.parse(require('fs').readFileSync('$CONFIG_FILE','utf-8')).slackWebhook||'')}catch{console.log('')}" 2>/dev/null || echo "")
-SLACK_WEBHOOK="${CLAWS_SLACK_WEBHOOK:-$CONFIG_SLACK_WEBHOOK}"
+SLACK_WEBHOOK="${YETI_SLACK_WEBHOOK:-$CONFIG_SLACK_WEBHOOK}"
 
 CONFIG_PORT=$(node -e "try{console.log(JSON.parse(require('fs').readFileSync('$CONFIG_FILE','utf-8')).port||9384)}catch{console.log(9384)}" 2>/dev/null || echo "9384")
 PORT="${PORT:-$CONFIG_PORT}"
 HEALTH_URL="http://localhost:$PORT/health"
 
-[[ -n "$SLACK_WEBHOOK" ]] || log "Warning: No Slack webhook configured (checked CLAWS_SLACK_WEBHOOK in $ENV_FILE and slackWebhook in $CONFIG_FILE)"
+[[ -n "$SLACK_WEBHOOK" ]] || log "Warning: No Slack webhook configured (checked YETI_SLACK_WEBHOOK in $ENV_FILE and slackWebhook in $CONFIG_FILE)"
 slack() {
   if [[ -z "$SLACK_WEBHOOK" ]]; then log "Warning: SLACK_WEBHOOK is empty, skipping notification"; return 0; fi
   local payload
@@ -43,7 +43,7 @@ slack() {
 }
 
 # 1. Get latest release tag
-LATEST_TAG=$(sudo -u brendan gh release list -R "$REPO" --limit 1 --json tagName --jq '.[0].tagName')
+LATEST_TAG=$(sudo -u yeti gh release list -R "$REPO" --limit 1 --json tagName --jq '.[0].tagName')
 if [[ -z "$LATEST_TAG" ]]; then
   log "No releases found"
   exit 0
@@ -68,11 +68,11 @@ fi
 
 log "Updating from $CURRENT_TAG to $LATEST_TAG"
 
-RELEASE_BODY=$(sudo -u brendan gh release view "$LATEST_TAG" -R "$REPO" --json body --jq '.body' 2>/dev/null || echo "")
+RELEASE_BODY=$(sudo -u yeti gh release view "$LATEST_TAG" -R "$REPO" --json body --jq '.body' 2>/dev/null || echo "")
 
 # 3. Download and extract
-TMPFILE=$(sudo -u brendan mktemp /tmp/claws-XXXXXX.tar.gz)
-sudo -u brendan gh release download "$LATEST_TAG" -R "$REPO" -p "claws.tar.gz" -O "$TMPFILE" --clobber
+TMPFILE=$(sudo -u yeti mktemp /tmp/yeti-XXXXXX.tar.gz)
+sudo -u yeti gh release download "$LATEST_TAG" -R "$REPO" -p "yeti.tar.gz" -O "$TMPFILE" --clobber
 rm -rf "$STAGING_DIR"
 mkdir -p "$STAGING_DIR"
 tar -xzf "$TMPFILE" -C "$STAGING_DIR"
@@ -85,11 +85,11 @@ if [[ -d "$INSTALL_DIR/dist" ]]; then
 fi
 
 # 5. Stop service before swapping files
-log "Stopping claws service..."
-systemctl stop claws || log "Warning: systemctl stop returned non-zero"
+log "Stopping yeti service..."
+systemctl stop yeti || log "Warning: systemctl stop returned non-zero"
 
 # 6. Replace dist, deploy, and node_modules with staging contents
-#    Note: ~/.claws/ (config.json, env) is user-managed and never touched by deployment.
+#    Note: ~/.yeti/ (config.json, env) is user-managed and never touched by deployment.
 rm -rf "$INSTALL_DIR/dist"
 mv "$STAGING_DIR/dist" "$INSTALL_DIR/dist"
 if [[ -d "$STAGING_DIR/deploy" ]]; then
@@ -103,23 +103,23 @@ if [[ -d "$STAGING_DIR/node_modules" ]]; then
 fi
 
 # 7. Reinstall systemd units (preserve User/Group/PATH from installed unit)
-CURRENT_UNIT="/etc/systemd/system/claws.service"
+CURRENT_UNIT="/etc/systemd/system/yeti.service"
 if [[ -f "$CURRENT_UNIT" ]]; then
-  CLAWS_USER=$(grep '^User=' "$CURRENT_UNIT" | cut -d= -f2)
-  CLAWS_PATH=$(grep '^Environment=PATH=' "$CURRENT_UNIT" | sed 's/^Environment=PATH=//')
-  log "Reinstalling systemd units for $CLAWS_USER..."
-  sed "s/User=brendan/User=$CLAWS_USER/;s/Group=brendan/Group=$CLAWS_USER/;s|/home/brendan/|$CLAWS_HOME/|" \
-    "$INSTALL_DIR/deploy/claws.service" | \
-    sed "/\[Service\]/a Environment=PATH=$CLAWS_PATH" | \
-    tee /etc/systemd/system/claws.service >/dev/null
-  cp "$INSTALL_DIR/deploy/claws-updater.service" /etc/systemd/system/
-  cp "$INSTALL_DIR/deploy/claws-updater.timer" /etc/systemd/system/
+  YETI_USER=$(grep '^User=' "$CURRENT_UNIT" | cut -d= -f2)
+  YETI_PATH=$(grep '^Environment=PATH=' "$CURRENT_UNIT" | sed 's/^Environment=PATH=//')
+  log "Reinstalling systemd units for $YETI_USER..."
+  sed "s/User=yeti/User=$YETI_USER/;s/Group=yeti/Group=$YETI_USER/;s|/home/yeti/|$YETI_HOME/|" \
+    "$INSTALL_DIR/deploy/yeti.service" | \
+    sed "/\[Service\]/a Environment=PATH=$YETI_PATH" | \
+    tee /etc/systemd/system/yeti.service >/dev/null
+  cp "$INSTALL_DIR/deploy/yeti-updater.service" /etc/systemd/system/
+  cp "$INSTALL_DIR/deploy/yeti-updater.timer" /etc/systemd/system/
   systemctl daemon-reload
 fi
 
 # 8. Start service
-log "Starting claws service..."
-systemctl start claws || log "Warning: systemctl start returned non-zero"
+log "Starting yeti service..."
+systemctl start yeti || log "Warning: systemctl start returned non-zero"
 
 # 9. Health check (poll for up to 45s)
 healthy=false
@@ -138,7 +138,7 @@ if [[ "$healthy" != "true" ]]; then
   if [[ -d "$INSTALL_DIR/dist.prev" ]]; then
     rm -rf "$INSTALL_DIR/dist"
     mv "$INSTALL_DIR/dist.prev" "$INSTALL_DIR/dist"
-    systemctl restart claws || log "Warning: rollback restart returned non-zero"
+    systemctl restart yeti || log "Warning: rollback restart returned non-zero"
 
     rollback_healthy=false
     for i in $(seq 1 30); do
@@ -151,20 +151,20 @@ if [[ "$healthy" != "true" ]]; then
 
     if [[ "$rollback_healthy" == "true" ]]; then
       log "Rollback successful"
-      slack "Deploy of claws $LATEST_TAG failed — rolled back to $CURRENT_TAG"
+      slack "Deploy of yeti $LATEST_TAG failed — rolled back to $CURRENT_TAG"
       echo "$LATEST_TAG" >> "$SKIP_FILE"
       log "Added $LATEST_TAG to skip list"
       exit 1
     else
       log "ERROR: Rollback also failed — manual intervention required"
-      slack "Deploy of claws $LATEST_TAG failed — rollback also failed, manual intervention required"
+      slack "Deploy of yeti $LATEST_TAG failed — rollback also failed, manual intervention required"
       echo "$LATEST_TAG" >> "$SKIP_FILE"
       log "Added $LATEST_TAG to skip list"
       exit 1
     fi
   else
     log "ERROR: No previous version to rollback to"
-    slack "Deploy of claws $LATEST_TAG failed — no previous version to rollback to"
+    slack "Deploy of yeti $LATEST_TAG failed — no previous version to rollback to"
     echo "$LATEST_TAG" >> "$SKIP_FILE"
     log "Added $LATEST_TAG to skip list"
     exit 1
@@ -175,7 +175,7 @@ fi
 echo "$LATEST_TAG" > "$VERSION_FILE"
 rm -rf "$INSTALL_DIR/dist.prev" "$STAGING_DIR"
 log "Update to $LATEST_TAG complete"
-DEPLOY_MSG="Deployed claws $LATEST_TAG"
+DEPLOY_MSG="Deployed yeti $LATEST_TAG"
 if [[ -n "$RELEASE_BODY" ]]; then
   DEPLOY_MSG=$(printf '%s\n\n%s' "$DEPLOY_MSG" "$RELEASE_BODY")
 fi

@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-REPO="St-John-Software/claws"
-INSTALL_DIR="/opt/claws"
+REPO="frostyard/yeti"
+INSTALL_DIR="/opt/yeti"
 USER_NAME="$(whoami)"
 
 log() { echo "==> $*"; }
@@ -21,32 +21,32 @@ sudo chown "$USER_NAME":"$USER_NAME" "$INSTALL_DIR"
 # Download and extract latest release
 log "Downloading latest release..."
 LATEST_TAG=$(gh release list -R "$REPO" --limit 1 --json tagName --jq '.[0].tagName')
-TMPFILE=$(mktemp /tmp/claws-XXXXXX.tar.gz)
-gh release download -R "$REPO" --pattern 'claws.tar.gz' -O "$TMPFILE" --clobber
+TMPFILE=$(mktemp /tmp/yeti-XXXXXX.tar.gz)
+gh release download -R "$REPO" --pattern 'yeti.tar.gz' -O "$TMPFILE" --clobber
 tar -xzf "$TMPFILE" -C "$INSTALL_DIR"
 rm -f "$TMPFILE"
 echo "$LATEST_TAG" > "$INSTALL_DIR/.current-version"
 
 # Patch the service unit with the current user and PATH
 log "Installing systemd units for user $USER_NAME..."
-sed "s/User=brendan/User=$USER_NAME/;s/Group=brendan/Group=$USER_NAME/;s|/home/brendan/|/home/$USER_NAME/|" \
-  "$INSTALL_DIR/deploy/claws.service" | \
+sed "s/User=yeti/User=$USER_NAME/;s/Group=yeti/Group=$USER_NAME/;s|/home/yeti/|/home/$USER_NAME/|" \
+  "$INSTALL_DIR/deploy/yeti.service" | \
   sed "/\[Service\]/a Environment=PATH=$PATH" | \
-  sudo tee /etc/systemd/system/claws.service >/dev/null
-sudo cp "$INSTALL_DIR/deploy/claws-updater.service" /etc/systemd/system/
-sudo cp "$INSTALL_DIR/deploy/claws-updater.timer" /etc/systemd/system/
+  sudo tee /etc/systemd/system/yeti.service >/dev/null
+sudo cp "$INSTALL_DIR/deploy/yeti-updater.service" /etc/systemd/system/
+sudo cp "$INSTALL_DIR/deploy/yeti-updater.timer" /etc/systemd/system/
 chmod +x "$INSTALL_DIR/deploy/deploy.sh"
 
 # Bootstrap config file if it doesn't exist
-CONFIG_DIR="$HOME/.claws"
+CONFIG_DIR="$HOME/.yeti"
 CONFIG_FILE="$CONFIG_DIR/config.json"
 if [[ ! -f "$CONFIG_FILE" ]]; then
   mkdir -p "$CONFIG_DIR"
   cat > "$CONFIG_FILE" << 'CONF'
 {
   "slackWebhook": "",
-  "githubOwners": ["stjohnb", "St-John-Software"],
-  "selfRepo": "St-John-Software/claws",
+  "githubOwners": ["frostyard", "frostyard"],
+  "selfRepo": "frostyard/yeti",
   "kwyjiboBaseUrl": "https://kwyjibo.vercel.app",
   "kwyjiboApiKey": ""
 }
@@ -60,9 +60,9 @@ ENV_FILE="$CONFIG_DIR/env"
 if [[ ! -f "$ENV_FILE" ]]; then
   mkdir -p "$CONFIG_DIR"
   cat > "$ENV_FILE" << 'CONF'
-# Environment variables loaded by the claws systemd unit.
+# Environment variables loaded by the yeti systemd unit.
 # Uncomment and set values as needed.
-# CLAWS_SLACK_WEBHOOK=https://hooks.slack.com/services/T.../B.../xxx
+# YETI_SLACK_WEBHOOK=https://hooks.slack.com/services/T.../B.../xxx
 # KWYJIBO_BASE_URL=https://kwyjibo.vercel.app
 # KWYJIBO_AUTOMATION_API_KEY=
 CONF
@@ -73,9 +73,9 @@ fi
 # Enable and start
 log "Enabling and starting services..."
 sudo systemctl daemon-reload
-sudo systemctl enable --now claws
-sudo systemctl enable --now claws-updater.timer
+sudo systemctl enable --now yeti
+sudo systemctl enable --now yeti-updater.timer
 
-log "Done! Claws is running as $USER_NAME"
-log "  Status:  sudo systemctl status claws"
-log "  Logs:    journalctl -u claws -f"
+log "Done! Yeti is running as $USER_NAME"
+log "  Status:  sudo systemctl status yeti"
+log "  Logs:    journalctl -u yeti -f"
