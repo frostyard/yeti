@@ -109,6 +109,25 @@ The service will start without it, but all Slack notifications will be silently 
 | `intervals.issueRefinerMs` | — | `300000` (5 min) | Issue refiner poll interval |
 | `intervals.ciFixerMs` | — | `600000` (10 min) | CI fixer poll interval |
 | `intervals.reviewAddresserMs` | — | `300000` (5 min) | Review addresser poll interval |
+| `allowedRepos` | `YETI_ALLOWED_REPOS` | *(absent — no filtering)* | Repo short-name allow-list (env var is comma-separated). Self-repo always included. |
+
+### Migrating to `allowedRepos`
+
+By default, `allowedRepos` is absent from your config, which means all discovered repos are processed — **no action is required on upgrade**. To restrict which repos Yeti operates on:
+
+1. Add `allowedRepos` to `~/.yeti/config.json` with the short names of repos you want Yeti to manage:
+
+```json
+{
+  "allowedRepos": ["yeti", "my-app", "docs"]
+}
+```
+
+2. The self-repo (e.g., `yeti`) is always included implicitly — you don't need to list it, but it's fine if you do.
+
+3. An empty list (`[]`) means only the self-repo gets jobs. To process no repos at all, pause all jobs instead.
+
+4. Repo names are case-insensitive and apply across all configured `githubOwners`.
 
 ### External tool authentication
 
@@ -121,7 +140,7 @@ These tools must be installed and authenticated on the host — they are **not**
 
 ## Jobs
 
-Yeti runs 10 jobs on timers. Each job scans all repos under the configured `githubOwners`. Understanding what triggers each job is important — **most jobs do not require labels** and will discover work based on PR/issue state.
+Yeti runs 10 jobs on timers. Each job scans repos under the configured `githubOwners`, filtered by `allowedRepos` if set. Understanding what triggers each job is important — **most jobs do not require labels** and will discover work based on PR/issue state.
 
 ### Jobs that require labels
 
