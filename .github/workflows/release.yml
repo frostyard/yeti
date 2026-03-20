@@ -42,7 +42,7 @@ jobs:
       - run: npm prune --omit=dev
 
       - name: Create release tarball
-        run: tar -czf claws.tar.gz dist/ deploy/ node_modules/
+        run: tar -czf yeti.tar.gz dist/ deploy/ node_modules/
 
       - name: Push tag
         run: |
@@ -70,4 +70,4 @@ jobs:
           tag_name: ${{ steps.version.outputs.tag }}
           name: ${{ steps.version.outputs.tag }}
           body: ${{ steps.notes.outputs.body }}
-          files: claws.tar.gz
+          files: yeti.tar.gz
