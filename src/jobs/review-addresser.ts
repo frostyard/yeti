@@ -85,8 +85,8 @@ export async function run(repos: Repo[]): Promise<void> {
       const prs = await gh.listPRs(repo.fullName);
       for (const pr of prs) {
         if (gh.isItemSkipped(repo.fullName, pr.number)) continue;
-        // Only process Claws PRs
-        if (!pr.headRefName.startsWith("claws/")) continue;
+        // Only process Yeti PRs
+        if (!pr.headRefName.startsWith("yeti/")) continue;
 
         const reviewData = await gh.getPRReviewComments(repo.fullName, pr.number);
         if (!reviewData.formatted || (reviewData.commentIds.length === 0 && reviewData.reviewCommentIds.length === 0)) {

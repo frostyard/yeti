@@ -91,7 +91,7 @@ describe("review-addresser", () => {
   });
 
   it("happy path — fetches comments, creates worktree, pushes changes, reacts, adds Ready label", async () => {
-    const pr = mockPR({ headRefName: "claws/fix-123" });
+    const pr = mockPR({ headRefName: "yeti/fix-123" });
     mockGh.listPRs.mockResolvedValue([pr]);
 
     await run([repo]);
@@ -110,7 +110,7 @@ describe("review-addresser", () => {
   });
 
   it("no review comments — skips without creating worktree", async () => {
-    const pr = mockPR({ headRefName: "claws/fix-123" });
+    const pr = mockPR({ headRefName: "yeti/fix-123" });
     mockGh.listPRs.mockResolvedValue([pr]);
     mockGh.getPRReviewComments.mockResolvedValue({
       formatted: "",
@@ -124,7 +124,7 @@ describe("review-addresser", () => {
   });
 
   it("no new commits — no push, no description update, but comment still posted", async () => {
-    const pr = mockPR({ headRefName: "claws/fix-123" });
+    const pr = mockPR({ headRefName: "yeti/fix-123" });
     mockGh.listPRs.mockResolvedValue([pr]);
     mockClaude.hasNewCommits.mockResolvedValue(false);
 
@@ -138,7 +138,7 @@ describe("review-addresser", () => {
   });
 
   it("error — records failure", async () => {
-    const pr = mockPR({ headRefName: "claws/fix-123" });
+    const pr = mockPR({ headRefName: "yeti/fix-123" });
     mockGh.listPRs.mockResolvedValue([pr]);
     mockClaude.runClaude.mockRejectedValue(new Error("claude error"));
 
@@ -150,7 +150,7 @@ describe("review-addresser", () => {
   });
 
   it("no new commits and empty Claude output — no comment posted", async () => {
-    const pr = mockPR({ headRefName: "claws/fix-123" });
+    const pr = mockPR({ headRefName: "yeti/fix-123" });
     mockGh.listPRs.mockResolvedValue([pr]);
     mockClaude.hasNewCommits.mockResolvedValue(false);
     mockClaude.runClaude.mockResolvedValue("   ");
@@ -162,7 +162,7 @@ describe("review-addresser", () => {
   });
 
   it("posts comment alongside pushed commits", async () => {
-    const pr = mockPR({ headRefName: "claws/fix-123" });
+    const pr = mockPR({ headRefName: "yeti/fix-123" });
     mockGh.listPRs.mockResolvedValue([pr]);
     mockClaude.hasNewCommits.mockResolvedValue(true);
     mockClaude.runClaude.mockResolvedValue("Fixed the issue and improved test coverage.");
@@ -176,7 +176,7 @@ describe("review-addresser", () => {
   });
 
   it("description update failure — does not fail the task", async () => {
-    const pr = mockPR({ headRefName: "claws/fix-123" });
+    const pr = mockPR({ headRefName: "yeti/fix-123" });
     mockGh.listPRs.mockResolvedValue([pr]);
     mockClaude.regeneratePRDescription.mockRejectedValue(new Error("Claude unavailable"));
 
@@ -188,14 +188,14 @@ describe("review-addresser", () => {
   });
 
   it("includes image context in prompt when images are found", async () => {
-    const pr = mockPR({ headRefName: "claws/fix-123" });
+    const pr = mockPR({ headRefName: "yeti/fix-123" });
     mockGh.listPRs.mockResolvedValue([pr]);
     mockGh.getPRReviewComments.mockResolvedValue({
       formatted: "Fix this ![screenshot](https://example.com/review.png)",
       commentIds: [101],
       reviewCommentIds: [],
     });
-    mockProcessTextForImages.mockResolvedValueOnce("\n## Attached Images\n- .claws-images/img-1.png");
+    mockProcessTextForImages.mockResolvedValueOnce("\n## Attached Images\n- .yeti-images/img-1.png");
 
     await run([repo]);
 
@@ -207,7 +207,7 @@ describe("review-addresser", () => {
     expect(prompt).toContain("## Attached Images");
   });
 
-  it("skips non-claws PRs", async () => {
+  it("skips non-yeti PRs", async () => {
     const pr = mockPR({ headRefName: "feature-branch" });
     mockGh.listPRs.mockResolvedValue([pr]);
 

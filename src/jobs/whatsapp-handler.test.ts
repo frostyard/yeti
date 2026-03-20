@@ -105,7 +105,7 @@ describe("whatsapp-handler", () => {
       messageId: "msg-2",
     });
 
-    expect(mockTranscribe.transcribe).toHaveBeenCalledWith(audioBuffer, "voice-note.ogg", "Kwyjibo, Claws, GitHub");
+    expect(mockTranscribe.transcribe).toHaveBeenCalledWith(audioBuffer, "voice-note.ogg", "Kwyjibo, Yeti, GitHub");
     expect(mockClaude.runClaude).toHaveBeenCalledOnce();
     expect(mockGh.createIssue).toHaveBeenCalledWith(
       "test-org/test-repo",

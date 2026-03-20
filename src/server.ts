@@ -30,7 +30,7 @@ const startedAt = new Date().toISOString();
 // ── Queue page category groups ──
 
 const MY_ATTENTION_CATEGORIES: QueueCategory[] = ["ready"];
-const CLAWS_ATTENTION_CATEGORIES: QueueCategory[] = ["needs-refinement", "refined", "needs-review-addressing", "auto-mergeable", "needs-triage"];
+const YETI_ATTENTION_CATEGORIES: QueueCategory[] = ["needs-refinement", "refined", "needs-review-addressing", "auto-mergeable", "needs-triage"];
 
 // ── Auth helpers ──
 
@@ -58,7 +58,7 @@ function requireAuth(req: http.IncomingMessage, res: http.ServerResponse): boole
 
   // Check cookie
   const cookies = parseCookies(req.headers.cookie);
-  const cookieToken = cookies["claws_token"];
+  const cookieToken = cookies["yeti_token"];
   if (cookieToken && safeCompare(cookieToken, token)) return true;
 
   // Auth failed
@@ -126,7 +126,7 @@ export function createServer(scheduler: Scheduler): http.Server {
 
 function getTheme(req: http.IncomingMessage): "dark" | "light" | "system" {
   const cookies = parseCookies(req.headers.cookie);
-  const value = cookies["claws_theme"];
+  const value = cookies["yeti_theme"];
   if (value === "dark" || value === "light") return value;
   return "system";
 }
@@ -150,7 +150,7 @@ async function handleRequest(req: http.IncomingMessage, res: http.ServerResponse
 
     res.writeHead(303, {
       Location: "/",
-      "Set-Cookie": `claws_token=${encodeURIComponent(token)}; HttpOnly; Secure; SameSite=Strict; Path=/`,
+      "Set-Cookie": `yeti_token=${encodeURIComponent(token)}; HttpOnly; Secure; SameSite=Strict; Path=/`,
     });
     res.end();
     return;
@@ -380,7 +380,7 @@ async function handleRequest(req: http.IncomingMessage, res: http.ServerResponse
     const newToken = config.AUTH_TOKEN;
     const headers: Record<string, string> = { Location: "/config?saved=1" };
     if (newToken) {
-      headers["Set-Cookie"] = `claws_token=${encodeURIComponent(newToken)}; HttpOnly; Secure; SameSite=Strict; Path=/`;
+      headers["Set-Cookie"] = `yeti_token=${encodeURIComponent(newToken)}; HttpOnly; Secure; SameSite=Strict; Path=/`;
     }
 
     res.writeHead(303, headers);
@@ -658,9 +658,9 @@ async function handleRequest(req: http.IncomingMessage, res: http.ServerResponse
   if (req.url === "/queue") {
     if (!requireAuth(req, res)) return;
     const myAttention = getQueueSnapshot(MY_ATTENTION_CATEGORIES);
-    const clawsAttention = getQueueSnapshot(CLAWS_ATTENTION_CATEGORIES);
+    const yetiAttention = getQueueSnapshot(YETI_ATTENTION_CATEGORIES);
     await enrichQueueItemsWithPRStatus(myAttention.items);
-    const html = buildQueuePage(myAttention, clawsAttention, theme, config.SKIPPED_ITEMS as Array<{ repo: string; number: number }>);
+    const html = buildQueuePage(myAttention, yetiAttention, theme, config.SKIPPED_ITEMS as Array<{ repo: string; number: number }>);
     res.writeHead(200, { "Content-Type": "text/html" });
     res.end(html);
     return;

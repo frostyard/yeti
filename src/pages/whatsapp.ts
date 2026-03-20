@@ -34,7 +34,7 @@ ${htmlOpenTag(theme)}
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>WhatsApp — Claws</title>
+  <title>WhatsApp — Yeti</title>
   <style>${PAGE_CSS}</style>
 </head>
 <body>

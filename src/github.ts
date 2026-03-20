@@ -89,23 +89,23 @@ export function clearApiCache(): void {
   (apiCache as any).inFlight.clear();
 }
 
-/** Hidden HTML comment appended to every comment Claws posts, used to filter out its own comments. */
-export const CLAWS_COMMENT_MARKER = "<!-- claws-automated -->";
+/** Hidden HTML comment appended to every comment Yeti posts, used to filter out its own comments. */
+export const YETI_COMMENT_MARKER = "<!-- yeti-automated -->";
 
-/** Visible header prepended to every comment Claws posts so conversations read naturally. */
-export const CLAWS_VISIBLE_HEADER = "*— Automated by Claws —*";
+/** Visible header prepended to every comment Yeti posts so conversations read naturally. */
+export const YETI_VISIBLE_HEADER = "*— Automated by Yeti —*";
 
 /** Previous visible header — kept for backward compatibility with old comments. */
-const LEGACY_VISIBLE_HEADER = "*— Automated by CLAWS —*";
+const LEGACY_VISIBLE_HEADER = "*— Automated by YETI —*";
 
-/** Check whether a comment body was posted by Claws. */
-export function isClawsComment(body: string): boolean {
-  return body.includes(CLAWS_COMMENT_MARKER);
+/** Check whether a comment body was posted by Yeti. */
+export function isYetiComment(body: string): boolean {
+  return body.includes(YETI_COMMENT_MARKER);
 }
 
-/** Strip the hidden Claws marker and visible header from a comment body. */
-export function stripClawsMarker(body: string): string {
-  return body.replace(CLAWS_COMMENT_MARKER, "").replace(CLAWS_VISIBLE_HEADER, "").replace(LEGACY_VISIBLE_HEADER, "").trim();
+/** Strip the hidden Yeti marker and visible header from a comment body. */
+export function stripYetiMarker(body: string): string {
+  return body.replace(YETI_COMMENT_MARKER, "").replace(YETI_VISIBLE_HEADER, "").replace(LEGACY_VISIBLE_HEADER, "").trim();
 }
 
 // ── Repo cache (shared across all jobs) ──
@@ -502,7 +502,7 @@ export async function deleteStaleLabels(
   legacyLabels: Set<string>,
 ): Promise<void> {
   const current = await listLabels(repo);
-  // Only delete labels that were previously managed by Claws but are no longer needed
+  // Only delete labels that were previously managed by Yeti but are no longer needed
   const stale = current.filter((name) => legacyLabels.has(name));
 
   for (const label of stale) {
@@ -567,7 +567,7 @@ export async function getIssueBody(repo: string, issueNumber: number): Promise<s
 }
 
 export async function commentOnIssue(repo: string, issueNumber: number, body: string): Promise<void> {
-  const fullBody = CLAWS_VISIBLE_HEADER + "\n\n" + body + "\n" + CLAWS_COMMENT_MARKER;
+  const fullBody = YETI_VISIBLE_HEADER + "\n\n" + body + "\n" + YETI_COMMENT_MARKER;
   await gh(["issue", "comment", String(issueNumber), "--repo", repo, "--body", fullBody]);
   apiCache.invalidate(`issue-comments:${repo}:${issueNumber}`);
 }
@@ -600,7 +600,7 @@ export async function getIssueComments(repo: string, issueNumber: number): Promi
 }
 
 export async function editIssueComment(repo: string, commentId: number, body: string): Promise<void> {
-  const fullBody = CLAWS_VISIBLE_HEADER + "\n\n" + body + "\n" + CLAWS_COMMENT_MARKER;
+  const fullBody = YETI_VISIBLE_HEADER + "\n\n" + body + "\n" + YETI_COMMENT_MARKER;
   await gh([
     "api", "--method", "PATCH",
     `repos/${repo}/issues/comments/${commentId}`,
@@ -678,13 +678,13 @@ export async function listMergedPRsForIssue(repo: string, issueNumber: number): 
     "--json", "number,title,headRefName,baseRefName,labels,author,body",
   ]);
   const prs = safeJsonParse(raw, "pr list merged") as PR[];
-  const branchPrefix = `claws/issue-${issueNumber}-`;
+  const branchPrefix = `yeti/issue-${issueNumber}-`;
   return prs.filter((pr) => pr.headRefName.startsWith(branchPrefix));
 }
 
 export async function getOpenPRForIssue(repo: string, issueNumber: number): Promise<PR | null> {
   const prs = await listPRs(repo);
-  const branchPrefix = `claws/issue-${issueNumber}-`;
+  const branchPrefix = `yeti/issue-${issueNumber}-`;
   return prs.find((pr) => pr.headRefName.startsWith(branchPrefix)) ?? null;
 }
 
@@ -863,7 +863,7 @@ export async function hasValidLGTM(repo: string, prNumber: number, baseBranch: s
   let latestLGTM: { created_at: string } | null = null;
   for (const comment of comments) {
     if (comment.body.trim().toUpperCase() !== "LGTM") continue;
-    if (isClawsComment(comment.body)) continue;
+    if (isYetiComment(comment.body)) continue;
     if (!latestLGTM || comment.created_at > latestLGTM.created_at) {
       latestLGTM = comment;
     }
@@ -996,16 +996,16 @@ export async function getPRReviewComments(repo: string, prNumber: number): Promi
       }
     }
 
-    // Check which inline comments already have a 👍 from Claws
+    // Check which inline comments already have a 👍 from Yeti
     for (const comment of comments) {
-      // Check for existing 👍 reaction from Claws
-      let hasClawsReaction = false;
+      // Check for existing 👍 reaction from Yeti
+      let hasYetiReaction = false;
       try {
         const reactionsRaw = await gh(["api", `repos/${repo}/pulls/comments/${comment.id}/reactions`]);
         const reactions = JSON.parse(reactionsRaw) as Reaction[];
-        hasClawsReaction = reactions.some((r) => r.user.login === selfLogin && r.content === "+1");
+        hasYetiReaction = reactions.some((r) => r.user.login === selfLogin && r.content === "+1");
       } catch { /* treat as no reaction */ }
-      if (hasClawsReaction) continue;
+      if (hasYetiReaction) continue;
 
       const location = comment.line ? `${comment.path}:${comment.line}` : comment.path;
       parts.push(
@@ -1015,23 +1015,23 @@ export async function getPRReviewComments(repo: string, prNumber: number): Promi
       reviewCommentIds.push(comment.id);
     }
 
-    // Add non-Claws, non-bot issue-tab comments without 👍 from Claws
+    // Add non-Yeti, non-bot issue-tab comments without 👍 from Yeti
     for (const comment of issueComments) {
       if (!comment.body?.trim()) continue;
       if (comment.body.trim().toUpperCase() === "LGTM") continue;
-      if (isClawsComment(comment.body)) {
-        parts.push(`Comment by @${comment.user.login} (automated by Claws):\n${stripClawsMarker(comment.body)}`);
+      if (isYetiComment(comment.body)) {
+        parts.push(`Comment by @${comment.user.login} (automated by Yeti):\n${stripYetiMarker(comment.body)}`);
         continue;
       }
       if (comment.user.login.endsWith("[bot]")) continue;
 
-      // Check for existing 👍 reaction from Claws
-      let hasClawsReaction = false;
+      // Check for existing 👍 reaction from Yeti
+      let hasYetiReaction = false;
       try {
         const reactions = await getCommentReactions(repo, comment.id);
-        hasClawsReaction = reactions.some((r) => r.user.login === selfLogin && r.content === "+1");
+        hasYetiReaction = reactions.some((r) => r.user.login === selfLogin && r.content === "+1");
       } catch { /* treat as no reaction */ }
-      if (hasClawsReaction) continue;
+      if (hasYetiReaction) continue;
 
       parts.push(`Comment by @${comment.user.login}:\n${comment.body}`);
       commentIds.push(comment.id);

@@ -7,14 +7,14 @@ const LEGACY_LABELS = vi.hoisted(() => new Set([
   "Reviewed",
   "prod-report",
   "investigated",
-  "claws-mergeable",
-  "claws-error",
+  "yeti-mergeable",
+  "yeti-error",
 ]));
 
 vi.mock("../config.js", () => ({
-  WORK_DIR: "/home/testuser/.claws",
+  WORK_DIR: "/home/testuser/.yeti",
   LABEL_SPECS: {
-    "Refined": { color: "0075ca", description: "Issue is ready for claws to implement" },
+    "Refined": { color: "0075ca", description: "Issue is ready for yeti to implement" },
   },
   SELF_REPO: "test-org/self-repo",
   LEGACY_LABELS,

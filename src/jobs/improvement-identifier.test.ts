@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { mockRepo } from "../test-helpers.js";
 
 vi.mock("../config.js", () => ({
-  WORK_DIR: "/home/testuser/.claws",
+  WORK_DIR: "/home/testuser/.yeti",
 }));
 
 vi.mock("../log.js", () => ({
@@ -90,7 +90,7 @@ describe("improvement-identifier", () => {
 
   it("skips repo when open improvement PRs exist", async () => {
     mockGh.listPRs.mockResolvedValue([
-      { number: 50, title: "refactor: Consolidate logic", headRefName: "claws/improve-ab12" },
+      { number: 50, title: "refactor: Consolidate logic", headRefName: "yeti/improve-ab12" },
     ]);
 
     await run([repo]);
@@ -108,13 +108,13 @@ describe("improvement-identifier", () => {
     expect(mockGh.createPR).toHaveBeenCalledTimes(2);
     expect(mockGh.createPR).toHaveBeenCalledWith(
       repo.fullName,
-      "claws/improve-ab12",
+      "yeti/improve-ab12",
       "refactor: Consolidate duplicate validation logic",
       expect.stringContaining("Files `src/a.ts` and `src/b.ts`"),
     );
     expect(mockGh.createPR).toHaveBeenCalledWith(
       repo.fullName,
-      "claws/improve-ab12",
+      "yeti/improve-ab12",
       "refactor: Remove unused helper function",
       expect.stringContaining("`src/utils.ts:42`"),
     );
@@ -198,7 +198,7 @@ describe("improvement-identifier", () => {
       repo.fullName,
       expect.any(String),
       expect.any(String),
-      "Test body\n\n---\n*Automated improvement by claws improvement-identifier*",
+      "Test body\n\n---\n*Automated improvement by yeti improvement-identifier*",
     );
   });
 
@@ -263,7 +263,7 @@ describe("improvement-identifier", () => {
 
   it("fetches both issue and PR titles for prompt context", async () => {
     mockGh.listOpenIssues.mockResolvedValue([{ number: 1, title: "Fix bug" }]);
-    mockGh.listPRs.mockResolvedValue([{ number: 2, title: "refactor: Improve X", headRefName: "claws/some-other-branch" }]);
+    mockGh.listPRs.mockResolvedValue([{ number: 2, title: "refactor: Improve X", headRefName: "yeti/some-other-branch" }]);
 
     await run([repo]);
 

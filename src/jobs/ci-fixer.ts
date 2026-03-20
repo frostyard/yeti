@@ -292,7 +292,7 @@ async function fileUnrelatedIssue(
       issueNumber = existing.number;
     } else {
       const body = [
-        `**Auto-created by Claws ci-fixer**`,
+        `**Auto-created by Yeti ci-fixer**`,
         "",
         `This issue tracks CI failures that are unrelated to the PRs they occurred on (flakey tests, runner issues, pre-existing failures).`,
         `Each occurrence is logged below.`,
@@ -330,7 +330,7 @@ async function revertPreviousUnrelatedFixes(
 ): Promise<void> {
   const fullName = repo.fullName;
 
-  // Skip if Claws has never run ci-fixer on this PR
+  // Skip if Yeti has never run ci-fixer on this PR
   if (!db.hasPreviousCiFixerTasks(fullName, pr.number)) {
     return;
   }
@@ -455,7 +455,7 @@ async function postErrorOnPR(repoName: string, pr: gh.PR, err: unknown): Promise
 
     const comments = await gh.getIssueComments(repoName, pr.number);
     const existing = comments.find(
-      (c) => gh.isClawsComment(c.body) && c.body.includes(CI_FIXER_ERROR_HEADING),
+      (c) => gh.isYetiComment(c.body) && c.body.includes(CI_FIXER_ERROR_HEADING),
     );
 
     if (existing) {

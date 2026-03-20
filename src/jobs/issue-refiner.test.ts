@@ -31,8 +31,8 @@ const { mockGh, mockClaude, mockDb } = vi.hoisted(() => ({
     removeLabel: vi.fn(),
     commentOnIssue: vi.fn(),
     editIssueComment: vi.fn(),
-    isClawsComment: (body: string) => body.includes("<!-- claws-automated -->"),
-    stripClawsMarker: (body: string) => body.replace("<!-- claws-automated -->", "").replace("*— Automated by Claws —*", "").trim(),
+    isYetiComment: (body: string) => body.includes("<!-- yeti-automated -->"),
+    stripYetiMarker: (body: string) => body.replace("<!-- yeti-automated -->", "").replace("*— Automated by Yeti —*", "").trim(),
     isRateLimited: vi.fn().mockReturnValue(false),
     isItemSkipped: vi.fn().mockReturnValue(false),
     hasPriorityLabel: vi.fn().mockReturnValue(false),
@@ -66,14 +66,14 @@ vi.mock("./triage-kwyjibo-errors.js", () => ({
   extractGameId: vi.fn().mockReturnValue(null),
 }));
 
-vi.mock("./triage-claws-errors.js", () => ({
+vi.mock("./triage-yeti-errors.js", () => ({
   extractFingerprint: vi.fn().mockReturnValue(null),
 }));
 
 import { run } from "./issue-refiner.js";
 import { reportError } from "../error-reporter.js";
 import { extractGameId } from "./triage-kwyjibo-errors.js";
-import { extractFingerprint } from "./triage-claws-errors.js";
+import { extractFingerprint } from "./triage-yeti-errors.js";
 
 describe("issue-refiner", () => {
   const repo = mockRepo();
@@ -85,7 +85,7 @@ describe("issue-refiner", () => {
     mockClaude.runClaude.mockResolvedValue("## Plan\nDo the thing");
     mockClaude.removeWorktree.mockResolvedValue(undefined);
     mockGh.listOpenIssues.mockResolvedValue([]);
-    mockGh.getSelfLogin.mockResolvedValue("claws-bot[bot]");
+    mockGh.getSelfLogin.mockResolvedValue("yeti-bot[bot]");
     mockGh.getOpenPRForIssue.mockResolvedValue(null);
     mockGh.getCommentReactions.mockResolvedValue([]);
     mockGh.addReaction.mockResolvedValue(undefined);
@@ -105,7 +105,7 @@ describe("issue-refiner", () => {
 
     await run([repo]);
 
-    expect(mockClaude.createWorktree).toHaveBeenCalledWith(repo, "claws/plan-1-ab12", "issue-refiner");
+    expect(mockClaude.createWorktree).toHaveBeenCalledWith(repo, "yeti/plan-1-ab12", "issue-refiner");
     expect(mockGh.commentOnIssue).toHaveBeenCalledWith(
       repo.fullName,
       issue.number,
@@ -121,13 +121,13 @@ describe("issue-refiner", () => {
     const issue = mockIssue({ body: "Test issue body" });
     mockGh.listOpenIssues.mockResolvedValueOnce([issue]);
     mockGh.getIssueComments.mockResolvedValue([
-      { id: 901, body: "## Claws Error Investigation Report\n\nRoot cause: missing null check", login: "claws-bot" },
+      { id: 901, body: "## Yeti Error Investigation Report\n\nRoot cause: missing null check", login: "yeti-bot" },
     ]);
 
     await run([repo]);
 
     const prompt = mockClaude.runClaude.mock.calls[0][0] as string;
-    expect(prompt).toContain("Claws Error Investigation Report");
+    expect(prompt).toContain("Yeti Error Investigation Report");
     expect(prompt).toContain("Root cause: missing null check");
   });
 
@@ -158,8 +158,8 @@ describe("issue-refiner", () => {
     const issue = mockIssue({ body: "Test issue body" });
     mockGh.listOpenIssues.mockResolvedValueOnce([issue]);
 
-    // Discovery phase: comments include a Claws plan comment + unreacted human comment
-    const planComment = { id: 501, body: "<!-- claws-automated -->## Implementation Plan\n\nOriginal plan here", login: "claws-bot" };
+    // Discovery phase: comments include a Yeti plan comment + unreacted human comment
+    const planComment = { id: 501, body: "<!-- yeti-automated -->## Implementation Plan\n\nOriginal plan here", login: "yeti-bot" };
     const humanComment = { id: 502, body: "Please also handle edge case X", login: "reviewer" };
 
     // getIssueComments is called in discovery phase and again inside processRefinement
@@ -184,8 +184,8 @@ describe("issue-refiner", () => {
     const issue = mockIssue({ body: "Test issue body" });
     mockGh.listOpenIssues.mockResolvedValueOnce([issue]);
 
-    // Discovery phase: Claws plan comment (triggers plan-found path) + unreacted human comment
-    const planComment = { id: 601, body: "<!-- claws-automated -->## Implementation Plan\n\nOld plan", login: "claws-bot" };
+    // Discovery phase: Yeti plan comment (triggers plan-found path) + unreacted human comment
+    const planComment = { id: 601, body: "<!-- yeti-automated -->## Implementation Plan\n\nOld plan", login: "yeti-bot" };
     const humanComment = { id: 602, body: "Just a random comment", login: "someone" };
 
     // Discovery call sees the plan comment → enters refinement path
@@ -236,7 +236,7 @@ describe("issue-refiner", () => {
     mockGh.getIssueComments.mockResolvedValue([
       { id: 1001, body: "Comment with ![img](https://example.com/img2.png)", login: "commenter" },
     ]);
-    mockProcessTextForImages.mockResolvedValueOnce("\n## Attached Images\n- .claws-images/img-1.png");
+    mockProcessTextForImages.mockResolvedValueOnce("\n## Attached Images\n- .yeti-images/img-1.png");
 
     await run([repo]);
 
@@ -261,7 +261,7 @@ describe("issue-refiner", () => {
   it("skips issues with open PR", async () => {
     const issue = mockIssue({ body: "Test issue body" });
     mockGh.listOpenIssues.mockResolvedValueOnce([issue]);
-    mockGh.getOpenPRForIssue.mockResolvedValueOnce({ number: 10, headRefName: "claws/issue-1-abc" });
+    mockGh.getOpenPRForIssue.mockResolvedValueOnce({ number: 10, headRefName: "yeti/issue-1-abc" });
 
     await run([repo]);
 
@@ -320,8 +320,8 @@ describe("issue-refiner", () => {
 
     const planComment = {
       id: 701,
-      body: "<!-- claws-automated -->## Implementation Plan\n\nFix the CI",
-      login: "claws-bot",
+      body: "<!-- yeti-automated -->## Implementation Plan\n\nFix the CI",
+      login: "yeti-bot",
     };
     mockGh.getIssueComments.mockResolvedValue([planComment]);
 
@@ -346,10 +346,10 @@ describe("issue-refiner", () => {
   it("responds to follow-up comments when issue has open PR", async () => {
     const issue = mockIssue({ body: "Test issue body" });
     mockGh.listOpenIssues.mockResolvedValueOnce([issue]);
-    mockGh.getOpenPRForIssue.mockResolvedValueOnce({ number: 5, headRefName: "claws/issue-1-c6b5" });
+    mockGh.getOpenPRForIssue.mockResolvedValueOnce({ number: 5, headRefName: "yeti/issue-1-c6b5" });
 
-    const planComment = { id: 501, body: "<!-- claws-automated -->## Implementation Plan\n\nOriginal plan", login: "claws-bot" };
-    const humanComment = { id: 502, body: "Is everything healthy again?", login: "stjohnb" };
+    const planComment = { id: 501, body: "<!-- yeti-automated -->## Implementation Plan\n\nOriginal plan", login: "yeti-bot" };
+    const humanComment = { id: 502, body: "Is everything healthy again?", login: "frostyard" };
 
     mockGh.getIssueComments.mockResolvedValue([planComment, humanComment]);
     mockGh.getCommentReactions.mockResolvedValue([]);
@@ -375,9 +375,9 @@ describe("issue-refiner", () => {
   it("skips issue with open PR when no unreacted comments", async () => {
     const issue = mockIssue({ body: "Test issue body" });
     mockGh.listOpenIssues.mockResolvedValueOnce([issue]);
-    mockGh.getOpenPRForIssue.mockResolvedValueOnce({ number: 5, headRefName: "claws/issue-1-c6b5" });
+    mockGh.getOpenPRForIssue.mockResolvedValueOnce({ number: 5, headRefName: "yeti/issue-1-c6b5" });
 
-    const planComment = { id: 501, body: "<!-- claws-automated -->## Implementation Plan\n\nPlan here", login: "claws-bot" };
+    const planComment = { id: 501, body: "<!-- yeti-automated -->## Implementation Plan\n\nPlan here", login: "yeti-bot" };
     mockGh.getIssueComments.mockResolvedValue([planComment]);
 
     await run([repo]);
@@ -389,14 +389,14 @@ describe("issue-refiner", () => {
   it("skips issue with open PR when all follow-up comments already reacted", async () => {
     const issue = mockIssue({ body: "Test issue body" });
     mockGh.listOpenIssues.mockResolvedValueOnce([issue]);
-    mockGh.getOpenPRForIssue.mockResolvedValueOnce({ number: 5, headRefName: "claws/issue-1-c6b5" });
-    mockGh.getSelfLogin.mockResolvedValue("stjohnb");
+    mockGh.getOpenPRForIssue.mockResolvedValueOnce({ number: 5, headRefName: "yeti/issue-1-c6b5" });
+    mockGh.getSelfLogin.mockResolvedValue("frostyard");
 
-    const planComment = { id: 501, body: "<!-- claws-automated -->## Implementation Plan\n\nPlan here", login: "claws-bot" };
+    const planComment = { id: 501, body: "<!-- yeti-automated -->## Implementation Plan\n\nPlan here", login: "yeti-bot" };
     const humanComment = { id: 502, body: "Is everything healthy?", login: "someone" };
     mockGh.getIssueComments.mockResolvedValue([planComment, humanComment]);
     // Already has a 👍 reaction from self
-    mockGh.getCommentReactions.mockResolvedValue([{ user: { login: "stjohnb" }, content: "+1" }]);
+    mockGh.getCommentReactions.mockResolvedValue([{ user: { login: "frostyard" }, content: "+1" }]);
 
     await run([repo]);
 
@@ -404,9 +404,9 @@ describe("issue-refiner", () => {
     expect(mockGh.commentOnIssue).not.toHaveBeenCalled();
   });
 
-  it("skips [claws-error] issues without investigation report", async () => {
+  it("skips [yeti-error] issues without investigation report", async () => {
     const issue = mockIssue({
-      title: "[claws-error] Something broke",
+      title: "[yeti-error] Something broke",
       body: "Error details here",
     });
     mockGh.listOpenIssues.mockResolvedValueOnce([issue]);

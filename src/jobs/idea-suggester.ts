@@ -233,7 +233,7 @@ export function formatOverviewContent(suggestions: Suggestions): string {
 
   sections.push("");
   sections.push("---");
-  sections.push("*Automated suggestions by claws idea-suggester*");
+  sections.push("*Automated suggestions by yeti idea-suggester*");
   sections.push("");
 
   return sections.join("\n");
@@ -281,7 +281,7 @@ async function processRepo(repo: Repo): Promise<void> {
   const openPRTitles = openPRs.map((p) => p.title);
 
   // Create worktree and run Claude
-  const branch = `claws/ideas-${claude.randomSuffix()}`;
+  const branch = `yeti/ideas-${claude.randomSuffix()}`;
   const taskId = db.recordTaskStart("idea-suggester", fullName, 0, null);
   let wt: string | undefined;
 

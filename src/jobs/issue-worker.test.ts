@@ -32,8 +32,8 @@ const { mockGh, mockClaude, mockDb } = vi.hoisted(() => ({
     getOpenPRForIssue: vi.fn(),
     editIssueComment: vi.fn(),
     commentOnIssue: vi.fn(),
-    isClawsComment: (body: string) => body.includes("<!-- claws-automated -->"),
-    stripClawsMarker: (body: string) => body.replace("<!-- claws-automated -->", "").replace("*— Automated by Claws —*", "").trim(),
+    isYetiComment: (body: string) => body.includes("<!-- yeti-automated -->"),
+    stripYetiMarker: (body: string) => body.replace("<!-- yeti-automated -->", "").replace("*— Automated by Yeti —*", "").trim(),
     isRateLimited: vi.fn().mockReturnValue(false),
     isItemSkipped: vi.fn().mockReturnValue(false),
     isItemPrioritized: vi.fn().mockReturnValue(false),
@@ -111,7 +111,7 @@ describe("issue-worker", () => {
       expect(mockClaude.generatePRDescription).toHaveBeenCalled();
       expect(mockGh.createPR).toHaveBeenCalledWith(
         repo.fullName,
-        expect.stringContaining("claws/issue-1"),
+        expect.stringContaining("yeti/issue-1"),
         expect.stringContaining("#1"),
         expect.stringContaining("Closes #1"),
       );
@@ -177,14 +177,14 @@ describe("issue-worker", () => {
     it("creates first PR with phase title", async () => {
       const issue = mockIssue({ labels: [{ name: "Refined" }] });
       mockGh.listIssuesByLabel.mockResolvedValueOnce([issue]);
-      mockGh.getIssueComments.mockResolvedValue([{ id: 1, body: multiPRPlan, login: "claws-bot" }]);
+      mockGh.getIssueComments.mockResolvedValue([{ id: 1, body: multiPRPlan, login: "yeti-bot" }]);
       mockGh.listMergedPRsForIssue.mockResolvedValue([]);
 
       await run([repo]);
 
       expect(mockGh.createPR).toHaveBeenCalledWith(
         repo.fullName,
-        expect.stringContaining("claws/issue-1"),
+        expect.stringContaining("yeti/issue-1"),
         "fix(#1): Add database schema (1/3)",
         expect.stringContaining("Part of #1"),
       );
@@ -194,16 +194,16 @@ describe("issue-worker", () => {
     it("creates second PR after first is merged", async () => {
       const issue = mockIssue({ labels: [{ name: "Refined" }] });
       mockGh.listIssuesByLabel.mockResolvedValueOnce([issue]);
-      mockGh.getIssueComments.mockResolvedValue([{ id: 1, body: multiPRPlan, login: "claws-bot" }]);
+      mockGh.getIssueComments.mockResolvedValue([{ id: 1, body: multiPRPlan, login: "yeti-bot" }]);
       mockGh.listMergedPRsForIssue.mockResolvedValue([
-        mockPR({ number: 50, title: "Add database schema", headRefName: "claws/issue-1-xxxx" }),
+        mockPR({ number: 50, title: "Add database schema", headRefName: "yeti/issue-1-xxxx" }),
       ]);
 
       await run([repo]);
 
       expect(mockGh.createPR).toHaveBeenCalledWith(
         repo.fullName,
-        expect.stringContaining("claws/issue-1"),
+        expect.stringContaining("yeti/issue-1"),
         "fix(#1): Implement API endpoints (2/3)",
         expect.stringContaining("Part of #1"),
       );
@@ -213,17 +213,17 @@ describe("issue-worker", () => {
     it("creates final PR with Closes reference", async () => {
       const issue = mockIssue({ labels: [{ name: "Refined" }] });
       mockGh.listIssuesByLabel.mockResolvedValueOnce([issue]);
-      mockGh.getIssueComments.mockResolvedValue([{ id: 1, body: multiPRPlan, login: "claws-bot" }]);
+      mockGh.getIssueComments.mockResolvedValue([{ id: 1, body: multiPRPlan, login: "yeti-bot" }]);
       mockGh.listMergedPRsForIssue.mockResolvedValue([
-        mockPR({ number: 50, headRefName: "claws/issue-1-aaaa" }),
-        mockPR({ number: 51, headRefName: "claws/issue-1-bbbb" }),
+        mockPR({ number: 50, headRefName: "yeti/issue-1-aaaa" }),
+        mockPR({ number: 51, headRefName: "yeti/issue-1-bbbb" }),
       ]);
 
       await run([repo]);
 
       expect(mockGh.createPR).toHaveBeenCalledWith(
         repo.fullName,
-        expect.stringContaining("claws/issue-1"),
+        expect.stringContaining("yeti/issue-1"),
         "fix(#1): Add frontend UI (3/3)",
         expect.stringContaining("Closes #1"),
       );
@@ -233,7 +233,7 @@ describe("issue-worker", () => {
     it("includes phase-specific prompt content", async () => {
       const issue = mockIssue({ labels: [{ name: "Refined" }] });
       mockGh.listIssuesByLabel.mockResolvedValueOnce([issue]);
-      mockGh.getIssueComments.mockResolvedValue([{ id: 1, body: multiPRPlan, login: "claws-bot" }]);
+      mockGh.getIssueComments.mockResolvedValue([{ id: 1, body: multiPRPlan, login: "yeti-bot" }]);
       mockGh.listMergedPRsForIssue.mockResolvedValue([]);
 
       await run([repo]);
@@ -263,11 +263,11 @@ describe("issue-worker", () => {
       mockGh.listOpenIssues.mockResolvedValueOnce([issue]);
       // Issue has merged PRs (so it qualifies for multi-phase check)
       mockGh.listMergedPRsForIssue.mockResolvedValue([
-        mockPR({ number: 50, headRefName: "claws/issue-1-ab12" }),
+        mockPR({ number: 50, headRefName: "yeti/issue-1-ab12" }),
       ]);
-      mockGh.getIssueComments.mockResolvedValue([{ id: 1, body: multiPRPlan, login: "claws-bot" }]);
+      mockGh.getIssueComments.mockResolvedValue([{ id: 1, body: multiPRPlan, login: "yeti-bot" }]);
       // Still has an open PR
-      mockGh.getOpenPRForIssue.mockResolvedValue(mockPR({ headRefName: "claws/issue-1-cd34" }));
+      mockGh.getOpenPRForIssue.mockResolvedValue(mockPR({ headRefName: "yeti/issue-1-cd34" }));
 
       await run([repo]);
 
@@ -279,9 +279,9 @@ describe("issue-worker", () => {
       mockGh.listIssuesByLabel.mockResolvedValueOnce([]);
       mockGh.listOpenIssues.mockResolvedValueOnce([issue]);
       mockGh.getOpenPRForIssue.mockResolvedValue(null);
-      mockGh.getIssueComments.mockResolvedValue([{ id: 1, body: multiPRPlan, login: "claws-bot" }]);
+      mockGh.getIssueComments.mockResolvedValue([{ id: 1, body: multiPRPlan, login: "yeti-bot" }]);
       mockGh.listMergedPRsForIssue.mockResolvedValue([
-        mockPR({ number: 50, headRefName: "claws/issue-1-ab12" }),
+        mockPR({ number: 50, headRefName: "yeti/issue-1-ab12" }),
       ]);
 
       await run([repo]);
@@ -294,10 +294,10 @@ describe("issue-worker", () => {
       mockGh.listIssuesByLabel.mockResolvedValueOnce([]);
       mockGh.listOpenIssues.mockResolvedValueOnce([issue]);
       mockGh.getOpenPRForIssue.mockResolvedValue(null);
-      mockGh.getIssueComments.mockResolvedValue([{ id: 1, body: multiPRPlan, login: "claws-bot" }]);
+      mockGh.getIssueComments.mockResolvedValue([{ id: 1, body: multiPRPlan, login: "yeti-bot" }]);
       mockGh.listMergedPRsForIssue.mockResolvedValue([
-        mockPR({ number: 50, headRefName: "claws/issue-1-aaaa" }),
-        mockPR({ number: 51, headRefName: "claws/issue-1-bbbb" }),
+        mockPR({ number: 50, headRefName: "yeti/issue-1-aaaa" }),
+        mockPR({ number: 51, headRefName: "yeti/issue-1-bbbb" }),
       ]);
 
       await run([repo]);
@@ -311,7 +311,7 @@ describe("issue-worker", () => {
       const issue = mockIssue({ labels: [{ name: "Refined" }] });
       mockGh.listIssuesByLabel.mockResolvedValueOnce([issue]);
       mockGh.getOpenPRForIssue.mockResolvedValue(
-        mockPR({ number: 42, headRefName: "claws/issue-1-ab12" }),
+        mockPR({ number: 42, headRefName: "yeti/issue-1-ab12" }),
       );
 
       await run([repo]);
@@ -355,9 +355,9 @@ describe("issue-worker", () => {
     it("posts progress comment before implementing next phase", async () => {
       const issue = mockIssue({ labels: [{ name: "Refined" }] });
       mockGh.listIssuesByLabel.mockResolvedValueOnce([issue]);
-      mockGh.getIssueComments.mockResolvedValue([{ id: 42, body: multiPRPlan, login: "claws-bot" }]);
+      mockGh.getIssueComments.mockResolvedValue([{ id: 42, body: multiPRPlan, login: "yeti-bot" }]);
       mockGh.listMergedPRsForIssue.mockResolvedValue([
-        mockPR({ number: 50, title: "Add database schema", headRefName: "claws/issue-1-xxxx" }),
+        mockPR({ number: 50, title: "Add database schema", headRefName: "yeti/issue-1-xxxx" }),
       ]);
 
       await run([repo]);
@@ -382,11 +382,11 @@ describe("issue-worker", () => {
       const issue = mockIssue({ labels: [{ name: "Refined" }] });
       mockGh.listIssuesByLabel.mockResolvedValueOnce([issue]);
       mockGh.getIssueComments.mockResolvedValue([
-        { id: 42, body: multiPRPlan, login: "claws-bot" },
-        { id: 43, body: progressComment, login: "claws-bot" },
+        { id: 42, body: multiPRPlan, login: "yeti-bot" },
+        { id: 43, body: progressComment, login: "yeti-bot" },
       ]);
       mockGh.listMergedPRsForIssue.mockResolvedValue([
-        mockPR({ number: 50, headRefName: "claws/issue-1-xxxx" }),
+        mockPR({ number: 50, headRefName: "yeti/issue-1-xxxx" }),
       ]);
 
       await run([repo]);
@@ -400,9 +400,9 @@ describe("issue-worker", () => {
     it("progress comment failure does not block implementation", async () => {
       const issue = mockIssue({ labels: [{ name: "Refined" }] });
       mockGh.listIssuesByLabel.mockResolvedValueOnce([issue]);
-      mockGh.getIssueComments.mockResolvedValue([{ id: 42, body: multiPRPlan, login: "claws-bot" }]);
+      mockGh.getIssueComments.mockResolvedValue([{ id: 42, body: multiPRPlan, login: "yeti-bot" }]);
       mockGh.listMergedPRsForIssue.mockResolvedValue([
-        mockPR({ number: 50, headRefName: "claws/issue-1-xxxx" }),
+        mockPR({ number: 50, headRefName: "yeti/issue-1-xxxx" }),
       ]);
 
       mockGh.commentOnIssue.mockRejectedValueOnce(new Error("API error"));
@@ -418,7 +418,7 @@ describe("issue-worker", () => {
     it("skips progress comment for first phase", async () => {
       const issue = mockIssue({ labels: [{ name: "Refined" }] });
       mockGh.listIssuesByLabel.mockResolvedValueOnce([issue]);
-      mockGh.getIssueComments.mockResolvedValue([{ id: 42, body: multiPRPlan, login: "claws-bot" }]);
+      mockGh.getIssueComments.mockResolvedValue([{ id: 42, body: multiPRPlan, login: "yeti-bot" }]);
       mockGh.listMergedPRsForIssue.mockResolvedValue([]);
 
       await run([repo]);
@@ -431,10 +431,10 @@ describe("issue-worker", () => {
     it("progress comment contains merged PR numbers and titles", async () => {
       const issue = mockIssue({ labels: [{ name: "Refined" }] });
       mockGh.listIssuesByLabel.mockResolvedValueOnce([issue]);
-      mockGh.getIssueComments.mockResolvedValue([{ id: 42, body: multiPRPlan, login: "claws-bot" }]);
+      mockGh.getIssueComments.mockResolvedValue([{ id: 42, body: multiPRPlan, login: "yeti-bot" }]);
       mockGh.listMergedPRsForIssue.mockResolvedValue([
-        mockPR({ number: 50, title: "Add database schema", headRefName: "claws/issue-1-xxxx" }),
-        mockPR({ number: 51, title: "Implement API endpoints", headRefName: "claws/issue-1-yyyy" }),
+        mockPR({ number: 50, title: "Add database schema", headRefName: "yeti/issue-1-xxxx" }),
+        mockPR({ number: 51, title: "Implement API endpoints", headRefName: "yeti/issue-1-yyyy" }),
       ]);
 
       await run([repo]);
@@ -454,7 +454,7 @@ describe("issue-worker", () => {
     });
     mockGh.listIssuesByLabel.mockResolvedValueOnce([issue]);
     mockGh.getIssueComments.mockResolvedValue([{ id: 100, body: "![comment img](https://example.com/comment.png)", login: "commenter" }]);
-    mockProcessTextForImages.mockResolvedValueOnce("\n## Attached Images\n- .claws-images/img-1.png");
+    mockProcessTextForImages.mockResolvedValueOnce("\n## Attached Images\n- .yeti-images/img-1.png");
 
     await run([repo]);
 

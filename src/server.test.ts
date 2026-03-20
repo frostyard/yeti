@@ -10,8 +10,8 @@ vi.mock("./config.js", () => ({
     ready: "Ready",
   },
   LABEL_SPECS: {
-    "Refined":              { color: "0075ca", description: "Issue is ready for claws to implement" },
-    "Ready":                { color: "0e8a16", description: "Claws has finished — needs human attention" },
+    "Refined":              { color: "0075ca", description: "Issue is ready for yeti to implement" },
+    "Ready":                { color: "0e8a16", description: "Yeti has finished — needs human attention" },
   },
   getConfigForDisplay: vi.fn().mockReturnValue({
     slackWebhook: "****cdef",
@@ -256,7 +256,7 @@ describe("HTTP server", () => {
     const res = await request(server, "GET", "/");
     expect(res.status).toBe(200);
     expect(res.headers["content-type"]).toBe("text/html");
-    expect(res.body).toContain("claws");
+    expect(res.body).toContain("yeti");
     expect(res.body).toContain("issue-worker");
     expect(res.body).toContain("ci-fixer");
     expect(res.body).toContain('href="/logs"');
@@ -532,7 +532,7 @@ describe("HTTP server with auth", () => {
 
   it("GET /config returns 200 with valid cookie", async () => {
     const res = await request(server, "GET", "/config", {
-      headers: { Cookie: "claws_token=test-secret-token" },
+      headers: { Cookie: "yeti_token=test-secret-token" },
     });
     expect(res.status).toBe(200);
     expect(res.body).toContain("Save Configuration");
@@ -598,7 +598,7 @@ describe("HTTP server with auth", () => {
     expect(res.headers.location).toBe("/");
     const cookies = res.headers["set-cookie"];
     expect(cookies).toBeDefined();
-    expect(cookies!.some(c => c.includes("claws_token="))).toBe(true);
+    expect(cookies!.some(c => c.includes("yeti_token="))).toBe(true);
   });
 
   it("POST /login shows error on invalid token", async () => {
@@ -690,33 +690,33 @@ describe("Theme support", () => {
     expect(res.body).toMatch(/<html lang="en">\s*\n<head>/);
   });
 
-  it("GET / with claws_theme=dark cookie sets data-theme=dark on html tag", async () => {
+  it("GET / with yeti_theme=dark cookie sets data-theme=dark on html tag", async () => {
     const res = await request(server, "GET", "/", {
-      headers: { Cookie: "claws_theme=dark" },
+      headers: { Cookie: "yeti_theme=dark" },
     });
     expect(res.status).toBe(200);
     expect(res.body).toContain('<html lang="en" data-theme="dark">');
   });
 
-  it("GET / with claws_theme=light cookie sets data-theme=light on html tag", async () => {
+  it("GET / with yeti_theme=light cookie sets data-theme=light on html tag", async () => {
     const res = await request(server, "GET", "/", {
-      headers: { Cookie: "claws_theme=light" },
+      headers: { Cookie: "yeti_theme=light" },
     });
     expect(res.status).toBe(200);
     expect(res.body).toContain('<html lang="en" data-theme="light">');
   });
 
-  it("GET / with claws_theme=system cookie omits data-theme on html tag", async () => {
+  it("GET / with yeti_theme=system cookie omits data-theme on html tag", async () => {
     const res = await request(server, "GET", "/", {
-      headers: { Cookie: "claws_theme=system" },
+      headers: { Cookie: "yeti_theme=system" },
     });
     expect(res.status).toBe(200);
     expect(res.body).toMatch(/<html lang="en">\s*\n<head>/);
   });
 
-  it("GET / with invalid claws_theme cookie defaults to system", async () => {
+  it("GET / with invalid yeti_theme cookie defaults to system", async () => {
     const res = await request(server, "GET", "/", {
-      headers: { Cookie: "claws_theme=invalid" },
+      headers: { Cookie: "yeti_theme=invalid" },
     });
     expect(res.status).toBe(200);
     expect(res.body).toMatch(/<html lang="en">\s*\n<head>/);
@@ -724,7 +724,7 @@ describe("Theme support", () => {
 
   it("theme select has correct option pre-selected for dark", async () => {
     const res = await request(server, "GET", "/", {
-      headers: { Cookie: "claws_theme=dark" },
+      headers: { Cookie: "yeti_theme=dark" },
     });
     expect(res.body).toContain('<option value="dark" selected>');
     expect(res.body).not.toContain('<option value="light" selected>');
@@ -757,7 +757,7 @@ describe("Theme support", () => {
     });
     try {
       const res = await request(authServer, "GET", "/login", {
-        headers: { Cookie: "claws_theme=light" },
+        headers: { Cookie: "yeti_theme=light" },
       });
       expect(res.status).toBe(200);
       expect(res.body).toContain('<html lang="en" data-theme="light">');
@@ -885,7 +885,7 @@ describe("Theme support", () => {
   });
 
   it("buildQueuePage shows Needs Review Addressing group before Needs Refinement", () => {
-    const clawsAttention = {
+    const yetiAttention = {
       items: [
         { repo: "org/repo", number: 1, title: "Refine item", category: "needs-refinement" as const, updatedAt: "2025-01-01T00:00:00Z", type: "issue" as const },
         { repo: "org/repo", number: 2, title: "Review item", category: "needs-review-addressing" as const, updatedAt: "2025-01-01T00:00:00Z", type: "issue" as const, checkStatus: "passing" as const, prNumber: 99 },
@@ -893,7 +893,7 @@ describe("Theme support", () => {
       oldestFetchAt: Date.now(),
     };
     const empty = { items: [], oldestFetchAt: Date.now() };
-    const html = buildQueuePage(empty, clawsAttention, "system" as Theme);
+    const html = buildQueuePage(empty, yetiAttention, "system" as Theme);
     const reviewPos = html.indexOf("Needs Review Addressing");
     const refinementPos = html.indexOf("Needs Refinement");
     expect(reviewPos).toBeLessThan(refinementPos);
@@ -1093,15 +1093,15 @@ describe("POST /queue/deprioritize", () => {
 });
 
 describe("Queue page UI features", () => {
-  it("buildQueuePage renders skip and prioritize buttons for claws attention items", () => {
-    const clawsAttention = {
+  it("buildQueuePage renders skip and prioritize buttons for yeti attention items", () => {
+    const yetiAttention = {
       items: [
         { repo: "org/repo", number: 1, title: "Test item", category: "refined" as const, updatedAt: "2025-01-01T00:00:00Z", type: "issue" as const },
       ],
       oldestFetchAt: Date.now(),
     };
     const empty = { items: [], oldestFetchAt: Date.now() };
-    const html = buildQueuePage(empty, clawsAttention, "system" as Theme);
+    const html = buildQueuePage(empty, yetiAttention, "system" as Theme);
     expect(html).toContain("Prioritise");
     expect(html).toContain("Skip");
     expect(html).toContain("skipItem");
@@ -1119,7 +1119,7 @@ describe("Queue page UI features", () => {
     const html = buildQueuePage(myAttention, empty, "system" as Theme);
     // The script block defines the functions, but the "Needs My Attention" section
     // should not contain skip/prioritize button onclick attributes
-    const mySection = html.split("Needs Claws Attention")[0];
+    const mySection = html.split("Needs Yeti Attention")[0];
     expect(mySection).not.toContain('onclick="skipItem');
     expect(mySection).not.toContain('onclick="prioritizeItem');
   });
@@ -1134,14 +1134,14 @@ describe("Queue page UI features", () => {
   });
 
   it("buildQueuePage shows priority star for prioritized items", () => {
-    const clawsAttention = {
+    const yetiAttention = {
       items: [
         { repo: "org/repo", number: 1, title: "Priority item", category: "refined" as const, updatedAt: "2025-01-01T00:00:00Z", type: "issue" as const, prioritized: true },
       ],
       oldestFetchAt: Date.now(),
     };
     const empty = { items: [], oldestFetchAt: Date.now() };
-    const html = buildQueuePage(empty, clawsAttention, "system" as Theme);
+    const html = buildQueuePage(empty, yetiAttention, "system" as Theme);
     expect(html).toContain("priority-star");
     expect(html).toContain("Deprioritise");
   });

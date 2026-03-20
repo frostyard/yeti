@@ -7,11 +7,11 @@ ${htmlOpenTag(theme)}
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>claws — login</title>
+  <title>yeti — login</title>
   <style>${PAGE_CSS}</style>
 </head>
 <body>
-  <h1>claws</h1>
+  <h1>yeti</h1>
   <div class="login-form">
     <h2>Login</h2>
     ${error ? '<div class="login-error">Invalid token. Please try again.</div>' : ""}

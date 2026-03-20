@@ -7,7 +7,7 @@ import * as db from "../db.js";
 import { reportError } from "../error-reporter.js";
 import { processTextForImages } from "../images.js";
 import { extractGameId, REPORT_HEADER as KWYJIBO_REPORT_HEADER } from "./triage-kwyjibo-errors.js";
-import { extractFingerprint, REPORT_HEADER as CLAWS_ERROR_REPORT_HEADER } from "./triage-claws-errors.js";
+import { extractFingerprint, REPORT_HEADER as YETI_ERROR_REPORT_HEADER } from "./triage-yeti-errors.js";
 
 const PLAN_HEADER = "## Implementation Plan";
 
@@ -56,10 +56,10 @@ function buildRefinementPrompt(
           `The following feedback was provided on the plan:`,
           ``,
           ...feedback.flatMap((f) => {
-            const label = gh.isClawsComment(f.body)
-              ? `Comment by @${f.login} (automated by Claws):`
+            const label = gh.isYetiComment(f.body)
+              ? `Comment by @${f.login} (automated by Yeti):`
               : `Comment by @${f.login}:`;
-            return [`---`, label, gh.stripClawsMarker(f.body), ``];
+            return [`---`, label, gh.stripYetiMarker(f.body), ``];
           }),
         ]
       : [`No specific feedback comments were provided. Re-evaluate the plan for completeness and correctness.`, ``]),
@@ -103,10 +103,10 @@ function buildFollowUpPrompt(
     `The following follow-up comments were posted after the plan:`,
     ``,
     ...followUpComments.flatMap((f) => {
-      const label = gh.isClawsComment(f.body)
-        ? `Comment by @${f.login} (automated by Claws):`
+      const label = gh.isYetiComment(f.body)
+        ? `Comment by @${f.login} (automated by Yeti):`
         : `Comment by @${f.login}:`;
-      return [`---`, label, gh.stripClawsMarker(f.body), ``];
+      return [`---`, label, gh.stripYetiMarker(f.body), ``];
     }),
     ``,
     `If \`docs/OVERVIEW.md\` exists in the repository, read it first (and any linked documents that seem relevant) for context about the codebase architecture and patterns.`,
@@ -127,10 +127,10 @@ function buildNewPlanPrompt(fullName: string, issue: gh.Issue, comments: gh.Issu
     issue.body || "(No description provided)",
     ``,
     ...comments.flatMap((c) => {
-      const label = gh.isClawsComment(c.body)
-        ? `Comment by @${c.login} (automated by Claws):`
+      const label = gh.isYetiComment(c.body)
+        ? `Comment by @${c.login} (automated by Yeti):`
         : `Comment by @${c.login}:`;
-      return [`---`, label, gh.stripClawsMarker(c.body), ``];
+      return [`---`, label, gh.stripYetiMarker(c.body), ``];
     }),
     `If \`docs/OVERVIEW.md\` exists in the repository, read it first (and any linked documents that seem relevant to the issue) for context about the codebase architecture and patterns.`,
     ``,
@@ -155,7 +155,7 @@ async function processIssue(repo: Repo, issue: gh.Issue): Promise<void> {
   let wtPath: string | undefined;
 
   try {
-    const branchName = `claws/plan-${issue.number}-${claude.randomSuffix()}`;
+    const branchName = `yeti/plan-${issue.number}-${claude.randomSuffix()}`;
     wtPath = await claude.createWorktree(repo, branchName, "issue-refiner");
     db.updateTaskWorktree(taskId, wtPath, branchName);
 
@@ -202,7 +202,7 @@ async function processRefinement(
   let wtPath: string | undefined;
 
   try {
-    const branchName = `claws/plan-${issue.number}-${claude.randomSuffix()}`;
+    const branchName = `yeti/plan-${issue.number}-${claude.randomSuffix()}`;
     wtPath = await claude.createWorktree(repo, branchName, "issue-refiner");
     db.updateTaskWorktree(taskId, wtPath, branchName);
 
@@ -278,13 +278,13 @@ async function processFollowUp(
   let wtPath: string | undefined;
 
   try {
-    const branchName = `claws/plan-${issue.number}-${claude.randomSuffix()}`;
+    const branchName = `yeti/plan-${issue.number}-${claude.randomSuffix()}`;
     wtPath = await claude.createWorktree(repo, branchName, "issue-refiner");
     db.updateTaskWorktree(taskId, wtPath, branchName);
 
     const comments = await gh.getIssueComments(fullName, issue.number);
     const lastPlanIdx = comments.findLastIndex(
-      (c) => c.body.includes(PLAN_HEADER) && gh.isClawsComment(c.body),
+      (c) => c.body.includes(PLAN_HEADER) && gh.isYetiComment(c.body),
     );
 
     if (lastPlanIdx === -1) {
@@ -328,7 +328,7 @@ async function findUnreactedHumanComments(
 ): Promise<gh.IssueComment[]> {
   const unreacted: gh.IssueComment[] = [];
   for (const comment of commentsAfterPlan) {
-    if (gh.isClawsComment(comment.body)) continue;
+    if (gh.isYetiComment(comment.body)) continue;
     if (comment.login.endsWith("[bot]")) continue;
     try {
       const reactions = await gh.getCommentReactions(fullName, comment.id);
@@ -366,7 +366,7 @@ export async function run(repos: Repo[]): Promise<void> {
         if (openPR) {
           const comments = await gh.getIssueComments(repo.fullName, issue.number);
           const lastPlanIdx = comments.findLastIndex(
-            (c) => c.body.includes(PLAN_HEADER) && gh.isClawsComment(c.body),
+            (c) => c.body.includes(PLAN_HEADER) && gh.isYetiComment(c.body),
           );
           if (lastPlanIdx !== -1) {
             const commentsAfterPlan = comments.slice(lastPlanIdx + 1);
@@ -383,10 +383,10 @@ export async function run(repos: Repo[]): Promise<void> {
           continue;
         }
 
-        // Triage-before-refinement: skip [claws-error] issues without triage report
+        // Triage-before-refinement: skip [yeti-error] issues without triage report
         if (extractFingerprint(issue.title) !== null) {
           const comments = await gh.getIssueComments(repo.fullName, issue.number);
-          const hasReport = comments.some((c) => c.body.includes(CLAWS_ERROR_REPORT_HEADER));
+          const hasReport = comments.some((c) => c.body.includes(YETI_ERROR_REPORT_HEADER));
           if (!hasReport) continue;
         }
 
@@ -400,7 +400,7 @@ export async function run(repos: Repo[]): Promise<void> {
         // Fetch comments to determine state
         const comments = await gh.getIssueComments(repo.fullName, issue.number);
         const lastPlanIdx = comments.findLastIndex(
-          (c) => c.body.includes(PLAN_HEADER) && gh.isClawsComment(c.body),
+          (c) => c.body.includes(PLAN_HEADER) && gh.isYetiComment(c.body),
         );
 
         if (lastPlanIdx === -1) {

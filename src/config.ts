@@ -2,9 +2,9 @@ import path from "node:path";
 import os from "node:os";
 import fs from "node:fs";
 
-export const WORK_DIR = path.join(os.homedir(), ".claws");
+export const WORK_DIR = path.join(os.homedir(), ".yeti");
 
-export const DB_PATH = path.join(WORK_DIR, "claws.db");
+export const DB_PATH = path.join(WORK_DIR, "yeti.db");
 
 export const CONFIG_PATH = path.join(WORK_DIR, "config.json");
 
@@ -16,21 +16,21 @@ export const LABELS = {
 } as const;
 
 export const LABEL_SPECS: Record<string, { color: string; description: string }> = {
-  "Refined":              { color: "0075ca", description: "Issue is ready for claws to implement" },
-  "Ready":                { color: "0e8a16", description: "Claws has finished — needs human attention" },
-  "Priority":             { color: "d93f0b", description: "High-priority — processed first in all Claws queues" },
+  "Refined":              { color: "0075ca", description: "Issue is ready for yeti to implement" },
+  "Ready":                { color: "0e8a16", description: "Yeti has finished — needs human attention" },
+  "Priority":             { color: "d93f0b", description: "High-priority — processed first in all Yeti queues" },
   "In Review":            { color: "fbca04", description: "Issue has an open PR being reviewed" },
 };
 
-/** Labels that were previously managed by Claws and can be cleaned up as stale. */
+/** Labels that were previously managed by Yeti and can be cleaned up as stale. */
 export const LEGACY_LABELS = new Set([
   "Needs Refinement",
   "Plan Produced",
   "Reviewed",
   "prod-report",
   "investigated",
-  "claws-mergeable",
-  "claws-error",
+  "yeti-mergeable",
+  "yeti-error",
 ]);
 
 export interface Repo {
@@ -77,7 +77,7 @@ export interface ConfigFile {
     reviewAddresserMs?: number;
     triageKwyjiboErrorsMs?: number;
     autoMergerMs?: number;
-    triageClawsErrorsMs?: number;
+    triageYetiErrorsMs?: number;
     ideaCollectorMs?: number;
     runnerMonitorMs?: number;
     emailMonitorMs?: number;
@@ -118,20 +118,20 @@ function loadConfig() {
   }
 
   const slackWebhook =
-    process.env["CLAWS_SLACK_WEBHOOK"] ?? file.slackWebhook ?? "";
+    process.env["YETI_SLACK_WEBHOOK"] ?? file.slackWebhook ?? "";
 
   const slackBotToken =
-    process.env["CLAWS_SLACK_BOT_TOKEN"] ?? file.slackBotToken ?? "";
+    process.env["YETI_SLACK_BOT_TOKEN"] ?? file.slackBotToken ?? "";
 
   const slackIdeasChannel =
-    process.env["CLAWS_SLACK_IDEAS_CHANNEL"] ?? file.slackIdeasChannel ?? "";
+    process.env["YETI_SLACK_IDEAS_CHANNEL"] ?? file.slackIdeasChannel ?? "";
 
-  const githubOwners = process.env["CLAWS_GITHUB_OWNERS"]
-    ? process.env["CLAWS_GITHUB_OWNERS"].split(",").map((s) => s.trim())
-    : file.githubOwners ?? ["stjohnb", "St-John-Software"];
+  const githubOwners = process.env["YETI_GITHUB_OWNERS"]
+    ? process.env["YETI_GITHUB_OWNERS"].split(",").map((s) => s.trim())
+    : file.githubOwners ?? ["frostyard", "frostyard"];
 
   const selfRepo =
-    process.env["CLAWS_SELF_REPO"] ?? file.selfRepo ?? "St-John-Software/claws";
+    process.env["YETI_SELF_REPO"] ?? file.selfRepo ?? "frostyard/yeti";
 
   const port = parseInt(
     process.env["PORT"] ?? String(file.port ?? 3000),
@@ -147,16 +147,16 @@ function loadConfig() {
   const runners = file.runners ?? DEFAULT_RUNNERS;
 
   const emailEnabled =
-    process.env["CLAWS_EMAIL_ENABLED"] === "true" || file.emailEnabled === true;
+    process.env["YETI_EMAIL_ENABLED"] === "true" || file.emailEnabled === true;
 
   const emailUser =
-    process.env["CLAWS_EMAIL_USER"] ?? file.emailUser ?? "";
+    process.env["YETI_EMAIL_USER"] ?? file.emailUser ?? "";
 
   const emailAppPassword =
-    process.env["CLAWS_EMAIL_APP_PASSWORD"] ?? file.emailAppPassword ?? "";
+    process.env["YETI_EMAIL_APP_PASSWORD"] ?? file.emailAppPassword ?? "";
 
   const emailRecipient =
-    process.env["CLAWS_EMAIL_RECIPIENT"] ?? file.emailRecipient ?? "";
+    process.env["YETI_EMAIL_RECIPIENT"] ?? file.emailRecipient ?? "";
 
   const emailVegBoxSender =
     file.emailVegBoxSender ?? "";
@@ -168,7 +168,7 @@ function loadConfig() {
     reviewAddresserMs: file.intervals?.reviewAddresserMs ?? 5 * 60 * 1000,
     triageKwyjiboErrorsMs: file.intervals?.triageKwyjiboErrorsMs ?? 10 * 60 * 1000,
     autoMergerMs: file.intervals?.autoMergerMs ?? 10 * 60 * 1000,
-    triageClawsErrorsMs: file.intervals?.triageClawsErrorsMs ?? 10 * 60 * 1000,
+    triageYetiErrorsMs: file.intervals?.triageYetiErrorsMs ?? 10 * 60 * 1000,
     ideaCollectorMs: file.intervals?.ideaCollectorMs ?? 30 * 60 * 1000,
     runnerMonitorMs: file.intervals?.runnerMonitorMs ?? 10 * 60 * 1000,
     emailMonitorMs: file.intervals?.emailMonitorMs ?? 5 * 60 * 1000,
@@ -196,17 +196,17 @@ function loadConfig() {
     process.env["OPENAI_API_KEY"] ?? file.openaiApiKey ?? "";
 
   const authToken =
-    process.env["CLAWS_AUTH_TOKEN"] ?? file.authToken ?? "";
+    process.env["YETI_AUTH_TOKEN"] ?? file.authToken ?? "";
 
   const maxClaudeWorkers = parseInt(
-    process.env["CLAWS_MAX_CLAUDE_WORKERS"] ?? String(file.maxClaudeWorkers ?? 2),
+    process.env["YETI_MAX_CLAUDE_WORKERS"] ?? String(file.maxClaudeWorkers ?? 2),
     10,
   );
 
   const claudeTimeoutMs = Math.max(
     60_000,
     parseInt(
-      process.env["CLAWS_CLAUDE_TIMEOUT_MS"] ?? String(file.claudeTimeoutMs ?? 20 * 60 * 1000),
+      process.env["YETI_CLAUDE_TIMEOUT_MS"] ?? String(file.claudeTimeoutMs ?? 20 * 60 * 1000),
       10,
     ),
   );
@@ -219,7 +219,7 @@ function loadConfig() {
 
   if (!slackWebhook) {
     console.warn(
-      "Warning: No Slack webhook configured. Set CLAWS_SLACK_WEBHOOK or slackWebhook in ~/.claws/config.json",
+      "Warning: No Slack webhook configured. Set YETI_SLACK_WEBHOOK or slackWebhook in ~/.yeti/config.json",
     );
   }
 

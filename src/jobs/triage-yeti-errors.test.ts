@@ -48,17 +48,17 @@ vi.mock("../db.js", () => mockDb);
 
 import {
   run,
-  parseClawsError,
+  parseYetiError,
   extractFingerprint,
   buildInvestigationPrompt,
   parseRelatedIssues,
   deduplicateByFingerprint,
   deduplicateByInvestigation,
-} from "./triage-claws-errors.js";
+} from "./triage-yeti-errors.js";
 import { reportError } from "../error-reporter.js";
 
 const ERROR_BODY = [
-  "**Auto-created by Claws error reporter**",
+  "**Auto-created by Yeti error reporter**",
   "",
   "**Fingerprint:** `kwyjibo-bug-investigator:list-issues`",
   "**Context:** test-org/test-repo",
@@ -70,7 +70,7 @@ const ERROR_BODY = [
   "```",
 ].join("\n");
 
-describe("triage-claws-errors", () => {
+describe("triage-yeti-errors", () => {
   const selfRepo = mockRepo({ fullName: "test-org/test-repo" });
 
   beforeEach(() => {
@@ -88,9 +88,9 @@ describe("triage-claws-errors", () => {
     mockGh.editIssueComment.mockResolvedValue(undefined);
   });
 
-  describe("parseClawsError", () => {
+  describe("parseYetiError", () => {
     it("extracts all fields from well-formed body", () => {
-      const result = parseClawsError(ERROR_BODY);
+      const result = parseYetiError(ERROR_BODY);
       expect(result.fingerprint).toBe("kwyjibo-bug-investigator:list-issues");
       expect(result.context).toBe("test-org/test-repo");
       expect(result.timestamp).toBe("2025-01-15T10:30:00.000Z");
@@ -98,7 +98,7 @@ describe("triage-claws-errors", () => {
     });
 
     it("handles missing fields", () => {
-      const result = parseClawsError("No structured content here");
+      const result = parseYetiError("No structured content here");
       expect(result.fingerprint).toBe("");
       expect(result.context).toBe("");
       expect(result.timestamp).toBe("");
@@ -119,14 +119,14 @@ describe("triage-claws-errors", () => {
         "second block",
         "```",
       ].join("\n");
-      const result = parseClawsError(body);
+      const result = parseYetiError(body);
       expect(result.errorText).toBe("first error block");
     });
   });
 
   describe("extractFingerprint", () => {
-    it("extracts fingerprint from [claws-error] title", () => {
-      expect(extractFingerprint("[claws-error] kwyjibo-bug-investigator:list-issues"))
+    it("extracts fingerprint from [yeti-error] title", () => {
+      expect(extractFingerprint("[yeti-error] kwyjibo-bug-investigator:list-issues"))
         .toBe("kwyjibo-bug-investigator:list-issues");
     });
 
@@ -135,7 +135,7 @@ describe("triage-claws-errors", () => {
     });
 
     it("handles whitespace variations", () => {
-      expect(extractFingerprint("[claws-error]  some:fingerprint"))
+      expect(extractFingerprint("[yeti-error]  some:fingerprint"))
         .toBe("some:fingerprint");
     });
   });
@@ -143,8 +143,8 @@ describe("triage-claws-errors", () => {
   describe("deduplicateByFingerprint", () => {
     it("returns all issues when each has unique fingerprint", async () => {
       const issues = [
-        mockIssue({ number: 1, title: "[claws-error] fp-a" }),
-        mockIssue({ number: 2, title: "[claws-error] fp-b" }),
+        mockIssue({ number: 1, title: "[yeti-error] fp-a" }),
+        mockIssue({ number: 2, title: "[yeti-error] fp-b" }),
       ];
       mockGh.listOpenIssues.mockResolvedValue(issues);
 
@@ -155,8 +155,8 @@ describe("triage-claws-errors", () => {
 
     it("closes higher-numbered duplicate, keeps lower-numbered", async () => {
       const issues = [
-        mockIssue({ number: 5, title: "[claws-error] same-fp" }),
-        mockIssue({ number: 3, title: "[claws-error] same-fp" }),
+        mockIssue({ number: 5, title: "[yeti-error] same-fp" }),
+        mockIssue({ number: 3, title: "[yeti-error] same-fp" }),
       ];
       mockGh.listOpenIssues.mockResolvedValue(issues);
 
@@ -168,9 +168,9 @@ describe("triage-claws-errors", () => {
 
     it("only deduplicates within each fingerprint group", async () => {
       const issues = [
-        mockIssue({ number: 1, title: "[claws-error] fp-a" }),
-        mockIssue({ number: 2, title: "[claws-error] fp-a" }),
-        mockIssue({ number: 3, title: "[claws-error] fp-b" }),
+        mockIssue({ number: 1, title: "[yeti-error] fp-a" }),
+        mockIssue({ number: 2, title: "[yeti-error] fp-a" }),
+        mockIssue({ number: 3, title: "[yeti-error] fp-b" }),
       ];
       mockGh.listOpenIssues.mockResolvedValue(issues);
 
@@ -182,13 +182,13 @@ describe("triage-claws-errors", () => {
     });
 
     it("closes issue when fingerprint matches existing Known Fingerprints", async () => {
-      const newIssue = mockIssue({ number: 10, title: "[claws-error] known-fp" });
-      const existingIssue = mockIssue({ number: 5, title: "[claws-error] other-fp" });
+      const newIssue = mockIssue({ number: 10, title: "[yeti-error] known-fp" });
+      const existingIssue = mockIssue({ number: 5, title: "[yeti-error] other-fp" });
 
       // listOpenIssues returns both existing and new issues
       mockGh.listOpenIssues.mockResolvedValue([existingIssue, newIssue]);
       mockGh.getIssueComments.mockResolvedValue([
-        { id: 100, body: "### Known Fingerprints\n- `other-fp`\n- `known-fp`", login: "claws-bot" },
+        { id: 100, body: "### Known Fingerprints\n- `other-fp`\n- `known-fp`", login: "yeti-bot" },
       ]);
 
       const result = await deduplicateByFingerprint("test-org/test-repo", [newIssue]);
@@ -199,8 +199,8 @@ describe("triage-claws-errors", () => {
 
   describe("deduplicateByInvestigation", () => {
     it("closes related issues and adds fingerprints to canonical", async () => {
-      const canonical = mockIssue({ number: 1, title: "[claws-error] fp-main" });
-      const related = mockIssue({ number: 5, title: "[claws-error] fp-related" });
+      const canonical = mockIssue({ number: 1, title: "[yeti-error] fp-main" });
+      const related = mockIssue({ number: 5, title: "[yeti-error] fp-related" });
 
       mockGh.listOpenIssues.mockResolvedValue([related]);
       mockGh.getIssueComments.mockResolvedValue([]);
@@ -215,7 +215,7 @@ describe("triage-claws-errors", () => {
     });
 
     it("handles empty related issues list (no-op)", async () => {
-      const canonical = mockIssue({ number: 1, title: "[claws-error] fp-main" });
+      const canonical = mockIssue({ number: 1, title: "[yeti-error] fp-main" });
 
       await deduplicateByInvestigation("test-org/test-repo", canonical, []);
 
@@ -223,7 +223,7 @@ describe("triage-claws-errors", () => {
     });
 
     it("handles issues that are not found gracefully", async () => {
-      const canonical = mockIssue({ number: 1, title: "[claws-error] fp-main" });
+      const canonical = mockIssue({ number: 1, title: "[yeti-error] fp-main" });
       mockGh.listOpenIssues.mockResolvedValue([]); // related issue not found
 
       await deduplicateByInvestigation("test-org/test-repo", canonical, [99]);
@@ -234,8 +234,8 @@ describe("triage-claws-errors", () => {
 
   describe("buildInvestigationPrompt", () => {
     it("includes error details and verification instructions", () => {
-      const issue = mockIssue({ number: 1, title: "[claws-error] test:fp", body: ERROR_BODY });
-      const details = parseClawsError(ERROR_BODY);
+      const issue = mockIssue({ number: 1, title: "[yeti-error] test:fp", body: ERROR_BODY });
+      const details = parseYetiError(ERROR_BODY);
 
       const prompt = buildInvestigationPrompt(issue, details, []);
 
@@ -246,9 +246,9 @@ describe("triage-claws-errors", () => {
     });
 
     it("includes other issues for cross-reference", () => {
-      const issue = mockIssue({ number: 1, title: "[claws-error] test:fp", body: ERROR_BODY });
-      const details = parseClawsError(ERROR_BODY);
-      const other = mockIssue({ number: 5, title: "[claws-error] other:fp", body: "Other error" });
+      const issue = mockIssue({ number: 1, title: "[yeti-error] test:fp", body: ERROR_BODY });
+      const details = parseYetiError(ERROR_BODY);
+      const other = mockIssue({ number: 5, title: "[yeti-error] other:fp", body: "Other error" });
 
       const prompt = buildInvestigationPrompt(issue, details, [other]);
 
@@ -258,8 +258,8 @@ describe("triage-claws-errors", () => {
     });
 
     it("maps fingerprint to source file path", () => {
-      const issue = mockIssue({ number: 1, title: "[claws-error] kwyjibo-bug-investigator:list-issues", body: ERROR_BODY });
-      const details = parseClawsError(ERROR_BODY);
+      const issue = mockIssue({ number: 1, title: "[yeti-error] kwyjibo-bug-investigator:list-issues", body: ERROR_BODY });
+      const details = parseYetiError(ERROR_BODY);
 
       const prompt = buildInvestigationPrompt(issue, details, []);
 
@@ -268,7 +268,7 @@ describe("triage-claws-errors", () => {
 
     it("instructs reading docs/OVERVIEW.md and linked docs", () => {
       const issue = mockIssue({ number: 1, body: ERROR_BODY });
-      const details = parseClawsError(ERROR_BODY);
+      const details = parseYetiError(ERROR_BODY);
 
       const prompt = buildInvestigationPrompt(issue, details, []);
 
@@ -299,7 +299,7 @@ describe("triage-claws-errors", () => {
     it("happy path — investigates and posts report", async () => {
       const issue = mockIssue({
         number: 10,
-        title: "[claws-error] test:fp",
+        title: "[yeti-error] test:fp",
         body: ERROR_BODY,
       });
       mockGh.listOpenIssues.mockResolvedValue([issue]);
@@ -307,13 +307,13 @@ describe("triage-claws-errors", () => {
 
       await run([selfRepo]);
 
-      expect(mockClaude.createWorktree).toHaveBeenCalledWith(selfRepo, "claws/investigate-error-10-ab12", "triage-claws-errors");
+      expect(mockClaude.createWorktree).toHaveBeenCalledWith(selfRepo, "yeti/investigate-error-10-ab12", "triage-yeti-errors");
       expect(mockGh.commentOnIssue).toHaveBeenCalledWith(
         "test-org/test-repo",
         10,
-        expect.stringContaining("## Claws Error Investigation Report"),
+        expect.stringContaining("## Yeti Error Investigation Report"),
       );
-      expect(mockDb.recordTaskStart).toHaveBeenCalledWith("triage-claws-errors", "test-org/test-repo", 10, null);
+      expect(mockDb.recordTaskStart).toHaveBeenCalledWith("triage-yeti-errors", "test-org/test-repo", 10, null);
       expect(mockDb.recordTaskComplete).toHaveBeenCalledWith(1);
       expect(mockClaude.removeWorktree).toHaveBeenCalled();
     });
@@ -321,12 +321,12 @@ describe("triage-claws-errors", () => {
     it("phase 2 dedup — Claude identifies related issues, they get closed", async () => {
       const issue1 = mockIssue({
         number: 10,
-        title: "[claws-error] fp-main",
+        title: "[yeti-error] fp-main",
         body: ERROR_BODY,
       });
       const issue2 = mockIssue({
         number: 15,
-        title: "[claws-error] fp-related",
+        title: "[yeti-error] fp-related",
         body: ERROR_BODY,
       });
 
@@ -351,7 +351,7 @@ describe("triage-claws-errors", () => {
     it("empty Claude output — logs warning", async () => {
       const issue = mockIssue({
         number: 10,
-        title: "[claws-error] test:fp",
+        title: "[yeti-error] test:fp",
         body: ERROR_BODY,
       });
       mockGh.listOpenIssues.mockResolvedValue([issue]);
@@ -369,7 +369,7 @@ describe("triage-claws-errors", () => {
     it("Claude error — task marked failed, worktree cleaned up", async () => {
       const issue = mockIssue({
         number: 10,
-        title: "[claws-error] test:fp",
+        title: "[yeti-error] test:fp",
         body: ERROR_BODY,
       });
       mockGh.listOpenIssues.mockResolvedValue([issue]);
@@ -395,7 +395,7 @@ describe("triage-claws-errors", () => {
     it("strips RELATED_ISSUES line from posted comment", async () => {
       const issue = mockIssue({
         number: 10,
-        title: "[claws-error] test:fp",
+        title: "[yeti-error] test:fp",
         body: ERROR_BODY,
       });
       mockGh.listOpenIssues.mockResolvedValue([issue]);
@@ -414,12 +414,12 @@ describe("triage-claws-errors", () => {
     it("skips issues that already have an investigation report", async () => {
       const issue = mockIssue({
         number: 10,
-        title: "[claws-error] test:fp",
+        title: "[yeti-error] test:fp",
         body: ERROR_BODY,
       });
       mockGh.listOpenIssues.mockResolvedValue([issue]);
       mockGh.getIssueComments.mockResolvedValue([
-        { id: 1, body: "## Claws Error Investigation Report\n\nPrevious report", login: "claws-bot" },
+        { id: 1, body: "## Yeti Error Investigation Report\n\nPrevious report", login: "yeti-bot" },
       ]);
 
       await run([selfRepo]);
@@ -430,7 +430,7 @@ describe("triage-claws-errors", () => {
     it("populates queue cache for uninvestigated issues", async () => {
       const issue = mockIssue({
         number: 10,
-        title: "[claws-error] test:fp",
+        title: "[yeti-error] test:fp",
         body: ERROR_BODY,
       });
       mockGh.listOpenIssues.mockResolvedValue([issue]);

@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 
 vi.mock("./config.js", () => ({
-  WORK_DIR: "/tmp/test-claws",
+  WORK_DIR: "/tmp/test-yeti",
   MAX_CLAUDE_WORKERS: 2,
   CLAUDE_TIMEOUT_MS: 20 * 60 * 1000,
 }));

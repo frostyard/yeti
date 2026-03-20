@@ -187,7 +187,7 @@ describe("triage-kwyjibo-errors", () => {
 
       await run([repo]);
 
-      expect(mockClaude.createWorktree).toHaveBeenCalledWith(repo, "claws/investigate-1-ab12", "triage-kwyjibo-errors");
+      expect(mockClaude.createWorktree).toHaveBeenCalledWith(repo, "yeti/investigate-1-ab12", "triage-kwyjibo-errors");
       // Should have fetched debug data (3 API calls)
       expect(mockFetch).toHaveBeenCalledTimes(3);
       expect(mockGh.commentOnIssue).toHaveBeenCalledWith(
@@ -219,7 +219,7 @@ describe("triage-kwyjibo-errors", () => {
       });
       mockGh.listOpenIssues.mockResolvedValueOnce([issue]);
       mockGh.getIssueComments.mockResolvedValueOnce([
-        { id: 1, body: "## Bug Investigation Report\n\nSome previous report", login: "claws-bot" },
+        { id: 1, body: "## Bug Investigation Report\n\nSome previous report", login: "yeti-bot" },
       ]);
 
       await run([repo]);
@@ -330,7 +330,7 @@ describe("triage-kwyjibo-errors", () => {
       });
       mockGh.listOpenIssues.mockResolvedValueOnce([issue]);
       mockGh.getIssueComments.mockResolvedValueOnce([]);
-      mockProcessTextForImages.mockResolvedValueOnce("\n## Attached Images\n- .claws-images/img-1.png");
+      mockProcessTextForImages.mockResolvedValueOnce("\n## Attached Images\n- .yeti-images/img-1.png");
 
       await run([repo]);
 

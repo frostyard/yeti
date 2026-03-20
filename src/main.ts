@@ -20,7 +20,7 @@ import * as repoStandards from "./jobs/repo-standards.js";
 import * as improvementIdentifier from "./jobs/improvement-identifier.js";
 import * as ideaSuggester from "./jobs/idea-suggester.js";
 import * as ideaCollector from "./jobs/idea-collector.js";
-import * as triageClawsErrors from "./jobs/triage-claws-errors.js";
+import * as triageYetiErrors from "./jobs/triage-yeti-errors.js";
 import * as issueAuditor from "./jobs/issue-auditor.js";
 import * as runnerMonitor from "./jobs/runner-monitor.js";
 import * as ubuntuLatestScanner from "./jobs/ubuntu-latest-scanner.js";
@@ -32,7 +32,7 @@ import { cancelQueuedTasks, cancelCurrentTask } from "./claude.js";
 import { reportError } from "./error-reporter.js";
 import { VERSION } from "./version.js";
 
-log.info(`claws ${VERSION} starting up`);
+log.info(`yeti ${VERSION} starting up`);
 
 // ── Database init & recovery ──
 
@@ -207,11 +207,11 @@ const jobs: Job[] = [
     },
   },
   {
-    name: "triage-claws-errors",
-    intervalMs: INTERVALS.triageClawsErrorsMs,
+    name: "triage-yeti-errors",
+    intervalMs: INTERVALS.triageYetiErrorsMs,
     async run() {
       const repos = await gh.listRepos();
-      await triageClawsErrors.run(repos);
+      await triageYetiErrors.run(repos);
     },
   },
   {
@@ -325,4 +325,4 @@ async function shutdown() {
 process.on("SIGINT", () => void shutdown());
 process.on("SIGTERM", () => void shutdown());
 
-log.info("claws is running");
+log.info("yeti is running");

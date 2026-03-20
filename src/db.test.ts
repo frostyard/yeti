@@ -238,10 +238,10 @@ describe("db", () => {
   it("searchRunsByItem finds runs by repo#number format", () => {
     insertJobRun("run-1", "job-a");
     setRunIdProvider(() => "run-1");
-    recordTaskStart("job-a", "org/claws", 195, null);
+    recordTaskStart("job-a", "org/yeti", 195, null);
     setRunIdProvider(() => undefined);
 
-    const results = searchRunsByItem("claws#195");
+    const results = searchRunsByItem("yeti#195");
     expect(results).toHaveLength(1);
     expect(results[0].run_id).toBe("run-1");
   });
@@ -249,10 +249,10 @@ describe("db", () => {
   it("searchRunsByItem finds runs by full owner/repo#number format", () => {
     insertJobRun("run-1", "job-a");
     setRunIdProvider(() => "run-1");
-    recordTaskStart("job-a", "org/claws", 195, null);
+    recordTaskStart("job-a", "org/yeti", 195, null);
     setRunIdProvider(() => undefined);
 
-    const results = searchRunsByItem("org/claws#195");
+    const results = searchRunsByItem("org/yeti#195");
     expect(results).toHaveLength(1);
     expect(results[0].run_id).toBe("run-1");
   });
@@ -260,17 +260,17 @@ describe("db", () => {
   it("searchRunsByItem repo#number does not match wrong number", () => {
     insertJobRun("run-1", "job-a");
     setRunIdProvider(() => "run-1");
-    recordTaskStart("job-a", "org/claws", 195, null);
+    recordTaskStart("job-a", "org/yeti", 195, null);
     setRunIdProvider(() => undefined);
 
-    const results = searchRunsByItem("claws#999");
+    const results = searchRunsByItem("yeti#999");
     expect(results).toHaveLength(0);
   });
 
   it("searchRunsByItem repo#number does not match wrong repo", () => {
     insertJobRun("run-1", "job-a");
     setRunIdProvider(() => "run-1");
-    recordTaskStart("job-a", "org/claws", 195, null);
+    recordTaskStart("job-a", "org/yeti", 195, null);
     setRunIdProvider(() => undefined);
 
     const results = searchRunsByItem("other#195");

@@ -112,11 +112,11 @@ ${htmlOpenTag(theme)}
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>claws</title>
+  <title>yeti</title>
   <style>${PAGE_CSS}</style>
 </head>
 <body>
-  <h1>claws</h1>
+  <h1>yeti</h1>
   ${buildNav(theme)}
   ${THEME_SCRIPT}
   <dl class="meta">

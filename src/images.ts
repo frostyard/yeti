@@ -6,7 +6,7 @@ import * as log from "./log.js";
 const MAX_IMAGES = 10;
 const MAX_IMAGE_SIZE = 10 * 1024 * 1024; // 10MB
 const DOWNLOAD_TIMEOUT = 30_000; // 30s
-const IMAGE_DIR = ".claws-images";
+const IMAGE_DIR = ".yeti-images";
 
 const MAX_ATTACHMENTS = 5;
 const MAX_ATTACHMENT_SIZE = 1 * 1024 * 1024; // 1MB

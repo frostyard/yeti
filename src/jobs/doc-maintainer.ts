@@ -59,20 +59,20 @@ function buildDocPrompt(fullName: string, planCount = 0): string {
 async function processRepo(repo: Repo): Promise<void> {
   const fullName = repo.fullName;
 
-  // Step 0: Skip repos claws isn't working with
+  // Step 0: Skip repos yeti isn't working with
   const repoDir = path.join(WORK_DIR, "repos", repo.owner, repo.name);
   if (!fs.existsSync(repoDir)) return;
 
   // Step 1: Check for existing open docs PR
   const prs = await gh.listPRs(fullName);
-  const hasDocsPR = prs.some((pr) => pr.headRefName.startsWith("claws/docs-"));
+  const hasDocsPR = prs.some((pr) => pr.headRefName.startsWith("yeti/docs-"));
   if (hasDocsPR) {
     log.info(`[doc-maintainer] Skipping ${fullName} — open docs PR exists`);
     return;
   }
 
   // Step 2: Check if maintenance is needed
-  const branchName = `claws/docs-${claude.datestamp()}-${claude.randomSuffix()}`;
+  const branchName = `yeti/docs-${claude.datestamp()}-${claude.randomSuffix()}`;
   const taskId = db.recordTaskStart("doc-maintainer", fullName, 0, null);
   let wtPath: string | undefined;
 

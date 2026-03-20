@@ -51,7 +51,7 @@ function isReady(
   return elapsed >= TIMEOUT_MS;
 }
 
-const PR_TITLE_PREFIX = "[claws-ideas]";
+const PR_TITLE_PREFIX = "[yeti-ideas]";
 
 export async function run(repos: Repo[]): Promise<void> {
   if (!fs.existsSync(PENDING_IDEAS_DIR)) return;
@@ -125,7 +125,7 @@ async function processPendingFile(filePath: string, repos: Repo[]): Promise<void
   const rejected = resolved.filter((i) => i.disposition === "rejected");
 
   // Create collection PR
-  const branch = `claws/ideas-collect-${claude.randomSuffix()}`;
+  const branch = `yeti/ideas-collect-${claude.randomSuffix()}`;
   let wt: string | undefined;
 
   try {
@@ -212,7 +212,7 @@ async function processPendingFile(filePath: string, repos: Repo[]): Promise<void
           return `| ${idea.title} | ${disp} |`;
         }),
         ``,
-        `*Automated by claws idea-collector*`,
+        `*Automated by yeti idea-collector*`,
       ].join("\n");
 
       await gh.createPR(

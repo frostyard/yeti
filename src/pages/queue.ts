@@ -81,7 +81,7 @@ function buildQueueSection(
         html += `<button class="merge-btn" onclick="mergePR('${escapedRepo}',${item.prNumber},this)">Squash &amp; Merge</button>`;
       }
 
-      // Skip & prioritize buttons (only for Claws Attention section)
+      // Skip & prioritize buttons (only for Yeti Attention section)
       if (showActions) {
         if (item.prioritized) {
           html += `<button class="prio-btn deprio" onclick="deprioritizeItem('${escapedRepo}',${item.number},this)">Deprioritise</button>`;
@@ -119,11 +119,11 @@ function buildSkippedSection(
 
 export function buildQueuePage(
   myAttention: { items: QueueItem[]; oldestFetchAt: number | null },
-  clawsAttention: { items: QueueItem[]; oldestFetchAt: number | null },
+  yetiAttention: { items: QueueItem[]; oldestFetchAt: number | null },
   theme: Theme,
   skippedItems: Array<{ repo: string; number: number }> = [],
 ): string {
-  const oldestFetch = [myAttention.oldestFetchAt, clawsAttention.oldestFetchAt]
+  const oldestFetch = [myAttention.oldestFetchAt, yetiAttention.oldestFetchAt]
     .filter((t): t is number => t !== null);
   const staleNote = oldestFetch.length > 0
     ? `<p class="queue-stale">Last scanned ${formatRelativeTime(new Date(Math.min(...oldestFetch)).toISOString())}</p>`
@@ -135,7 +135,7 @@ ${htmlOpenTag(theme)}
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta http-equiv="refresh" content="60">
-  <title>claws — Queue</title>
+  <title>yeti — Queue</title>
   <style>${PAGE_CSS}
   .priority-star { color: #f0ad4e; margin-right: 4px; font-size: 1.1em; }
   .prio-btn, .skip-btn, .restore-btn { padding: 2px 8px; margin-left: 4px; border: 1px solid var(--border); border-radius: 4px; cursor: pointer; font-size: 0.85em; background: var(--bg-secondary); color: var(--text); }
@@ -152,7 +152,7 @@ ${htmlOpenTag(theme)}
   ${THEME_SCRIPT}
   <h1>Queue</h1>
   ${buildQueueSection("Needs My Attention", myAttention, false)}
-  ${buildQueueSection("Needs Claws Attention", clawsAttention, true)}
+  ${buildQueueSection("Needs Yeti Attention", yetiAttention, true)}
   ${buildSkippedSection(skippedItems)}
   ${staleNote}
   <script>

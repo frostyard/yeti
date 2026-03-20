@@ -35,11 +35,11 @@ ${htmlOpenTag(theme)}
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>claws — logs</title>
+  <title>yeti — logs</title>
   <style>${PAGE_CSS}</style>
 </head>
 <body>
-  <h1>claws</h1>
+  <h1>yeti</h1>
   ${buildNav(theme)}
   ${THEME_SCRIPT}
   <h2>Job Runs</h2>
@@ -147,11 +147,11 @@ ${htmlOpenTag(theme)}
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>claws — ${escapeHtml(shortRepo)}#${itemNumber} logs</title>
+  <title>yeti — ${escapeHtml(shortRepo)}#${itemNumber} logs</title>
   <style>${PAGE_CSS}</style>
 </head>
 <body>
-  <h1>claws</h1>
+  <h1>yeti</h1>
   ${buildNav(theme)}
   ${THEME_SCRIPT}
   <h2>${escapeHtml(shortRepo)}#${itemNumber}</h2>
@@ -224,11 +224,11 @@ ${htmlOpenTag(theme)}
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>claws — ${escapeHtml(run.job_name)} run</title>
+  <title>yeti — ${escapeHtml(run.job_name)} run</title>
   <style>${PAGE_CSS}</style>
 </head>
 <body>
-  <h1>claws</h1>
+  <h1>yeti</h1>
   ${buildNav(theme)}
   ${THEME_SCRIPT}
   <h2>${escapeHtml(run.job_name)}</h2>

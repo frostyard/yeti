@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { mockRepo } from "../test-helpers.js";
 
 vi.mock("../config.js", () => ({
-  WORK_DIR: "/home/testuser/.claws",
+  WORK_DIR: "/home/testuser/.yeti",
 }));
 
 vi.mock("../log.js", () => ({
@@ -210,8 +210,8 @@ describe("idea-collector", () => {
     expect(mockClaude.pushBranch).toHaveBeenCalled();
     expect(mockGh.createPR).toHaveBeenCalledWith(
       "test-org/test-repo",
-      "claws/ideas-collect-cd34",
-      "[claws-ideas] Collected idea responses for test-repo",
+      "yeti/ideas-collect-cd34",
+      "[yeti-ideas] Collected idea responses for test-repo",
       expect.stringContaining("Collected Idea Responses"),
     );
 

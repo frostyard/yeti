@@ -115,7 +115,7 @@ describe("reportError", () => {
 
   it("includes diagnostics in recurrence comment for ClaudeTimeoutError", async () => {
     vi.mocked(gh.searchIssues).mockResolvedValueOnce([
-      { number: 99, title: "[claws-error] test:timeout-recur" } as any,
+      { number: 99, title: "[yeti-error] test:timeout-recur" } as any,
     ]);
 
     const err = new ClaudeTimeoutError(1200000, 0, "", "err line", "/tmp/wt");

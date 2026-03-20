@@ -46,7 +46,7 @@ const { mockGh, mockClaude, mockDb, MockRateLimitError } = vi.hoisted(() => {
     commentOnIssue: vi.fn(),
     getIssueComments: vi.fn(),
     editIssueComment: vi.fn(),
-    isClawsComment: vi.fn(),
+    isYetiComment: vi.fn(),
     RateLimitError: MockRateLimitError,
   },
   mockClaude: {
@@ -91,7 +91,7 @@ describe("ci-fixer", () => {
     mockGh.commentOnIssue.mockResolvedValue(undefined);
     mockGh.getIssueComments.mockResolvedValue([]);
     mockGh.editIssueComment.mockResolvedValue(undefined);
-    mockGh.isClawsComment.mockReturnValue(false);
+    mockGh.isYetiComment.mockReturnValue(false);
     mockClaude.createWorktreeFromBranch.mockResolvedValue("/tmp/worktree");
     mockClaude.enqueue.mockImplementation((fn: () => Promise<string>) => fn());
     mockClaude.runClaude.mockResolvedValue('{"related": true, "fingerprint": "", "reason": "related to PR"}');
@@ -183,7 +183,7 @@ describe("ci-fixer", () => {
     expect(mockGh.createIssue).toHaveBeenCalledWith(
       repo.fullName,
       "[ci-unrelated] CI failures unrelated to PR changes",
-      expect.stringContaining("Auto-created by Claws"),
+      expect.stringContaining("Auto-created by Yeti"),
       [],
     );
     // Fingerprint logged as comment with run link
@@ -687,11 +687,11 @@ describe("ci-fixer", () => {
     mockGh.getFailedRunLog.mockResolvedValue("log output");
     // Classification is skipped for ci-unrelated fix PRs
     mockClaude.runClaude.mockRejectedValueOnce(new Error("claude error"));
-    // Existing error comment from Claws
+    // Existing error comment from Yeti
     mockGh.getIssueComments.mockResolvedValue([
-      { id: 777, body: "### CI Fixer Error\n\nprevious error", login: "claws-bot" },
+      { id: 777, body: "### CI Fixer Error\n\nprevious error", login: "yeti-bot" },
     ]);
-    mockGh.isClawsComment.mockReturnValue(true);
+    mockGh.isYetiComment.mockReturnValue(true);
 
     await run([repo]);
 

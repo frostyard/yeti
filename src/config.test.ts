@@ -7,11 +7,11 @@ import os from "node:os";
 // with the test environment. We'll test the exported functions by importing
 // after setting up a temp directory.
 
-const tmpDir = path.join(os.tmpdir(), "claws-config-test-" + process.pid);
+const tmpDir = path.join(os.tmpdir(), "yeti-config-test-" + process.pid);
 const configPath = path.join(tmpDir, "config.json");
 
 // Override WORK_DIR / CONFIG_PATH before importing config
-vi.stubEnv("HOME", tmpDir.replace("/.claws", ""));
+vi.stubEnv("HOME", tmpDir.replace("/.yeti", ""));
 
 // We need to mock the os.homedir to return a temp-friendly path
 vi.mock("node:os", async () => {
@@ -20,7 +20,7 @@ vi.mock("node:os", async () => {
     ...actual,
     default: {
       ...actual,
-      homedir: () => tmpDir.replace("/.claws", "").replace(path.sep + ".claws", ""),
+      homedir: () => tmpDir.replace("/.yeti", "").replace(path.sep + ".yeti", ""),
     },
   };
 });
@@ -30,12 +30,12 @@ const origWarn = console.warn;
 beforeEach(() => {
   console.warn = vi.fn();
   // Clear env vars that would override config file values
-  delete process.env["CLAWS_SLACK_WEBHOOK"];
-  delete process.env["CLAWS_AUTH_TOKEN"];
+  delete process.env["YETI_SLACK_WEBHOOK"];
+  delete process.env["YETI_AUTH_TOKEN"];
   delete process.env["OPENAI_API_KEY"];
   delete process.env["KWYJIBO_AUTOMATION_API_KEY"];
-  delete process.env["CLAWS_GITHUB_OWNERS"];
-  delete process.env["CLAWS_SELF_REPO"];
+  delete process.env["YETI_GITHUB_OWNERS"];
+  delete process.env["YETI_SELF_REPO"];
   delete process.env["KWYJIBO_BASE_URL"];
   delete process.env["WHATSAPP_ENABLED"];
   delete process.env["WHATSAPP_ALLOWED_NUMBERS"];
@@ -51,8 +51,8 @@ afterEach(() => {
     // best effort
   }
   // Clear env vars we may have set
-  delete process.env["CLAWS_SLACK_WEBHOOK"];
-  delete process.env["CLAWS_AUTH_TOKEN"];
+  delete process.env["YETI_SLACK_WEBHOOK"];
+  delete process.env["YETI_AUTH_TOKEN"];
   delete process.env["OPENAI_API_KEY"];
 });
 
@@ -99,8 +99,8 @@ describe("config", () => {
     fs.writeFileSync(cp, JSON.stringify({}));
 
     // Remove env vars that would override
-    delete process.env["CLAWS_SLACK_WEBHOOK"];
-    delete process.env["CLAWS_AUTH_TOKEN"];
+    delete process.env["YETI_SLACK_WEBHOOK"];
+    delete process.env["YETI_AUTH_TOKEN"];
     delete process.env["OPENAI_API_KEY"];
     delete process.env["KWYJIBO_AUTOMATION_API_KEY"];
 

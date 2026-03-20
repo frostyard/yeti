@@ -16,9 +16,9 @@ vi.mock("./config.js", () => ({
     priority: "Priority",
   },
   LABEL_SPECS: {
-    "Refined": { color: "0075ca", description: "Issue is ready for claws to implement" },
-    "Ready": { color: "0e8a16", description: "Claws has finished — needs human attention" },
-    "Priority": { color: "d93f0b", description: "High-priority — processed first in all Claws queues" },
+    "Refined": { color: "0075ca", description: "Issue is ready for yeti to implement" },
+    "Ready": { color: "0e8a16", description: "Yeti has finished — needs human attention" },
+    "Priority": { color: "d93f0b", description: "High-priority — processed first in all Yeti queues" },
   },
   SELF_REPO: "test-org/test-repo",
   SKIPPED_ITEMS: [],
@@ -61,10 +61,10 @@ import {
   deleteStaleLabels,
   getIssueComments,
   editIssueComment,
-  CLAWS_COMMENT_MARKER,
-  CLAWS_VISIBLE_HEADER,
-  isClawsComment,
-  stripClawsMarker,
+  YETI_COMMENT_MARKER,
+  YETI_VISIBLE_HEADER,
+  isYetiComment,
+  stripYetiMarker,
   isRateLimited,
   clearRateLimitState,
   RateLimitError,
@@ -698,8 +698,8 @@ describe("getOpenPRForIssue (uses cached listPRs)", () => {
   it("finds PR matching the issue branch prefix", async () => {
     mockExecFile.mockImplementation((_cmd: string, _args: string[], _opts: any, cb: any) => {
       cb(null, JSON.stringify([
-        { number: 5, title: "fix: something", headRefName: "claws/issue-42-abc1", baseRefName: "main", labels: [], author: { login: "bot" } },
-        { number: 6, title: "fix: other", headRefName: "claws/issue-99-def2", baseRefName: "main", labels: [], author: { login: "bot" } },
+        { number: 5, title: "fix: something", headRefName: "yeti/issue-42-abc1", baseRefName: "main", labels: [], author: { login: "bot" } },
+        { number: 6, title: "fix: other", headRefName: "yeti/issue-99-def2", baseRefName: "main", labels: [], author: { login: "bot" } },
       ]), "");
     });
 
@@ -720,7 +720,7 @@ describe("getOpenPRForIssue (uses cached listPRs)", () => {
   it("reuses cached listPRs result", async () => {
     mockExecFile.mockImplementation((_cmd: string, _args: string[], _opts: any, cb: any) => {
       cb(null, JSON.stringify([
-        { number: 5, title: "fix: something", headRefName: "claws/issue-42-abc1", baseRefName: "main", labels: [], author: { login: "bot" } },
+        { number: 5, title: "fix: something", headRefName: "yeti/issue-42-abc1", baseRefName: "main", labels: [], author: { login: "bot" } },
       ]), "");
     });
 
@@ -1014,7 +1014,7 @@ describe("getPRReviewComments", () => {
     expect(result.reviewCommentIds).toEqual([]);
   });
 
-  it("includes Claws-automated issue comments with attribution label", async () => {
+  it("includes Yeti-automated issue comments with attribution label", async () => {
     mockExecFile.mockImplementation((_cmd: string, args: string[], _opts: any, cb: any) => {
       const argsStr = args.join(" ");
       if (argsStr.includes("api user")) {
@@ -1027,7 +1027,7 @@ describe("getPRReviewComments", () => {
         cb(null, "[]", "");
       } else if (argsStr.includes("/issues/")) {
         cb(null, JSON.stringify([
-          { id: 501, user: { login: "claws-bot" }, body: `Some automated response\n${CLAWS_COMMENT_MARKER}` },
+          { id: 501, user: { login: "yeti-bot" }, body: `Some automated response\n${YETI_COMMENT_MARKER}` },
           { id: 502, user: { login: "alice" }, body: "Please fix the tests" },
         ]), "");
       } else if (argsStr.includes("graphql")) {
@@ -1042,9 +1042,9 @@ describe("getPRReviewComments", () => {
 
     const result = await getPRReviewComments("org/repo", 1);
     expect(result.formatted).toContain("Some automated response");
-    expect(result.formatted).toContain("(automated by Claws)");
-    expect(result.formatted).toContain("claws-bot");
-    expect(result.formatted).not.toContain(CLAWS_COMMENT_MARKER);
+    expect(result.formatted).toContain("(automated by Yeti)");
+    expect(result.formatted).toContain("yeti-bot");
+    expect(result.formatted).not.toContain(YETI_COMMENT_MARKER);
     expect(result.formatted).toContain("alice");
     expect(result.formatted).toContain("Please fix the tests");
   });
@@ -1056,13 +1056,13 @@ describe("getPRReviewComments", () => {
         cb(null, "test-bot\n", "");
       } else if (argsStr.includes("/reviews")) {
         cb(null, JSON.stringify([
-          { user: { login: "stjohnb" }, state: "COMMENTED", body: "Looks good overall" },
+          { user: { login: "frostyard" }, state: "COMMENTED", body: "Looks good overall" },
         ]), "");
       } else if (argsStr.includes("/pulls/") && argsStr.includes("/reactions")) {
         cb(null, "[]", "");
       } else if (argsStr.includes("/pulls/") && argsStr.includes("/comments")) {
         cb(null, JSON.stringify([
-          { id: 300, user: { login: "stjohnb" }, path: "src/app.ts", line: 5, body: "Consider renaming", diff_hunk: "@@ -1,3 +1,3 @@" },
+          { id: 300, user: { login: "frostyard" }, path: "src/app.ts", line: 5, body: "Consider renaming", diff_hunk: "@@ -1,3 +1,3 @@" },
           { id: 301, user: { login: "test-bot" }, path: "src/utils.ts", line: 10, body: "Needs a type annotation", diff_hunk: "@@ -8,3 +8,3 @@" },
         ]), "");
       } else if (argsStr.includes("/issues/")) {
@@ -1078,7 +1078,7 @@ describe("getPRReviewComments", () => {
     });
 
     const result = await getPRReviewComments("org/repo", 1);
-    expect(result.formatted).toContain("stjohnb");
+    expect(result.formatted).toContain("frostyard");
     expect(result.formatted).toContain("Looks good overall");
     expect(result.formatted).toContain("Consider renaming");
     expect(result.formatted).toContain("test-bot");
@@ -1184,7 +1184,7 @@ describe("editIssueComment", () => {
 
     expect(mockExecFile).toHaveBeenCalledWith(
       "gh",
-      ["api", "--method", "PATCH", "repos/org/repo/issues/comments/123", "-f", `body=${CLAWS_VISIBLE_HEADER}\n\nUpdated body\n${CLAWS_COMMENT_MARKER}`],
+      ["api", "--method", "PATCH", "repos/org/repo/issues/comments/123", "-f", `body=${YETI_VISIBLE_HEADER}\n\nUpdated body\n${YETI_COMMENT_MARKER}`],
       expect.any(Object),
       expect.any(Function),
     );
@@ -1206,7 +1206,7 @@ describe("ensureLabel", () => {
 
     expect(mockExecFile).toHaveBeenCalledWith(
       "gh",
-      ["label", "create", "Refined", "--repo", "org/repo", "--force", "--color", "0075ca", "--description", "Issue is ready for claws to implement"],
+      ["label", "create", "Refined", "--repo", "org/repo", "--force", "--color", "0075ca", "--description", "Issue is ready for yeti to implement"],
       expect.any(Object),
       expect.any(Function),
     );
@@ -1367,8 +1367,8 @@ describe("searchIssues", () => {
 
   it("returns parsed issues and passes --json before -- separator", async () => {
     const issues = [
-      { number: 1, title: "[claws-error] Something broke" },
-      { number: 2, title: "[claws-error] Another error" },
+      { number: 1, title: "[yeti-error] Something broke" },
+      { number: 2, title: "[yeti-error] Another error" },
     ];
 
     mockExecFile.mockImplementation((_cmd: string, args: string[], _opts: any, cb: any) => {
@@ -1381,7 +1381,7 @@ describe("searchIssues", () => {
       cb(null, JSON.stringify(issues), "");
     });
 
-    const result = await searchIssues("org/repo", "[claws-error] Something broke");
+    const result = await searchIssues("org/repo", "[yeti-error] Something broke");
     expect(result).toEqual(issues);
   });
 
@@ -1572,29 +1572,29 @@ describe("apiCache TTL for listIssuesByLabel", () => {
   });
 });
 
-describe("isClawsComment", () => {
-  it("returns true when body contains the Claws marker", () => {
-    expect(isClawsComment(`Some response\n${CLAWS_COMMENT_MARKER}`)).toBe(true);
+describe("isYetiComment", () => {
+  it("returns true when body contains the Yeti marker", () => {
+    expect(isYetiComment(`Some response\n${YETI_COMMENT_MARKER}`)).toBe(true);
   });
 
   it("returns false when body does not contain the marker", () => {
-    expect(isClawsComment("A normal comment")).toBe(false);
+    expect(isYetiComment("A normal comment")).toBe(false);
   });
 });
 
-describe("stripClawsMarker", () => {
+describe("stripYetiMarker", () => {
   it("strips both hidden marker and visible header", () => {
-    const body = `${CLAWS_VISIBLE_HEADER}\n\nPlan content\n${CLAWS_COMMENT_MARKER}`;
-    expect(stripClawsMarker(body)).toBe("Plan content");
+    const body = `${YETI_VISIBLE_HEADER}\n\nPlan content\n${YETI_COMMENT_MARKER}`;
+    expect(stripYetiMarker(body)).toBe("Plan content");
   });
 
   it("strips hidden marker only when visible header is absent", () => {
-    const body = `Plan content\n${CLAWS_COMMENT_MARKER}`;
-    expect(stripClawsMarker(body)).toBe("Plan content");
+    const body = `Plan content\n${YETI_COMMENT_MARKER}`;
+    expect(stripYetiMarker(body)).toBe("Plan content");
   });
 
   it("returns body unchanged when no markers present", () => {
-    expect(stripClawsMarker("Just text")).toBe("Just text");
+    expect(stripYetiMarker("Just text")).toBe("Just text");
   });
 });
 

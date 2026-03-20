@@ -26,10 +26,10 @@ function buildPrompt(
       issue.body,
       ``,
       ...comments.flatMap((c) => {
-        const label = gh.isClawsComment(c.body)
-          ? `Comment by @${c.login} (automated by Claws):`
+        const label = gh.isYetiComment(c.body)
+          ? `Comment by @${c.login} (automated by Yeti):`
           : `Comment by @${c.login}:`;
-        return [`---`, label, gh.stripClawsMarker(c.body), ``];
+        return [`---`, label, gh.stripYetiMarker(c.body), ``];
       }),
       `If \`docs/OVERVIEW.md\` exists, read it first (and any linked documents that seem relevant to the issue) for context about the codebase.`,
       ``,
@@ -160,7 +160,7 @@ async function processIssue(repo: Repo, issue: gh.Issue): Promise<void> {
 
   await gh.removeLabel(fullName, issue.number, LABELS.ready);
 
-  const branchName = `claws/issue-${issue.number}-${claude.randomSuffix()}`;
+  const branchName = `yeti/issue-${issue.number}-${claude.randomSuffix()}`;
   const taskId = db.recordTaskStart("issue-worker", fullName, issue.number, LABELS.refined);
   let wtPath: string | undefined;
 
@@ -276,13 +276,13 @@ export async function run(repos: Repo[]): Promise<void> {
         );
       }
 
-      // Check multi-PR issues: scan open issues for ones with merged claws PRs but more phases remaining
+      // Check multi-PR issues: scan open issues for ones with merged yeti PRs but more phases remaining
       const allIssues = await gh.listOpenIssues(repo.fullName);
       for (const issue of allIssues) {
         if (processedIssues.has(issue.number)) continue;
         if (gh.isItemSkipped(repo.fullName, issue.number)) continue;
 
-        // Only check issues that have at least one merged PR with claws/ branch
+        // Only check issues that have at least one merged PR with yeti/ branch
         const mergedPRs = await gh.listMergedPRsForIssue(repo.fullName, issue.number);
         if (mergedPRs.length === 0) continue;
 

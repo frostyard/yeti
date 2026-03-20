@@ -58,12 +58,12 @@ describe("transcribe", () => {
     vi.stubGlobal("fetch", mockFetch);
 
     const audio = Buffer.from("fake-audio-data");
-    const result = await transcribe(audio, "voice-note.ogg", "Kwyjibo, Claws");
+    const result = await transcribe(audio, "voice-note.ogg", "Kwyjibo, Yeti");
 
     expect(result).toBe("Kwyjibo is broken");
     const [, opts] = mockFetch.mock.calls[0] as [string, RequestInit];
     const body = opts.body as FormData;
-    expect(body.get("prompt")).toBe("Kwyjibo, Claws");
+    expect(body.get("prompt")).toBe("Kwyjibo, Yeti");
   });
 
   it("throws when no API key is set", async () => {

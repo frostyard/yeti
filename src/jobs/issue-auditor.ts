@@ -5,7 +5,7 @@ import * as log from "../log.js";
 import { reportError } from "../error-reporter.js";
 import { notify } from "../slack.js";
 import { extractGameId, REPORT_HEADER as KWYJIBO_REPORT_HEADER } from "./triage-kwyjibo-errors.js";
-import { extractFingerprint, REPORT_HEADER as CLAWS_ERROR_REPORT_HEADER } from "./triage-claws-errors.js";
+import { extractFingerprint, REPORT_HEADER as YETI_ERROR_REPORT_HEADER } from "./triage-yeti-errors.js";
 import { findPlanComment, parsePlan } from "../plan-parser.js";
 
 const PLAN_HEADER = "## Implementation Plan";
@@ -27,14 +27,14 @@ export async function classifyIssue(
   // Has "Refined" label → issue-worker handles
   if (issue.labels.some((l) => l.name === LABELS.refined)) return "refined";
 
-  // Has open Claws PR → ci-fixer/review-addresser handle
+  // Has open Yeti PR → ci-fixer/review-addresser handle
   const openPR = await gh.getOpenPRForIssue(fullName, issue.number);
   if (openPR) return "in-progress";
 
-  // [claws-error] without investigation report → triage handles
+  // [yeti-error] without investigation report → triage handles
   if (extractFingerprint(issue.title) !== null) {
     const comments = await gh.getIssueComments(fullName, issue.number);
-    const hasReport = comments.some((c) => c.body.includes(CLAWS_ERROR_REPORT_HEADER));
+    const hasReport = comments.some((c) => c.body.includes(YETI_ERROR_REPORT_HEADER));
     if (!hasReport) return "needs-triage";
   }
 
@@ -48,9 +48,9 @@ export async function classifyIssue(
   // Fetch comments to check plan state
   const comments = await gh.getIssueComments(fullName, issue.number);
 
-  // Find the last Claws plan comment (matching refiner's stricter check)
+  // Find the last Yeti plan comment (matching refiner's stricter check)
   const lastPlanIdx = comments.findLastIndex(
-    (c) => c.body.includes(PLAN_HEADER) && gh.isClawsComment(c.body),
+    (c) => c.body.includes(PLAN_HEADER) && gh.isYetiComment(c.body),
   );
 
   // No plan → needs-refinement (refiner handles)
@@ -61,7 +61,7 @@ export async function classifyIssue(
   const commentsAfterPlan = comments.slice(lastPlanIdx + 1);
 
   for (const comment of commentsAfterPlan) {
-    if (gh.isClawsComment(comment.body)) continue;
+    if (gh.isYetiComment(comment.body)) continue;
     if (comment.login.endsWith("[bot]")) continue;
 
     try {

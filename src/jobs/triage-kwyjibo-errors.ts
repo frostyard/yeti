@@ -169,7 +169,7 @@ async function processIssue(repo: Repo, issue: gh.Issue): Promise<void> {
   let wtPath: string | undefined;
 
   try {
-    const branchName = `claws/investigate-${issue.number}-${claude.randomSuffix()}`;
+    const branchName = `yeti/investigate-${issue.number}-${claude.randomSuffix()}`;
     wtPath = await claude.createWorktree(repo, branchName, "triage-kwyjibo-errors");
     db.updateTaskWorktree(taskId, wtPath, branchName);
 

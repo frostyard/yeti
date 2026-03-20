@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { mockRepo } from "../test-helpers.js";
 
 vi.mock("../config.js", () => ({
-  WORK_DIR: "/home/testuser/.claws",
+  WORK_DIR: "/home/testuser/.yeti",
 }));
 
 vi.mock("../log.js", () => ({
@@ -46,7 +46,7 @@ describe("ubuntu-latest-scanner", () => {
     mockFs.readdirSync.mockReturnValue([]);
     mockGh.searchIssues.mockResolvedValue([]);
     mockGh.createIssue.mockResolvedValue(1);
-    mockClaude.ensureClone.mockResolvedValue("/home/testuser/.claws/repos/test-org/test-repo");
+    mockClaude.ensureClone.mockResolvedValue("/home/testuser/.yeti/repos/test-org/test-repo");
   });
 
   it("skips repos without local clone", async () => {

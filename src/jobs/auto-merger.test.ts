@@ -64,8 +64,8 @@ describe("auto-merger", () => {
     expect(mockGh.hasValidLGTM).not.toHaveBeenCalled();
   });
 
-  it("merges Claws PR when checks pass and LGTM is valid", async () => {
-    const pr = mockPR({ headRefName: "claws/issue-42" });
+  it("merges Yeti PR when checks pass and LGTM is valid", async () => {
+    const pr = mockPR({ headRefName: "yeti/issue-42" });
     mockGh.listPRs.mockResolvedValue([pr]);
     mockGh.hasValidLGTM.mockResolvedValue(true);
     mockGh.getPRCheckStatus.mockResolvedValue("passing");
@@ -76,8 +76,8 @@ describe("auto-merger", () => {
     expect(mockGh.mergePR).toHaveBeenCalledWith(repo.fullName, pr.number);
   });
 
-  it("skips Claws PR without valid LGTM", async () => {
-    const pr = mockPR({ headRefName: "claws/issue-42" });
+  it("skips Yeti PR without valid LGTM", async () => {
+    const pr = mockPR({ headRefName: "yeti/issue-42" });
     mockGh.listPRs.mockResolvedValue([pr]);
     mockGh.hasValidLGTM.mockResolvedValue(false);
 
@@ -111,7 +111,7 @@ describe("auto-merger", () => {
     );
   });
 
-  it("skips non-dependabot, non-claws PRs", async () => {
+  it("skips non-dependabot, non-yeti PRs", async () => {
     const pr = mockPR({ author: { login: "someuser" }, headRefName: "feature-branch" });
     mockGh.listPRs.mockResolvedValue([pr]);
 
@@ -137,8 +137,8 @@ describe("auto-merger", () => {
     expect(mockGh.mergePR).toHaveBeenCalledWith(repo2.fullName, pr.number);
   });
 
-  it("removes In Review label from source issue after merging Claws PR", async () => {
-    const pr = mockPR({ headRefName: "claws/issue-42-ab12" });
+  it("removes In Review label from source issue after merging Yeti PR", async () => {
+    const pr = mockPR({ headRefName: "yeti/issue-42-ab12" });
     mockGh.listPRs.mockResolvedValue([pr]);
     mockGh.hasValidLGTM.mockResolvedValue(true);
     mockGh.getPRCheckStatus.mockResolvedValue("passing");
@@ -161,7 +161,7 @@ describe("auto-merger", () => {
   });
 
   it("merges doc PR when no checks exist and files are doc-only", async () => {
-    const pr = mockPR({ headRefName: "claws/docs-ab12" });
+    const pr = mockPR({ headRefName: "yeti/docs-ab12" });
     mockGh.listPRs.mockResolvedValue([pr]);
     mockGh.getPRChangedFiles.mockResolvedValue(["docs/OVERVIEW.md", "docs/api.md"]);
     mockGh.getPRCheckStatus.mockResolvedValue("none");
@@ -172,7 +172,7 @@ describe("auto-merger", () => {
   });
 
   it("merges doc PR when checks are passing and files are doc-only", async () => {
-    const pr = mockPR({ headRefName: "claws/docs-ab12" });
+    const pr = mockPR({ headRefName: "yeti/docs-ab12" });
     mockGh.listPRs.mockResolvedValue([pr]);
     mockGh.getPRChangedFiles.mockResolvedValue(["docs/OVERVIEW.md", "README.md"]);
     mockGh.getPRCheckStatus.mockResolvedValue("passing");
@@ -183,7 +183,7 @@ describe("auto-merger", () => {
   });
 
   it("skips doc PR when checks are failing", async () => {
-    const pr = mockPR({ headRefName: "claws/docs-ab12" });
+    const pr = mockPR({ headRefName: "yeti/docs-ab12" });
     mockGh.listPRs.mockResolvedValue([pr]);
     mockGh.getPRChangedFiles.mockResolvedValue(["docs/OVERVIEW.md"]);
     mockGh.getPRCheckStatus.mockResolvedValue("failing");
@@ -197,7 +197,7 @@ describe("auto-merger", () => {
   });
 
   it("skips doc PR when checks are pending", async () => {
-    const pr = mockPR({ headRefName: "claws/docs-ab12" });
+    const pr = mockPR({ headRefName: "yeti/docs-ab12" });
     mockGh.listPRs.mockResolvedValue([pr]);
     mockGh.getPRChangedFiles.mockResolvedValue(["docs/OVERVIEW.md"]);
     mockGh.getPRCheckStatus.mockResolvedValue("pending");
@@ -208,7 +208,7 @@ describe("auto-merger", () => {
   });
 
   it("skips doc PR with non-doc file changes", async () => {
-    const pr = mockPR({ headRefName: "claws/docs-ab12" });
+    const pr = mockPR({ headRefName: "yeti/docs-ab12" });
     mockGh.listPRs.mockResolvedValue([pr]);
     mockGh.getPRChangedFiles.mockResolvedValue(["docs/OVERVIEW.md", "src/index.ts"]);
 
@@ -222,7 +222,7 @@ describe("auto-merger", () => {
   });
 
   it("skips doc PR with empty changed files", async () => {
-    const pr = mockPR({ headRefName: "claws/docs-ab12" });
+    const pr = mockPR({ headRefName: "yeti/docs-ab12" });
     mockGh.listPRs.mockResolvedValue([pr]);
     mockGh.getPRChangedFiles.mockResolvedValue([]);
 
@@ -232,7 +232,7 @@ describe("auto-merger", () => {
   });
 
   it("does not require LGTM for doc PRs", async () => {
-    const pr = mockPR({ headRefName: "claws/docs-ab12" });
+    const pr = mockPR({ headRefName: "yeti/docs-ab12" });
     mockGh.listPRs.mockResolvedValue([pr]);
     mockGh.getPRChangedFiles.mockResolvedValue(["docs/OVERVIEW.md"]);
     mockGh.getPRCheckStatus.mockResolvedValue("none");

@@ -11,22 +11,22 @@ export function buildConfigPage(saved: boolean, theme: Theme): string {
   const cfg = getConfigForDisplay();
 
   const envMap: Record<string, string> = {
-    slackWebhook: "CLAWS_SLACK_WEBHOOK",
-    slackBotToken: "CLAWS_SLACK_BOT_TOKEN",
-    slackIdeasChannel: "CLAWS_SLACK_IDEAS_CHANNEL",
-    githubOwners: "CLAWS_GITHUB_OWNERS",
-    selfRepo: "CLAWS_SELF_REPO",
+    slackWebhook: "YETI_SLACK_WEBHOOK",
+    slackBotToken: "YETI_SLACK_BOT_TOKEN",
+    slackIdeasChannel: "YETI_SLACK_IDEAS_CHANNEL",
+    githubOwners: "YETI_GITHUB_OWNERS",
+    selfRepo: "YETI_SELF_REPO",
     port: "PORT",
     kwyjiboBaseUrl: "KWYJIBO_BASE_URL",
     kwyjiboApiKey: "KWYJIBO_AUTOMATION_API_KEY",
     whatsappEnabled: "WHATSAPP_ENABLED",
     whatsappAllowedNumbers: "WHATSAPP_ALLOWED_NUMBERS",
     openaiApiKey: "OPENAI_API_KEY",
-    emailUser: "CLAWS_EMAIL_USER",
+    emailUser: "YETI_EMAIL_USER",
     emailAppPassword: "BRENDAN_SERVER_GMAIL_APP_PASSWORD",
-    emailRecipient: "CLAWS_EMAIL_RECIPIENT",
-    emailEnabled: "CLAWS_EMAIL_ENABLED",
-    authToken: "CLAWS_AUTH_TOKEN",
+    emailRecipient: "YETI_EMAIL_RECIPIENT",
+    emailEnabled: "YETI_EMAIL_ENABLED",
+    authToken: "YETI_AUTH_TOKEN",
   };
 
   function envNote(key: string): string {
@@ -51,11 +51,11 @@ ${htmlOpenTag(theme)}
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>claws — config</title>
+  <title>yeti — config</title>
   <style>${PAGE_CSS}</style>
 </head>
 <body>
-  <h1>claws</h1>
+  <h1>yeti</h1>
   ${buildNav(theme)}
   ${THEME_SCRIPT}
   ${saved ? '<div class="banner">Configuration saved and applied.</div>' : ""}

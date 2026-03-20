@@ -14,13 +14,13 @@ export async function run(repos: Repo[]): Promise<void> {
         if (gh.isItemSkipped(repo.fullName, pr.number)) continue;
         try {
           const isDependabot = pr.author.login === "dependabot[bot]";
-          const isClawsPR = pr.headRefName.startsWith("claws/issue-");
-          const isDocPR = pr.headRefName.startsWith("claws/docs-");
+          const isYetiPR = pr.headRefName.startsWith("yeti/issue-");
+          const isDocPR = pr.headRefName.startsWith("yeti/docs-");
 
-          if (!isDependabot && !isClawsPR && !isDocPR) continue;
+          if (!isDependabot && !isYetiPR && !isDocPR) continue;
 
-          // Claws PRs require an LGTM comment posted after the latest commit
-          if (isClawsPR) {
+          // Yeti PRs require an LGTM comment posted after the latest commit
+          if (isYetiPR) {
             const lgtm = await gh.hasValidLGTM(repo.fullName, pr.number, pr.baseRefName);
             if (!lgtm) {
               continue;
@@ -52,8 +52,8 @@ export async function run(repos: Repo[]): Promise<void> {
           log.info(`[auto-merger] Merging ${repo.fullName}#${pr.number}: ${pr.title}`);
           await gh.mergePR(repo.fullName, pr.number);
 
-          if (isClawsPR) {
-            const match = pr.headRefName.match(/^claws\/issue-(\d+)-/);
+          if (isYetiPR) {
+            const match = pr.headRefName.match(/^yeti\/issue-(\d+)-/);
             if (match) {
               const issueNumber = parseInt(match[1], 10);
               try {

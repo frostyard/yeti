@@ -44,7 +44,7 @@ describe("getPRLatestCommitDate", () => {
 });
 
 describe("hasValidLGTM", () => {
-  const selfLogin = "claws-bot";
+  const selfLogin = "yeti-bot";
   const commitDate = "2025-01-15T10:00:00Z";
 
   beforeEach(() => {
@@ -101,7 +101,7 @@ describe("hasValidLGTM", () => {
     expect(await github.hasValidLGTM("owner/repo", 42, "main")).toBe(false);
   });
 
-  it("returns true when LGTM comment is by shared account (user and CLAWS share login)", async () => {
+  it("returns true when LGTM comment is by shared account (user and YETI share login)", async () => {
     setupMocks([
       { body: "LGTM", login: selfLogin, created_at: "2025-01-15T12:00:00Z" },
     ]);
@@ -168,7 +168,7 @@ describe("hasValidLGTM", () => {
       [{ body: "LGTM", login: "reviewer", created_at: "2025-01-15T11:00:00Z" }],
       [
         { message: "feat: some change", date: "2025-01-15T10:00:00Z", parentCount: 1 },
-        { message: "Merge branch 'main' into claws/issue-42", date: "2025-01-15T12:00:00Z", parentCount: 2 },
+        { message: "Merge branch 'main' into yeti/issue-42", date: "2025-01-15T12:00:00Z", parentCount: 2 },
       ],
     );
     expect(await github.hasValidLGTM("owner/repo", 42, "main")).toBe(true);
@@ -179,7 +179,7 @@ describe("hasValidLGTM", () => {
       [{ body: "LGTM", login: "reviewer", created_at: "2025-01-15T11:00:00Z" }],
       [
         { message: "feat: some change", date: "2025-01-15T10:00:00Z", parentCount: 1 },
-        { message: "Merge branch 'feature-x' into claws/issue-42", date: "2025-01-15T12:00:00Z", parentCount: 2 },
+        { message: "Merge branch 'feature-x' into yeti/issue-42", date: "2025-01-15T12:00:00Z", parentCount: 2 },
       ],
     );
     expect(await github.hasValidLGTM("owner/repo", 42, "main")).toBe(false);
@@ -190,7 +190,7 @@ describe("hasValidLGTM", () => {
       [{ body: "LGTM", login: "reviewer", created_at: "2025-01-15T11:00:00Z" }],
       [
         { message: "feat: some change", date: "2025-01-15T10:00:00Z", parentCount: 1 },
-        { message: "Merge branch 'main' into claws/issue-42", date: "2025-01-15T12:00:00Z", parentCount: 2 },
+        { message: "Merge branch 'main' into yeti/issue-42", date: "2025-01-15T12:00:00Z", parentCount: 2 },
         { message: "fix: another change", date: "2025-01-15T13:00:00Z", parentCount: 1 },
       ],
     );
@@ -201,8 +201,8 @@ describe("hasValidLGTM", () => {
     setupMocks(
       [{ body: "LGTM", login: "reviewer", created_at: "2025-01-15T09:00:00Z" }],
       [
-        { message: "Merge branch 'main' into claws/issue-42", date: "2025-01-15T10:00:00Z", parentCount: 2 },
-        { message: "Merge branch 'main' into claws/issue-42", date: "2025-01-15T12:00:00Z", parentCount: 2 },
+        { message: "Merge branch 'main' into yeti/issue-42", date: "2025-01-15T10:00:00Z", parentCount: 2 },
+        { message: "Merge branch 'main' into yeti/issue-42", date: "2025-01-15T12:00:00Z", parentCount: 2 },
       ],
     );
     expect(await github.hasValidLGTM("owner/repo", 42, "main")).toBe(true);
@@ -213,7 +213,7 @@ describe("hasValidLGTM", () => {
       [{ body: "LGTM", login: "reviewer", created_at: "2025-01-15T11:00:00Z" }],
       [
         { message: "feat: some change", date: "2025-01-15T10:00:00Z", parentCount: 1 },
-        { message: "Merge remote-tracking branch 'origin/main' into claws/issue-42", date: "2025-01-15T12:00:00Z", parentCount: 2 },
+        { message: "Merge remote-tracking branch 'origin/main' into yeti/issue-42", date: "2025-01-15T12:00:00Z", parentCount: 2 },
       ],
     );
     expect(await github.hasValidLGTM("owner/repo", 42, "main")).toBe(true);
@@ -224,16 +224,16 @@ describe("hasValidLGTM", () => {
       [{ body: "LGTM", login: "reviewer", created_at: "2025-01-15T11:00:00Z" }],
       [
         { message: "feat: some change", date: "2025-01-15T10:00:00Z", parentCount: 1 },
-        { message: "Merge branch 'main' into claws/issue-42", date: "2025-01-15T12:00:00Z", parentCount: 2 },
+        { message: "Merge branch 'main' into yeti/issue-42", date: "2025-01-15T12:00:00Z", parentCount: 2 },
       ],
     );
     // baseBranch is "master", so merging "main" is NOT exempt
     expect(await github.hasValidLGTM("owner/repo", 42, "master")).toBe(false);
   });
 
-  it("returns false when LGTM comment is a Claws-automated comment", async () => {
+  it("returns false when LGTM comment is a Yeti-automated comment", async () => {
     setupMocks([
-      { body: `LGTM\n<!-- claws-automated -->`, login: "claws-bot", created_at: "2025-01-15T12:00:00Z" },
+      { body: `LGTM\n<!-- yeti-automated -->`, login: "yeti-bot", created_at: "2025-01-15T12:00:00Z" },
     ]);
     expect(await github.hasValidLGTM("owner/repo", 42, "main")).toBe(false);
   });
@@ -243,7 +243,7 @@ describe("hasValidLGTM", () => {
       [{ body: "LGTM", login: "reviewer", created_at: "2025-01-15T11:00:00Z" }],
       [
         { message: "feat: some change", date: "2025-01-15T10:00:00Z", parentCount: 1 },
-        { message: "Merge branch 'main' into claws/issue-42", date: "2025-01-15T12:00:00Z", parentCount: 1 },
+        { message: "Merge branch 'main' into yeti/issue-42", date: "2025-01-15T12:00:00Z", parentCount: 1 },
       ],
     );
     expect(await github.hasValidLGTM("owner/repo", 42, "main")).toBe(false);

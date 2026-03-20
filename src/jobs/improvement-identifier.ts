@@ -118,7 +118,7 @@ export function parseImprovements(output: string): Improvement[] {
   }
 }
 
-const FOOTER = "\n\n---\n*Automated improvement by claws improvement-identifier*";
+const FOOTER = "\n\n---\n*Automated improvement by yeti improvement-identifier*";
 
 async function processRepo(repo: Repo): Promise<void> {
   const fullName = repo.fullName;
@@ -133,7 +133,7 @@ async function processRepo(repo: Repo): Promise<void> {
   const openPRs = await gh.listPRs(fullName);
 
   // Skip if improvement PRs are already open
-  if (openPRs.some((pr) => pr.headRefName.startsWith("claws/improve-"))) {
+  if (openPRs.some((pr) => pr.headRefName.startsWith("yeti/improve-"))) {
     log.info(`[improvement-identifier] Skipping ${fullName} — open improvement PR(s) exist`);
     return;
   }
@@ -141,7 +141,7 @@ async function processRepo(repo: Repo): Promise<void> {
   const openPRTitles = openPRs.map((p) => p.title);
 
   // Phase 1: Analysis — identify improvements via Claude
-  const analysisBranch = `claws/improve-${claude.randomSuffix()}`;
+  const analysisBranch = `yeti/improve-${claude.randomSuffix()}`;
   const analysisTaskId = db.recordTaskStart("improvement-identifier", fullName, 0, null);
   let analysisWt: string | undefined;
   let improvements: Improvement[];
@@ -187,7 +187,7 @@ async function processRepo(repo: Repo): Promise<void> {
       return;
     }
 
-    const implBranch = `claws/improve-${claude.randomSuffix()}`;
+    const implBranch = `yeti/improve-${claude.randomSuffix()}`;
     const implTaskId = db.recordTaskStart("improvement-identifier", fullName, 0, null);
     let implWt: string | undefined;
 

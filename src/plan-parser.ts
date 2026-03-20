@@ -44,7 +44,7 @@ export function parsePlan(planComment: string): ParsedPlan {
 /**
  * Find the most recent plan comment in a list of issue comments.
  * Looks for comments containing `## Implementation Plan` (uses includes
- * rather than startsWith so it still matches when the Claws visible header
+ * rather than startsWith so it still matches when the Yeti visible header
  * is prepended).
  */
 export function findPlanComment(comments: { body: string }[]): string | null {

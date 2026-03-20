@@ -460,7 +460,7 @@ export function buildNav(theme: Theme): string {
   return `<nav><a href="/">Dashboard</a><a href="/queue">Queue</a><a href="/logs">Logs</a><a href="/whatsapp">WhatsApp</a><a href="/config">Config</a><select id="theme-select" onchange="setTheme(this.value)">${selectHtml}</select></nav>`;
 }
 
-export const THEME_SCRIPT = `<script>function setTheme(v){document.cookie="claws_theme="+v+";Path=/;SameSite=Strict;Max-Age=31536000";if(v==="system"){document.documentElement.removeAttribute("data-theme")}else{document.documentElement.setAttribute("data-theme",v)}}</script>`;
+export const THEME_SCRIPT = `<script>function setTheme(v){document.cookie="yeti_theme="+v+";Path=/;SameSite=Strict;Max-Age=31536000";if(v==="system"){document.documentElement.removeAttribute("data-theme")}else{document.documentElement.setAttribute("data-theme",v)}}</script>`;
 
 export function slackLabel(slack: {
   configured: boolean;

@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { mockRepo } from "../test-helpers.js";
 
 vi.mock("../config.js", () => ({
-  WORK_DIR: "/home/testuser/.claws",
+  WORK_DIR: "/home/testuser/.yeti",
   SLACK_IDEAS_CHANNEL: "C0123456",
 }));
 
@@ -381,7 +381,7 @@ describe("formatOverviewContent", () => {
     expect(content).toContain("## community");
     expect(content).toContain("### Idea B");
     expect(content).toContain("Desc B");
-    expect(content).toContain("Automated suggestions by claws idea-suggester");
+    expect(content).toContain("Automated suggestions by yeti idea-suggester");
   });
 
   it("omits area section when that area has no ideas", () => {
@@ -417,7 +417,7 @@ describe("formatOverviewContent", () => {
     expect(content).toContain("## Focus Areas");
     expect(content).toContain("- area1");
     expect(content).toContain("- area2");
-    expect(content).toContain("Automated suggestions by claws idea-suggester");
+    expect(content).toContain("Automated suggestions by yeti idea-suggester");
     // No idea sections rendered
     expect(content).not.toContain("## area1");
     expect(content).not.toContain("## area2");

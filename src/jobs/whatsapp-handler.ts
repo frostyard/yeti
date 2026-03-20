@@ -28,7 +28,7 @@ export function createHandler(
         }
 
         log.info("[whatsapp-handler] Transcribing voice note...");
-        text = await transcribe(msg.audioBuffer, "voice-note.ogg", "Kwyjibo, Claws, GitHub");
+        text = await transcribe(msg.audioBuffer, "voice-note.ogg", "Kwyjibo, Yeti, GitHub");
         log.info(`[whatsapp-handler] Transcription: ${text.slice(0, 200)}`);
       }
 
@@ -45,7 +45,7 @@ export function createHandler(
       // Get available repos
       const repos = await listRepos();
       if (repos.length === 0) {
-        await sendMessage(msg.from, "No repositories found. Check Claws configuration.");
+        await sendMessage(msg.from, "No repositories found. Check Yeti configuration.");
         return;
       }
 

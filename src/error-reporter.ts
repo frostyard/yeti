@@ -44,7 +44,7 @@ export async function reportError(
   lastReported.set(fingerprint, now);
 
   try {
-    const title = `[claws-error] ${fingerprint}`;
+    const title = `[yeti-error] ${fingerprint}`;
     const errorStr =
       error instanceof Error
         ? error.stack ?? error.message
@@ -92,7 +92,7 @@ export async function reportError(
       await gh.commentOnIssue(SELF_REPO, existing.number, comment);
     } else {
       const body = [
-        `**Auto-created by Claws error reporter**`,
+        `**Auto-created by Yeti error reporter**`,
         "",
         `**Fingerprint:** \`${fingerprint}\``,
         `**Context:** ${context}`,

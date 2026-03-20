@@ -115,7 +115,7 @@ describe("images", () => {
     let tmpDir: string;
 
     beforeEach(() => {
-      tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "claws-img-test-"));
+      tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "yeti-img-test-"));
     });
 
     afterEach(() => {
@@ -139,7 +139,7 @@ describe("images", () => {
       );
 
       expect(result).toHaveLength(1);
-      expect(result[0].localPath).toBe(".claws-images/img-1.png");
+      expect(result[0].localPath).toBe(".yeti-images/img-1.png");
       expect(result[0].alt).toBe("test");
       expect(fs.existsSync(path.join(tmpDir, "img-1.png"))).toBe(true);
     });
@@ -160,7 +160,7 @@ describe("images", () => {
         tmpDir,
       );
 
-      expect(result[0].localPath).toBe(".claws-images/img-1.jpg");
+      expect(result[0].localPath).toBe(".yeti-images/img-1.jpg");
     });
 
     it("skips failed downloads gracefully", async () => {
@@ -253,13 +253,13 @@ describe("images", () => {
   describe("buildImagePromptSection", () => {
     it("formats correctly with images", () => {
       const result = buildImagePromptSection([
-        { localPath: ".claws-images/img-1.png", alt: "screenshot of error" },
-        { localPath: ".claws-images/img-2.jpg", alt: "expected layout" },
+        { localPath: ".yeti-images/img-1.png", alt: "screenshot of error" },
+        { localPath: ".yeti-images/img-2.jpg", alt: "expected layout" },
       ]);
 
       expect(result).toContain("## Attached Images");
-      expect(result).toContain('.claws-images/img-1.png — "screenshot of error"');
-      expect(result).toContain('.claws-images/img-2.jpg — "expected layout"');
+      expect(result).toContain('.yeti-images/img-1.png — "screenshot of error"');
+      expect(result).toContain('.yeti-images/img-2.jpg — "expected layout"');
     });
 
     it("returns empty string when no images", () => {
@@ -268,10 +268,10 @@ describe("images", () => {
 
     it("handles images without alt text", () => {
       const result = buildImagePromptSection([
-        { localPath: ".claws-images/img-1.png", alt: "" },
+        { localPath: ".yeti-images/img-1.png", alt: "" },
       ]);
 
-      expect(result).toContain("- .claws-images/img-1.png");
+      expect(result).toContain("- .yeti-images/img-1.png");
       expect(result).not.toContain('""');
     });
   });
@@ -280,7 +280,7 @@ describe("images", () => {
     let tmpDir: string;
 
     beforeEach(() => {
-      tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "claws-img-test-"));
+      tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "yeti-img-test-"));
     });
 
     afterEach(() => {
@@ -309,8 +309,8 @@ describe("images", () => {
       );
 
       expect(result).toContain("## Attached Images");
-      expect(result).toContain(".claws-images/img-1.png");
-      expect(fs.existsSync(path.join(tmpDir, ".claws-images", "img-1.png"))).toBe(true);
+      expect(result).toContain(".yeti-images/img-1.png");
+      expect(fs.existsSync(path.join(tmpDir, ".yeti-images", "img-1.png"))).toBe(true);
     });
 
     it("combines images from multiple texts", async () => {

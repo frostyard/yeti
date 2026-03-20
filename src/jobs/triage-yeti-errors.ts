@@ -5,16 +5,16 @@ import * as log from "../log.js";
 import * as db from "../db.js";
 import { reportError } from "../error-reporter.js";
 
-export const REPORT_HEADER = "## Claws Error Investigation Report";
+export const REPORT_HEADER = "## Yeti Error Investigation Report";
 
-export interface ClawsErrorDetails {
+export interface YetiErrorDetails {
   fingerprint: string;
   context: string;
   timestamp: string;
   errorText: string;
 }
 
-export function parseClawsError(body: string): ClawsErrorDetails {
+export function parseYetiError(body: string): YetiErrorDetails {
   const fingerprint = body.match(/\*\*Fingerprint:\*\*\s*`([^`]+)`/)?.[1] ?? "";
   const context = body.match(/\*\*Context:\*\*\s*(.+)/)?.[1] ?? "";
   const timestamp = body.match(/\*\*Timestamp:\*\*\s*(.+)/)?.[1] ?? "";
@@ -23,7 +23,7 @@ export function parseClawsError(body: string): ClawsErrorDetails {
 }
 
 export function extractFingerprint(title: string): string | null {
-  const match = title.match(/^\[claws-error\]\s*(.+)$/);
+  const match = title.match(/^\[yeti-error\]\s*(.+)$/);
   return match ? match[1].trim() : null;
 }
 
@@ -71,7 +71,7 @@ export async function deduplicateByFingerprint(
   repo: string,
   issues: gh.Issue[],
 ): Promise<gh.Issue[]> {
-  // Build a map of fingerprint → existing open [claws-error] issues
+  // Build a map of fingerprint → existing open [yeti-error] issues
   const allOpenIssues = (await gh.listOpenIssues(repo)).filter(
     (i) => extractFingerprint(i.title) !== null,
   );
@@ -159,7 +159,7 @@ export async function deduplicateByInvestigation(
     try {
       const related = issues.find((i) => i.number === num);
       if (!related) {
-        log.warn(`[triage-claws-errors] Related issue #${num} not found, skipping`);
+        log.warn(`[triage-yeti-errors] Related issue #${num} not found, skipping`);
         continue;
       }
 
@@ -172,7 +172,7 @@ export async function deduplicateByInvestigation(
         `Root cause identified as same as #${canonicalIssue.number} during investigation. Closing as duplicate.`);
       await gh.closeIssue(repo, num, "not_planned");
     } catch (err) {
-      log.warn(`[triage-claws-errors] Failed to close related issue #${num}: ${err}`);
+      log.warn(`[triage-yeti-errors] Failed to close related issue #${num}: ${err}`);
     }
   }
 
@@ -193,11 +193,11 @@ function mapFingerprintToFile(fingerprint: string): string | null {
 
 export function buildInvestigationPrompt(
   issue: gh.Issue,
-  errorDetails: ClawsErrorDetails,
+  errorDetails: YetiErrorDetails,
   otherIssues: gh.Issue[],
 ): string {
   const sections: string[] = [
-    `You are investigating an internal Claws error.`,
+    `You are investigating an internal Yeti error.`,
     ``,
     `## Error Details`,
     ``,
@@ -217,7 +217,7 @@ export function buildInvestigationPrompt(
     ``,
     `## Instructions`,
     ``,
-    `1. **Read \`docs/OVERVIEW.md\` first** for architectural context about the Claws codebase, then follow and read any linked documents relevant to this error.`,
+    `1. **Read \`docs/OVERVIEW.md\` first** for architectural context about the Yeti codebase, then follow and read any linked documents relevant to this error.`,
   ];
 
   const fileHint = mapFingerprintToFile(errorDetails.fingerprint);
@@ -289,17 +289,17 @@ async function processIssue(
   issue: gh.Issue,
   otherIssues: gh.Issue[],
 ): Promise<void> {
-  log.info(`[triage-claws-errors] Investigating ${repo}#${issue.number}: ${issue.title}`);
+  log.info(`[triage-yeti-errors] Investigating ${repo}#${issue.number}: ${issue.title}`);
 
-  const taskId = db.recordTaskStart("triage-claws-errors", repo, issue.number, null);
+  const taskId = db.recordTaskStart("triage-yeti-errors", repo, issue.number, null);
   let wtPath: string | undefined;
 
   try {
-    const branchName = `claws/investigate-error-${issue.number}-${claude.randomSuffix()}`;
-    wtPath = await claude.createWorktree(selfRepo, branchName, "triage-claws-errors");
+    const branchName = `yeti/investigate-error-${issue.number}-${claude.randomSuffix()}`;
+    wtPath = await claude.createWorktree(selfRepo, branchName, "triage-yeti-errors");
     db.updateTaskWorktree(taskId, wtPath, branchName);
 
-    const errorDetails = parseClawsError(issue.body);
+    const errorDetails = parseYetiError(issue.body);
     const prompt = buildInvestigationPrompt(issue, errorDetails, otherIssues);
     const output = await claude.enqueue(() => claude.runClaude(prompt, wtPath!), gh.hasPriorityLabel(issue.labels));
 
@@ -308,14 +308,14 @@ async function processIssue(
 
       const reportBody = output.replace(/\nRELATED_ISSUES:.*$/m, "").trim();
       await gh.commentOnIssue(repo, issue.number, `${REPORT_HEADER}\n\n${reportBody}`);
-      log.info(`[triage-claws-errors] Posted investigation report for ${repo}#${issue.number}`);
+      log.info(`[triage-yeti-errors] Posted investigation report for ${repo}#${issue.number}`);
 
       if (relatedNumbers.length > 0) {
         await deduplicateByInvestigation(repo, issue, relatedNumbers);
-        log.info(`[triage-claws-errors] Phase 2 dedup closed ${relatedNumbers.length} related issue(s)`);
+        log.info(`[triage-yeti-errors] Phase 2 dedup closed ${relatedNumbers.length} related issue(s)`);
       }
     } else {
-      log.warn(`[triage-claws-errors] Empty investigation output for ${repo}#${issue.number}`);
+      log.warn(`[triage-yeti-errors] Empty investigation output for ${repo}#${issue.number}`);
     }
 
     db.recordTaskComplete(taskId);
@@ -337,11 +337,11 @@ export async function run(repos: Repo[]): Promise<void> {
 
   try {
     const allIssues = await gh.listOpenIssues(repo);
-    const clawsErrorIssues = allIssues.filter((i) => extractFingerprint(i.title) !== null);
+    const yetiErrorIssues = allIssues.filter((i) => extractFingerprint(i.title) !== null);
 
     // Filter to only issues without an investigation report
     const uninvestigated: gh.Issue[] = [];
-    for (const issue of clawsErrorIssues) {
+    for (const issue of yetiErrorIssues) {
       if (gh.isItemSkipped(repo, issue.number)) continue;
       const comments = await gh.getIssueComments(repo, issue.number);
       const hasReport = comments.some((c) => c.body.includes(REPORT_HEADER));
@@ -353,20 +353,20 @@ export async function run(repos: Repo[]): Promise<void> {
 
     if (uninvestigated.length === 0) return;
 
-    log.info(`[triage-claws-errors] Found ${uninvestigated.length} issue(s) needing investigation`);
+    log.info(`[triage-yeti-errors] Found ${uninvestigated.length} issue(s) needing investigation`);
 
     // Phase 1: deduplicate by fingerprint
     const canonical = await deduplicateByFingerprint(repo, uninvestigated);
-    log.info(`[triage-claws-errors] After Phase 1 dedup: ${canonical.length} canonical issue(s)`);
+    log.info(`[triage-yeti-errors] After Phase 1 dedup: ${canonical.length} canonical issue(s)`);
 
     const tasks = canonical.map((issue, i) => {
       const others = canonical.filter((_, j) => j !== i);
       return processIssue(repo, selfRepo, issue, others).catch((err) => {
-        reportError("triage-claws-errors:process-issue", `${repo}#${issue.number}`, err);
+        reportError("triage-yeti-errors:process-issue", `${repo}#${issue.number}`, err);
       });
     });
     await Promise.allSettled(tasks);
   } catch (err) {
-    reportError("triage-claws-errors:list-issues", repo, err);
+    reportError("triage-yeti-errors:list-issues", repo, err);
   }
 }

@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { mockRepo, mockPR } from "../test-helpers.js";
 
 vi.mock("../config.js", () => ({
-  WORK_DIR: "/home/testuser/.claws",
+  WORK_DIR: "/home/testuser/.yeti",
 }));
 
 vi.mock("../log.js", () => ({
@@ -97,7 +97,7 @@ describe("doc-maintainer", () => {
   });
 
   it("skips repo when open docs PR already exists", async () => {
-    const pr = mockPR({ headRefName: "claws/docs-ab12" });
+    const pr = mockPR({ headRefName: "yeti/docs-ab12" });
     mockGh.listPRs.mockResolvedValue([pr]);
 
     await run([repo]);
@@ -130,7 +130,7 @@ describe("doc-maintainer", () => {
     );
     expect(mockGh.createPR).toHaveBeenCalledWith(
       repo.fullName,
-      expect.stringContaining("claws/docs-"),
+      expect.stringContaining("yeti/docs-"),
       expect.stringContaining("update documentation"),
       "## Summary\nUpdated docs",
     );
