@@ -24,6 +24,7 @@ export interface Scheduler {
   pausedJobs(): Set<string>;
   jobScheduleInfo(): Map<string, { intervalMs: number; scheduledHour?: number }>;
   addJob(job: Job): void;
+  removeJob(name: string): void;
 }
 
 export function msUntilHour(hour: number): number {
@@ -290,5 +291,21 @@ export function startJobs(jobs: Job[], initialPaused?: readonly string[]): Sched
     }
   }
 
-  return { stop, drain, jobStates, triggerJob, updateInterval, updateScheduledHour, pauseJob, resumeJob, pausedJobs, jobScheduleInfo, addJob };
+  function removeJob(name: string): void {
+    if (!ticks.has(name)) return; // unknown job — no-op
+
+    clearJobTimers(name);
+    jobTimers.delete(name);
+    ticks.delete(name);
+    pausedFlags.delete(name);
+    scheduleConfigs.delete(name);
+    // Only delete runningFlags if the job isn't currently running.
+    // If it is running, the finally block will set it to false (zombie entry — harmless).
+    if (!runningFlags.get(name)) {
+      runningFlags.delete(name);
+    }
+    log.info(`Removed job: ${name}`);
+  }
+
+  return { stop, drain, jobStates, triggerJob, updateInterval, updateScheduledHour, pauseJob, resumeJob, pausedJobs, jobScheduleInfo, addJob, removeJob };
 }

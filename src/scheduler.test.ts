@@ -613,4 +613,63 @@ describe("scheduler", () => {
 
     scheduler.stop();
   });
+
+  it("removeJob stops ticks and cleans up state", async () => {
+    const runFn = vi.fn().mockResolvedValue(undefined);
+    const scheduler = startJobs([makeJob("remove-me", runFn, 1000)]);
+
+    await vi.advanceTimersByTimeAsync(0); // initial tick
+    expect(runFn).toHaveBeenCalledTimes(1);
+
+    scheduler.removeJob("remove-me");
+
+    await vi.advanceTimersByTimeAsync(5000);
+    expect(runFn).toHaveBeenCalledTimes(1); // no more ticks
+
+    expect(scheduler.jobStates().has("remove-me")).toBe(false);
+    expect(scheduler.jobScheduleInfo().has("remove-me")).toBe(false);
+
+    scheduler.stop();
+  });
+
+  it("removeJob on a currently-running job lets it complete", async () => {
+    let resolveJob: () => void;
+    const longRunning = () =>
+      new Promise<void>((resolve) => {
+        resolveJob = resolve;
+      });
+    const runFn = vi.fn().mockImplementation(longRunning);
+
+    const scheduler = startJobs([makeJob("remove-running", runFn, 1000)]);
+
+    await vi.advanceTimersByTimeAsync(0); // start the job
+    expect(runFn).toHaveBeenCalledTimes(1);
+    expect(scheduler.jobStates().get("remove-running")).toBe(true);
+
+    scheduler.removeJob("remove-running");
+
+    // Job should still be running (current run completes naturally)
+    expect(scheduler.jobStates().get("remove-running")).toBe(true);
+
+    // Complete the job
+    resolveJob!();
+    await vi.advanceTimersByTimeAsync(0);
+
+    // No more ticks after completion
+    await vi.advanceTimersByTimeAsync(5000);
+    expect(runFn).toHaveBeenCalledTimes(1);
+  });
+
+  it("removeJob for an unknown job is a no-op", async () => {
+    const runFn = vi.fn().mockResolvedValue(undefined);
+    const scheduler = startJobs([makeJob("keep-me", runFn, 1000)]);
+
+    // Should not throw
+    scheduler.removeJob("nonexistent-job");
+
+    await vi.advanceTimersByTimeAsync(0);
+    expect(runFn).toHaveBeenCalledTimes(1); // unrelated job unaffected
+
+    scheduler.stop();
+  });
 });
