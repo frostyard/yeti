@@ -550,4 +550,67 @@ describe("scheduler", () => {
 
     scheduler.stop();
   });
+
+  it("addJob registers and starts ticking a new interval job", async () => {
+    const scheduler = startJobs([]);
+
+    const runFn = vi.fn().mockResolvedValue(undefined);
+    scheduler.addJob(makeJob("dynamic-job", runFn, 1000));
+
+    await vi.advanceTimersByTimeAsync(0); // first tick
+    expect(runFn).toHaveBeenCalledTimes(1);
+
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(runFn).toHaveBeenCalledTimes(2);
+
+    scheduler.stop();
+  });
+
+  it("addJob registers and schedules a scheduledHour job", async () => {
+    vi.setSystemTime(new Date("2025-01-01T10:00:00"));
+    const scheduler = startJobs([]);
+
+    const runFn = vi.fn().mockResolvedValue(undefined);
+    scheduler.addJob({ name: "dynamic-sched", intervalMs: 0, scheduledHour: 12, run: runFn });
+
+    await vi.advanceTimersByTimeAsync(0);
+    expect(runFn).toHaveBeenCalledTimes(0); // not until scheduled hour
+
+    await vi.advanceTimersByTimeAsync(2 * 60 * 60 * 1000); // advance to 12:00
+    expect(runFn).toHaveBeenCalledTimes(1);
+
+    scheduler.stop();
+  });
+
+  it("addJob during drain is a no-op", async () => {
+    const scheduler = startJobs([]);
+    const drainPromise = scheduler.drain();
+    await vi.advanceTimersByTimeAsync(500);
+    await drainPromise;
+
+    const runFn = vi.fn().mockResolvedValue(undefined);
+    scheduler.addJob(makeJob("too-late", runFn, 1000));
+
+    await vi.advanceTimersByTimeAsync(5000);
+    expect(runFn).not.toHaveBeenCalled();
+    expect(scheduler.jobStates().has("too-late")).toBe(false);
+    expect(scheduler.jobScheduleInfo().has("too-late")).toBe(false);
+  });
+
+  it("addJob for an already-registered job is a no-op", async () => {
+    const run1 = vi.fn().mockResolvedValue(undefined);
+    const scheduler = startJobs([makeJob("existing-job", run1, 1000)]);
+
+    await vi.advanceTimersByTimeAsync(0);
+    expect(run1).toHaveBeenCalledTimes(1);
+
+    const run2 = vi.fn().mockResolvedValue(undefined);
+    scheduler.addJob(makeJob("existing-job", run2, 1000));
+
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(run1).toHaveBeenCalledTimes(2); // original still ticking
+    expect(run2).not.toHaveBeenCalled();   // duplicate ignored
+
+    scheduler.stop();
+  });
 });
