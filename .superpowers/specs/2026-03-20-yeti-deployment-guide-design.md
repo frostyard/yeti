@@ -10,9 +10,10 @@ Step-by-step guide to deploy Yeti from a local codebase to a fresh Debian/Ubuntu
 
 ## Prerequisites
 
-- Local machine with the Yeti codebase (this repo)
+- Local machine with the Yeti codebase, already initialized as a git repository with commits on `main`
 - Empty private GitHub repo at `frostyard/yeti`
 - Provisioned Incus container (Debian) with: Node.js (will upgrade to 22), `gh` CLI, `claude` CLI, `git`, `curl`, `build-essential`, Tailscale (authenticated)
+- A `yeti` user on the server (install.sh and the auto-updater `deploy.sh` hardcode `sudo -u yeti`, so the install **must** run as the `yeti` user)
 - Discord server where you can create a bot
 - Tailscale network with the server already joined
 
@@ -65,7 +66,7 @@ SSH into the server as `yeti`:
 gh auth login
 ```
 
-Interactive flow — authenticate with access to the `frostyard` org. Choose HTTPS or SSH as preferred. The `gh` CLI is used by both `install.sh` (to download releases) and Yeti at runtime (all GitHub API calls).
+Interactive flow — authenticate with access to the `frostyard` org. Choose HTTPS or SSH as preferred. The default scopes include `repo`, which is required for private repo access. The `gh` CLI is used by both `install.sh` (to download releases) and Yeti at runtime (all GitHub API calls).
 
 ### 3.2 Claude CLI
 
@@ -97,7 +98,7 @@ This:
 2. Navigate to the **Bot** section, create a bot
 3. Enable **Message Content Intent** under Privileged Gateway Intents
 4. Copy the **bot token**
-5. Navigate to **OAuth2 → URL Generator**, select scopes: `bot`, permissions: `Send Messages`, `Read Message History`
+5. Navigate to **OAuth2 → URL Generator**, select scopes: `bot`, permissions: `View Channels`, `Send Messages`, `Read Message History`
 6. Use the generated URL to invite the bot to your Discord server
 7. Create a private `#yeti` channel and add the bot to it
 8. Enable Developer Mode in Discord settings (User Settings → Advanced → Developer Mode)
@@ -106,23 +107,16 @@ This:
 
 ### 4.3 Edit configuration
 
-Edit `~/.yeti/config.json`:
+Edit the generated `~/.yeti/config.json` (created by install.sh with all fields and sensible defaults) and update these fields:
 
-```json
-{
-  "githubOwners": ["frostyard"],
-  "selfRepo": "frostyard/yeti",
-  "discordBotToken": "<bot token from step 4>",
-  "discordChannelId": "<channel ID from step 9>",
-  "discordAllowedUsers": ["<your user ID from step 10>"],
-  "authToken": "<generate a strong random string>",
-  "slackWebhook": "",
-  "slackBotToken": "",
-  "slackIdeasChannel": ""
-}
-```
+- `"discordBotToken"`: bot token from step 4
+- `"discordChannelId"`: channel ID from step 9
+- `"discordAllowedUsers"`: `["<your user ID from step 10>"]`
+- `"authToken"`: a strong random string for dashboard auth
 
-Only the fields you want to change need to be present — the skeleton config has sensible defaults for everything else (intervals, schedules, worker count, etc.).
+The remaining defaults (intervals, schedules, worker count, etc.) are fine to leave as-is. The Slack fields are empty by default — ignore the Slack webhook startup warning until Slack removal is complete.
+
+The release tarball includes pre-built `node_modules/` — no `npm install` is needed on the server.
 
 ### 4.4 Restart Yeti
 
@@ -138,7 +132,7 @@ Expose the dashboard securely over Tailscale:
 
 ```bash
 sudo tailscale set --hostname=yeti
-sudo tailscale serve --bg https / http://localhost:9384
+sudo tailscale serve --bg http://localhost:9384
 ```
 
 The dashboard is now accessible at `https://yeti.<tailnet>.ts.net` from any device on your Tailscale network. TLS is handled automatically by Tailscale.
