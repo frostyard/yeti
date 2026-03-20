@@ -28,7 +28,7 @@ fi
 CONFIG_SLACK_WEBHOOK=$(node -e "try{console.log(JSON.parse(require('fs').readFileSync('$CONFIG_FILE','utf-8')).slackWebhook||'')}catch{console.log('')}" 2>/dev/null || echo "")
 SLACK_WEBHOOK="${CLAWS_SLACK_WEBHOOK:-$CONFIG_SLACK_WEBHOOK}"
 
-CONFIG_PORT=$(node -e "try{console.log(JSON.parse(require('fs').readFileSync('$CONFIG_FILE','utf-8')).port||3000)}catch{console.log(3000)}" 2>/dev/null || echo "3000")
+CONFIG_PORT=$(node -e "try{console.log(JSON.parse(require('fs').readFileSync('$CONFIG_FILE','utf-8')).port||9384)}catch{console.log(9384)}" 2>/dev/null || echo "9384")
 PORT="${PORT:-$CONFIG_PORT}"
 HEALTH_URL="http://localhost:$PORT/health"
 

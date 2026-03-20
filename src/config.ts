@@ -134,7 +134,7 @@ function loadConfig() {
     process.env["YETI_SELF_REPO"] ?? file.selfRepo ?? "frostyard/yeti";
 
   const port = parseInt(
-    process.env["PORT"] ?? String(file.port ?? 3000),
+    process.env["PORT"] ?? String(file.port ?? 9384),
     10,
   );
 

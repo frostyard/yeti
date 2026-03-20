@@ -21,7 +21,7 @@ vi.mock("./config.js", () => ({
     kwyjiboApiKey: "Not configured",
     openaiApiKey: "Not configured",
     authToken: "Not configured",
-    port: 3000,
+    port: 9384,
     intervals: { issueWorkerMs: 300000, issueRefinerMs: 300000, ciFixerMs: 600000, reviewAddresserMs: 300000, bugInvestigatorMs: 600000, autoMergerMs: 600000 },
     schedules: { docMaintainerHour: 1, repoStandardsHour: 2, improvementIdentifierHour: 3 },
     logRetentionDays: 14,
