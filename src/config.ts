@@ -97,7 +97,7 @@ function loadConfig() {
 
   const githubOwners = process.env["YETI_GITHUB_OWNERS"]
     ? process.env["YETI_GITHUB_OWNERS"].split(",").map((s) => s.trim())
-    : file.githubOwners ?? ["frostyard", "frostyard"];
+    : file.githubOwners ?? ["frostyard"];
 
   const selfRepo =
     process.env["YETI_SELF_REPO"] ?? file.selfRepo ?? "frostyard/yeti";
