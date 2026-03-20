@@ -1,6 +1,6 @@
-# Claws — Overview
+# Yeti — Overview
 
-Claws is a self-hosted
+Yeti is a self-hosted
 GitHub automation service. It polls GitHub repositories on configurable timers,
 identifies work items via comment analysis, reactions, and PR state, and
 delegates tasks to the Claude CLI in isolated git worktrees. It runs as a
@@ -41,11 +41,11 @@ src/
     ├── issue-refiner.ts        Discovers issues needing plans via comment analysis
     ├── issue-worker.ts         Implements issues labelled "Refined" as PRs
     ├── ci-fixer.ts             Fixes failing CI and resolves merge conflicts
-    ├── review-addresser.ts     Addresses review comments on Claws PRs
+    ├── review-addresser.ts     Addresses review comments on Yeti PRs
     ├── triage-kwyjibo-errors.ts     Investigates prod bug reports (game-ID issues)
-    ├── triage-claws-errors.ts       Investigates internal Claws errors ([claws-error] issues)
+    ├── triage-yeti-errors.ts       Investigates internal Yeti errors ([yeti-error] issues)
     ├── doc-maintainer.ts       Nightly documentation generation/update
-    ├── auto-merger.ts          Auto-merges Dependabot and approved Claws PRs
+    ├── auto-merger.ts          Auto-merges Dependabot and approved Yeti PRs
     ├── repo-standards.ts       Syncs labels and cleans legacy labels
     ├── improvement-identifier.ts  Identifies codebase improvements via Claude, implements as PRs
     ├── idea-suggester.ts       Suggests new ideas per repo, posts to Slack for reaction-based review
@@ -56,9 +56,9 @@ src/
     └── ubuntu-latest-scanner.ts  Scans workflows for non-self-hosted runners, creates alert issues
 
 deploy/
-├── claws.service           systemd service unit
-├── claws-updater.service   systemd updater service
-├── claws-updater.timer     systemd timer (every 60s)
+├── yeti.service           systemd service unit
+├── yeti-updater.service   systemd updater service
+├── yeti-updater.timer     systemd timer (every 60s)
 ├── install.sh              One-shot bootstrap installer
 ├── deploy.sh               Auto-update with health check + rollback
 └── uninstall.sh            Service removal
@@ -77,12 +77,12 @@ drain running jobs (5 min timeout), terminate active Claude processes, and
 close the database.
 
 **`config.ts`** — Loads configuration in priority order: environment variables >
-`~/.claws/config.json` > hardcoded defaults. Exports `LABELS` (`refined`,
+`~/.yeti/config.json` > hardcoded defaults. Exports `LABELS` (`refined`,
 `ready`, `priority`, `inReview`), `LABEL_SPECS` (synced to all repos by
 repo-standards — includes colors and descriptions for all four labels),
 `LEGACY_LABELS` (set of old labels cleaned up as stale, including
-`claws-mergeable` and `claws-error`), `INTERVALS`, `SCHEDULES`, and
-connection strings. `WORK_DIR` is always `~/.claws`.
+`yeti-mergeable` and `yeti-error`), `INTERVALS`, `SCHEDULES`, and
+connection strings. `WORK_DIR` is always `~/.yeti`.
 
 **`scheduler.ts`** — Manages job lifecycle. Each job runs immediately on
 startup, then repeats on its interval. If a prior run is still active, the
@@ -116,10 +116,10 @@ items against the `skippedItems` and `prioritizedItems` config lists,
 used by jobs to exclude or fast-track specific issues/PRs. Provides
 reaction helpers (`addReaction`, `addReviewCommentReaction`,
 `getCommentReactions`) and `getPRReviewDecision()` for review-based gating.
-All comments posted by Claws include a hidden `CLAWS_COMMENT_MARKER` and a
-visible `CLAWS_VISIBLE_HEADER`, with helper functions `isClawsComment()` /
-`stripClawsMarker()` for attribution when processing feedback. Comment
-filtering uses `isClawsComment()` (marker-based) rather than self-login
+All comments posted by Yeti include a hidden `YETI_COMMENT_MARKER` and a
+visible `YETI_VISIBLE_HEADER`, with helper functions `isYetiComment()` /
+`stripYetiMarker()` for attribution when processing feedback. Comment
+filtering uses `isYetiComment()` (marker-based) rather than self-login
 comparison, ensuring correct behavior when the `gh` auth identity is the
 same GitHub account as the human user. `hasValidLGTM()` accepts a
 `baseBranch` parameter and filters out merge-from-base commits (e.g. from
@@ -153,7 +153,7 @@ and stdout byte count for observability. Timed-out processes throw
 `ClaudeTimeoutError` (carries diagnostic fields: `lastOutput`, `lastStderr`,
 `outputBytes`, `cwd`) which the error reporter includes in GitHub issue reports.
 
-**`db.ts`** — SQLite database at `~/.claws/claws.db`. Three tables: `tasks`
+**`db.ts`** — SQLite database at `~/.yeti/yeti.db`. Three tables: `tasks`
 (tracks every job invocation, linked to `job_runs` via `run_id`), `job_runs`
 (tracks scheduled job executions), and `job_logs` (captures log output per run
 via `AsyncLocalStorage` context). See [Database Schema](database-schema.md).
@@ -186,7 +186,7 @@ Routes:
 
 Supports dark/light/system themes. When `authToken` is configured, mutating
 endpoints and config views require authentication via
-`Authorization: Bearer <token>` header or `claws_token` cookie.
+`Authorization: Bearer <token>` header or `yeti_token` cookie.
 Token comparison uses `crypto.timingSafeEqual`.
 
 **`plan-parser.ts`** — Parses structured implementation plan comments into
@@ -205,9 +205,9 @@ logs are associated with the job run that produced them.
 
 **`error-reporter.ts`** — On error: logs to console + Slack, then (with a
 30-minute per-fingerprint cooldown) either comments on an existing
-`[claws-error]` issue in `SELF_REPO` or creates a new one with the
-`claws-error` label. These issues are then picked up by the
-triage-claws-errors job for automated investigation. Two error types are
+`[yeti-error]` issue in `SELF_REPO` or creates a new one with the
+`yeti-error` label. These issues are then picked up by the
+triage-yeti-errors job for automated investigation. Two error types are
 filtered before any reporting: `ShutdownError` (logged at info level —
 shutdown cancellations are expected) and `RateLimitError` (logged at warn
 level — handled by the circuit breaker, not actionable bugs). When the error
@@ -217,7 +217,7 @@ and collapsible last stdout/stderr snippets.
 
 **`images.ts`** — Extracts image references (markdown `![](url)` and HTML
 `<img>` tags) from issue/PR text, downloads them (up to 10 images, 10 MB
-each, 30s timeout), and writes them into the worktree under `.claws-images/`.
+each, 30s timeout), and writes them into the worktree under `.yeti-images/`.
 Also extracts GitHub file attachments (`[filename](github-attachment-url)`),
 downloads them (up to 5 attachments, 1 MB each), validates UTF-8 encoding,
 and truncates large text content (100K char limit, keeps first/last halves).
@@ -237,11 +237,11 @@ See [Jobs](jobs.md) for detailed behavior of each.
 | `issue-refiner` | Open issues without plan comment | 5 min | Discovers issues via comment analysis, posts implementation plans, refines plans based on unreacted human feedback, responds to follow-up questions on issues with open PRs |
 | `issue-worker` | Label `Refined` | 5 min | Implements the issue, creates a PR |
 | `ci-fixer` | Any open PR with failing checks | 10 min | Resolves merge conflicts, fixes CI failures |
-| `review-addresser` | Claws PRs with unreacted review comments | 5 min | Fetches unresolved review comments, pushes fix commits, reacts with thumbsup to track addressed comments |
+| `review-addresser` | Yeti PRs with unreacted review comments | 5 min | Fetches unresolved review comments, pushes fix commits, reacts with thumbsup to track addressed comments |
 | `triage-kwyjibo-errors` | Open issues with game-ID in body | 10 min | Fetches debug data from Kwyjibo API, posts investigation report |
-| `triage-claws-errors` | `[claws-error]` issues in `SELF_REPO` | 10 min | Investigates internal Claws errors, deduplicates by fingerprint, posts report |
+| `triage-yeti-errors` | `[yeti-error]` issues in `SELF_REPO` | 10 min | Investigates internal Yeti errors, deduplicates by fingerprint, posts report |
 | `doc-maintainer` | Daily at 1 AM | Scheduled | Updates `docs/` to reflect current codebase |
-| `auto-merger` | Dependabot PRs + LGTM'd Claws PRs + doc PRs | 10 min | Squash-merges PRs when conditions are met |
+| `auto-merger` | Dependabot PRs + LGTM'd Yeti PRs + doc PRs | 10 min | Squash-merges PRs when conditions are met |
 | `repo-standards` | Daily at 2 AM (+ on startup) | Scheduled | Syncs labels and cleans legacy labels |
 | `improvement-identifier` | Daily at 3 AM | Scheduled | Analyzes codebase via Claude, implements improvements as PRs |
 | `idea-suggester` | Daily at 4 AM | Scheduled | Suggests new ideas per repo, posts to Slack thread for reaction-based review |
@@ -259,9 +259,9 @@ Issues and PRs are discovered by analysing comments, reactions, and PR state —
 not labels. Four labels are used:
 
 - `Refined` — trigger for issue-worker (only label that drives a state transition)
-- `Ready` — informational, signals "Claws is done, your turn"
+- `Ready` — informational, signals "Yeti is done, your turn"
 - `In Review` — informational, signals an issue has an open PR under review
-- `Priority` — high-priority items processed first in all Claws queues
+- `Priority` — high-priority items processed first in all Yeti queues
 
 ```
 Issues:
@@ -270,12 +270,12 @@ Issues:
   Open PR + follow-up Q  →  (refiner posts response)     →  👍 reactions added (no label changes)
   Refined label          →  (worker creates PR)          →  Refined removed, Ready removed, In Review added
   Game-ID in body        →  (triage-kwyjibo-errors)      →  investigation report posted
-  [claws-error] title    →  (triage-claws-errors)        →  investigation report posted
+  [yeti-error] title    →  (triage-yeti-errors)        →  investigation report posted
 
 PRs:
   Unreacted review comments  →  (review-addresser)  →  👍 reactions added, Ready added
-  Dependabot or LGTM'd Claws PR + passing CI  →  (auto-merger)  →  merged, In Review removed
-  Doc PR (claws/docs-*) + doc-only files + CI passing/skipped  →  (auto-merger)  →  merged (no LGTM required)
+  Dependabot or LGTM'd Yeti PR + passing CI  →  (auto-merger)  →  merged, In Review removed
+  Doc PR (yeti/docs-*) + doc-only files + CI passing/skipped  →  (auto-merger)  →  merged (no LGTM required)
 ```
 
 Jobs track processed items via 👍 reactions on comments (issue-refiner,
@@ -288,7 +288,7 @@ labels to issues with open PRs and removing stale ones.
 All Claude invocations go through a module-level queue in `claude.ts`. Up to
 `MAX_CLAUDE_WORKERS` (default 2) `claude` processes run concurrently, balancing
 throughput with host resource usage. The concurrency limit is configurable via
-`maxClaudeWorkers` in `config.json` or the `CLAWS_MAX_CLAUDE_WORKERS` env var.
+`maxClaudeWorkers` in `config.json` or the `YETI_MAX_CLAUDE_WORKERS` env var.
 Each process has a configurable timeout (`claudeTimeoutMs`, default 20 min)
 with SIGTERM/SIGKILL escalation. A 5-minute heartbeat logs PID, elapsed time,
 and stdout byte count. Timed-out processes throw `ClaudeTimeoutError` with
@@ -303,9 +303,9 @@ no queue pile-up. This is distinct from the Claude task queue; a job can be
 ### Worktree Isolation
 
 Each task gets its own git worktree at
-`~/.claws/worktrees/<owner>/<repo>/<job>/<branch>`. The job namespace prevents
+`~/.yeti/worktrees/<owner>/<repo>/<job>/<branch>`. The job namespace prevents
 different jobs from colliding when they process the same branch concurrently.
-The main clone lives at `~/.claws/repos/<owner>/<repo>`. Worktrees are always
+The main clone lives at `~/.yeti/repos/<owner>/<repo>`. Worktrees are always
 cleaned up in a `finally` block after each task.
 
 ### Graceful Shutdown
@@ -341,12 +341,12 @@ cooldown expires. Jobs that iterate over repos short-circuit their loops via
 Errors flow through two stages:
 
 1. **Error reporter** (`error-reporter.ts`) — Uses a 30-minute cooldown per
-   fingerprint. Recurrences add comments to the existing `[claws-error]` issue
+   fingerprint. Recurrences add comments to the existing `[yeti-error]` issue
    rather than opening new ones. `ShutdownError` and `RateLimitError` are
    filtered before any reporting. Source-level filtering also applies: the
    WhatsApp module's Baileys logger suppresses transient errors (keep-alive
    timeouts, stream errors) at warn level before they reach the reporter.
-2. **Triage** (`triage-claws-errors.ts`) — Discovers `[claws-error]` issues
+2. **Triage** (`triage-yeti-errors.ts`) — Discovers `[yeti-error]` issues
    by title pattern (no label required), runs two-phase deduplication (by
    fingerprint before investigation, then by root cause after), and posts an
    investigation report. Reads `docs/OVERVIEW.md` for context and identifies
@@ -380,7 +380,7 @@ all CI failures as related. Without this guard, the classifier would see the
 pre-existing failures, classify them as "unrelated to the PR's changes", and
 the PR would stall indefinitely in a loop of filing redundant issues and
 reverting fix attempts. Errors on these PRs are posted as comments directly
-on the PR rather than creating `[claws-error]` issues.
+on the PR rather than creating `[yeti-error]` issues.
 
 ### CI Infrastructure Monitoring
 
@@ -409,7 +409,7 @@ prompt. This is used by issue-refiner, issue-worker, and review-addresser.
 ### Documentation as Context
 
 Issue-refiner, issue-worker, improvement-identifier, idea-suggester, and
-triage-claws-errors prompts instruct Claude to read `docs/OVERVIEW.md`
+triage-yeti-errors prompts instruct Claude to read `docs/OVERVIEW.md`
 (and linked docs) before starting work. This gives Claude accumulated
 architectural context about each repository.
 
@@ -426,14 +426,14 @@ constant to avoid runtime file I/O and build-path issues.
 
 | Job | Pattern |
 |-----|---------|
-| issue-refiner | `claws/plan-<N>-<hex4>` |
-| issue-worker | `claws/issue-<N>-<hex4>` |
-| triage-kwyjibo-errors | `claws/investigate-<N>-<hex4>` |
-| triage-claws-errors | `claws/investigate-error-<N>-<hex4>` |
-| doc-maintainer | `claws/docs-<YYYYMMDD>-<hex4>` |
-| improvement-identifier | `claws/improve-<hex4>` |
-| idea-suggester | `claws/ideas-<hex4>` |
-| idea-collector | `claws/ideas-collect-<hex4>` |
+| issue-refiner | `yeti/plan-<N>-<hex4>` |
+| issue-worker | `yeti/issue-<N>-<hex4>` |
+| triage-kwyjibo-errors | `yeti/investigate-<N>-<hex4>` |
+| triage-yeti-errors | `yeti/investigate-error-<N>-<hex4>` |
+| doc-maintainer | `yeti/docs-<YYYYMMDD>-<hex4>` |
+| improvement-identifier | `yeti/improve-<hex4>` |
+| idea-suggester | `yeti/ideas-<hex4>` |
+| idea-collector | `yeti/ideas-collect-<hex4>` |
 | ci-fixer / review-addresser | Uses existing PR branch |
 
 ### PR Title Conventions
@@ -442,15 +442,15 @@ constant to avoid runtime file I/O and build-path issues.
 - `fix(#N): <phase title> (X/Y)` — multi-PR issue phases
 - `refactor: <title>` — automated improvements
 - `docs: update documentation for <repo>` — doc maintenance
-- `[claws-ideas] Collected idea responses for <repo>` — idea collection
+- `[yeti-ideas] Collected idea responses for <repo>` — idea collection
 
 ### Duplicate PR Guards
 
 PR-creating jobs check for existing open PRs before creating new ones to
 prevent pile-up when previous PRs haven't been merged:
 
-- **doc-maintainer**: Skips if an open `claws/docs-*` PR exists
-- **improvement-identifier**: Skips if any open `claws/improve-*` PR exists
+- **doc-maintainer**: Skips if an open `yeti/docs-*` PR exists
+- **improvement-identifier**: Skips if any open `yeti/improve-*` PR exists
 - **idea-suggester**: Skips if a pending ideas file exists (previous batch
   still awaiting collection)
 - **ci-fixer**: Uses consolidated per-repo `[ci-unrelated]` issues rather
@@ -479,17 +479,17 @@ by `getLastDocMaintainerSha()` to detect whether docs are already up-to-date.
 
 ## Configuration
 
-Configuration is resolved per-field: env vars > `~/.claws/config.json` >
+Configuration is resolved per-field: env vars > `~/.yeti/config.json` >
 defaults.
 
 | Config key | Env variable | Default |
 |---|---|---|
-| `slackWebhook` | `CLAWS_SLACK_WEBHOOK` | *(empty — must be set)* |
-| `slackBotToken` | `CLAWS_SLACK_BOT_TOKEN` | *(empty — needed for idea threads)* |
-| `slackIdeasChannel` | `CLAWS_SLACK_IDEAS_CHANNEL` | *(empty — needed for idea threads)* |
-| `githubOwners` | `CLAWS_GITHUB_OWNERS` | `["stjohnb","St-John-Software"]` |
-| `selfRepo` | `CLAWS_SELF_REPO` | `St-John-Software/claws` |
-| `port` | `PORT` | `3000` |
+| `slackWebhook` | `YETI_SLACK_WEBHOOK` | *(empty — must be set)* |
+| `slackBotToken` | `YETI_SLACK_BOT_TOKEN` | *(empty — needed for idea threads)* |
+| `slackIdeasChannel` | `YETI_SLACK_IDEAS_CHANNEL` | *(empty — needed for idea threads)* |
+| `githubOwners` | `YETI_GITHUB_OWNERS` | `["frostyard","frostyard"]` |
+| `selfRepo` | `YETI_SELF_REPO` | `frostyard/yeti` |
+| `port` | `PORT` | `9384` |
 | `kwyjiboBaseUrl` | `KWYJIBO_BASE_URL` | `https://kwyjibo.vercel.app` |
 | `kwyjiboApiKey` | `KWYJIBO_AUTOMATION_API_KEY` | *(empty)* |
 | `intervals.issueWorkerMs` | — | `300000` (5 min) |
@@ -498,7 +498,7 @@ defaults.
 | `intervals.reviewAddresserMs` | — | `300000` (5 min) |
 | `intervals.triageKwyjiboErrorsMs` | — | `600000` (10 min) |
 | `intervals.autoMergerMs` | — | `600000` (10 min) |
-| `intervals.triageClawsErrorsMs` | — | `600000` (10 min) |
+| `intervals.triageYetiErrorsMs` | — | `600000` (10 min) |
 | `intervals.ideaCollectorMs` | — | `1800000` (30 min) |
 | `intervals.runnerMonitorMs` | — | `600000` (10 min) |
 | `schedules.docMaintainerHour` | — | `1` (1 AM local time) |
@@ -513,9 +513,9 @@ defaults.
 | `whatsappEnabled` | `WHATSAPP_ENABLED` | `false` |
 | `whatsappAllowedNumbers` | `WHATSAPP_ALLOWED_NUMBERS` | `[]` |
 | `openaiApiKey` | `OPENAI_API_KEY` | *(empty)* |
-| `maxClaudeWorkers` | `CLAWS_MAX_CLAUDE_WORKERS` | `2` |
-| `claudeTimeoutMs` | `CLAWS_CLAUDE_TIMEOUT_MS` | `1200000` (20 min, minimum 60s) |
-| `authToken` | `CLAWS_AUTH_TOKEN` | *(empty — auth disabled)* |
+| `maxClaudeWorkers` | `YETI_MAX_CLAUDE_WORKERS` | `2` |
+| `claudeTimeoutMs` | `YETI_CLAUDE_TIMEOUT_MS` | `1200000` (20 min, minimum 60s) |
+| `authToken` | `YETI_AUTH_TOKEN` | *(empty — auth disabled)* |
 | `pausedJobs` | — | `[]` (job names to pause on startup) |
 | `skippedItems` | — | `[]` (array of `{repo, number}` excluded from processing) |
 | `prioritizedItems` | — | `[]` (array of `{repo, number}` processed first) |
@@ -532,7 +532,7 @@ read-only in the UI.
 Env vars always take priority over `config.json`. Fields set via env var
 are shown as disabled in the config UI with a note indicating the override.
 
-External tools `gh` and `claude` must be authenticated separately — Claws does
+External tools `gh` and `claude` must be authenticated separately — Yeti does
 not manage their credentials.
 
 The WhatsApp gateway requires a one-time QR-code pairing step. See
@@ -552,10 +552,10 @@ The WhatsApp gateway requires a one-time QR-code pairing step. See
 ## Filesystem Layout (Runtime)
 
 ```
-~/.claws/
+~/.yeti/
 ├── config.json          Configuration file
 ├── env                  Environment overrides (loaded by systemd)
-├── claws.db             SQLite database
+├── yeti.db             SQLite database
 ├── whatsapp-auth/       Baileys auth state (created on first QR pairing)
 ├── pending-ideas/       Transient state for ideas awaiting Slack reaction collection
 │   └── <owner>-<repo>.json

@@ -1,8 +1,8 @@
-# Claws - Codebase Analysis Report
+# Yeti - Codebase Analysis Report
 
 ## What It Does
 
-**Claws** is a self-hosted GitHub automation service — an AI-powered development multiplier. It polls your GitHub repos on intervals, uses the Claude CLI to analyze issues/PRs, and autonomously implements changes, fixes CI failures, addresses review feedback, and auto-merges PRs. The whole system runs as a systemd service with an HTTP dashboard.
+**Yeti** is a self-hosted GitHub automation service — an AI-powered development multiplier. It polls your GitHub repos on intervals, uses the Claude CLI to analyze issues/PRs, and autonomously implements changes, fixes CI failures, addresses review feedback, and auto-merges PRs. The whole system runs as a systemd service with an HTTP dashboard.
 
 ## Tech Stack
 
@@ -33,7 +33,7 @@ GitHub Issues → [issue-refiner] plans → Human adds "Refined" label →
 | review-addresser | 5m | Push fixes for review comments |
 | auto-merger | 10m | Merge Dependabot/approved/doc PRs |
 | triage-kwyjibo-errors | 10m | Investigate prod bugs |
-| triage-claws-errors | 10m | Investigate internal errors |
+| triage-yeti-errors | 10m | Investigate internal errors |
 | idea-suggester | Daily 4AM | Generate feature ideas → Slack |
 | idea-collector | 30m | Poll Slack reactions → GH issues |
 | doc-maintainer | Daily 1AM | Auto-update docs |
@@ -70,7 +70,7 @@ Retention: 14 days + 20 runs per job (configurable).
 
 ### Configuration
 
-Priority: environment variables > `~/.claws/config.json` > hardcoded defaults. Live reload via HTTP POST `/config` (no restart required for most settings).
+Priority: environment variables > `~/.yeti/config.json` > hardcoded defaults. Live reload via HTTP POST `/config` (no restart required for most settings).
 
 ### HTTP Routes
 
@@ -116,7 +116,7 @@ Priority: environment variables > `~/.claws/config.json` > hardcoded defaults. L
 
 - **Transient retry** — exponential backoff (1s/2s/4s, max 3 attempts) for `gh` CLI
 - **Rate-limit circuit breaker** — 60s cooldown, Slack notification on trip/recovery
-- **Error reporter** — 30-min per-fingerprint dedup, creates `[claws-error]` issues in self-repo
+- **Error reporter** — 30-min per-fingerprint dedup, creates `[yeti-error]` issues in self-repo
 - **Graceful shutdown** — SIGINT/SIGTERM drains running jobs (5-min timeout), terminates Claude processes (5s grace), closes DB
 - **Crash recovery** — orphaned tasks cleaned up on startup, worktrees removed
 
@@ -147,9 +147,9 @@ Claude is spawned with all permission checks disabled. Intentional for the use c
 
 The HTTP server runs plain HTTP. Auth tokens transmitted in cleartext. Must be behind a reverse proxy with TLS.
 
-#### 3. Hardcoded username "brendan" in deploy scripts — `deploy/deploy.sh:46,74,75`
+#### 3. Hardcoded username "yeti" in deploy scripts — `deploy/deploy.sh:46,74,75`
 
-Deploy script uses `sudo -u brendan` instead of a configurable user.
+Deploy script uses `sudo -u yeti` instead of a configurable user.
 
 ### MEDIUM
 
@@ -173,7 +173,7 @@ No brute-force protection on the `/login` endpoint.
 
 Stack traces, working directory paths, and Claude stdout are posted as GitHub issues. Could leak environment details.
 
-#### 9. Service runs without sandboxing — `deploy/claws.service`
+#### 9. Service runs without sandboxing — `deploy/yeti.service`
 
 No AppArmor/SELinux/seccomp restrictions. A compromise gives access to the user's full home directory (SSH keys, git credentials, etc).
 

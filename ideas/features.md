@@ -2,7 +2,7 @@
 
 ### Dashboard analytics page with job metrics
 
-Add a /metrics or /analytics page to the web dashboard that visualizes job performance over time. The SQLite database already stores task start/completion times and success/failure status — surface this as charts showing: success/failure rates per job, average task duration trends, Claude queue utilization, items processed per day/week, and most-active repositories. This gives the operator visibility into whether Claws is healthy and productive without digging through logs. Could be implemented with server-rendered SVG charts (no external dependencies needed) or a lightweight charting library.
+Add a /metrics or /analytics page to the web dashboard that visualizes job performance over time. The SQLite database already stores task start/completion times and success/failure status — surface this as charts showing: success/failure rates per job, average task duration trends, Claude queue utilization, items processed per day/week, and most-active repositories. This gives the operator visibility into whether Yeti is healthy and productive without digging through logs. Could be implemented with server-rendered SVG charts (no external dependencies needed) or a lightweight charting library.
 
 ### GitHub webhook support for instant reactions
 

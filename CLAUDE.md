@@ -32,7 +32,7 @@ npx vitest run -t "returns ms until"          # run tests matching a name patter
 
 ## Architecture
 
-Claws is a self-hosted GitHub automation daemon that polls repositories on timers and delegates work to the `claude` CLI in isolated git worktrees. It runs as a systemd service on Linux (Node.js 22, ESM, strict TypeScript).
+Yeti is a self-hosted GitHub automation daemon that polls repositories on timers and delegates work to the `claude` CLI in isolated git worktrees. It runs as a systemd service on Linux (Node.js 22, ESM, strict TypeScript).
 
 ### Core modules
 
@@ -40,10 +40,10 @@ Claws is a self-hosted GitHub automation daemon that polls repositories on timer
 - **`scheduler.ts`** — Interval/daily-hour job runner with skip-if-busy semantics (no queue pile-up). Supports pause/resume, manual trigger, live interval updates.
 - **`claude.ts`** — Bounded concurrent queue (default 2 workers) for `claude` CLI processes. Also manages git worktree lifecycle (`createWorktree`/`removeWorktree`/`ensureClone`). Each process has a configurable timeout (default 20min) with SIGTERM→SIGKILL escalation.
 - **`github.ts`** — All GitHub interaction via `gh` CLI (never HTTP API directly). Exponential-backoff retry on transient errors, rate-limit circuit breaker (60s cooldown), TTL cache with in-flight dedup.
-- **`config.ts`** — Configuration priority: env vars > `~/.claws/config.json` > defaults. Uses ESM `export let` for live reloads without restart. Exports `LABELS`, `INTERVALS`, `SCHEDULES`, etc.
-- **`db.ts`** — SQLite (`~/.claws/claws.db`) with tables: `tasks`, `job_runs`, `job_logs`. Log capture via `AsyncLocalStorage` run context.
+- **`config.ts`** — Configuration priority: env vars > `~/.yeti/config.json` > defaults. Uses ESM `export let` for live reloads without restart. Exports `LABELS`, `INTERVALS`, `SCHEDULES`, etc.
+- **`db.ts`** — SQLite (`~/.yeti/yeti.db`) with tables: `tasks`, `job_runs`, `job_logs`. Log capture via `AsyncLocalStorage` run context.
 - **`server.ts`** — HTTP dashboard with job status, work queue, log viewer, config editor, WhatsApp pairing. Token-based auth when `authToken` is set.
-- **`error-reporter.ts`** — Deduplicating error reporter: logs + Slack + GitHub issues (`[claws-error]`). 30-min cooldown per fingerprint. Filters `ShutdownError` and `RateLimitError`.
+- **`error-reporter.ts`** — Deduplicating error reporter: logs + Slack + GitHub issues (`[yeti-error]`). 30-min cooldown per fingerprint. Filters `ShutdownError` and `RateLimitError`.
 
 ### Jobs (`src/jobs/`)
 
@@ -51,7 +51,7 @@ Each job exports a `run()` function. Jobs discover work via comment analysis, re
 
 ### Key patterns
 
-- **Worktree isolation**: Each task gets `~/.claws/worktrees/<owner>/<repo>/<job>/<branch>`, cleaned up in `finally` blocks.
+- **Worktree isolation**: Each task gets `~/.yeti/worktrees/<owner>/<repo>/<job>/<branch>`, cleaned up in `finally` blocks.
 - **Content-based state machine**: Issue/PR state is inferred from comments and reactions, not label-driven workflows.
 - **Two-phase identify/process**: Used by ci-fixer, improvement-identifier, issue-refiner — scan all items first, then process (prevents race conditions with concurrent GitHub API calls).
 - **Crash recovery**: On startup, tasks still marked `running` in DB get their worktrees cleaned and are marked `failed`.
@@ -62,8 +62,8 @@ Tests are co-located (`*.test.ts` next to source). Heavy mocking of external bou
 
 ## Deployment
 
-- Deployed to `/opt/claws` via systemd (`deploy/claws.service`)
-- Auto-updates via `claws-updater.timer` checking GitHub releases every 60s
+- Deployed to `/opt/yeti` via systemd (`deploy/yeti.service`)
+- Auto-updates via `yeti-updater.timer` checking GitHub releases every 60s
 - Version tags: `v<YYYY-MM-DD>.<N>` — release workflow on push to `main`
 - Release tarball: `dist/` + `deploy/` + `node_modules/`
-- Health check: `GET /health` on port 3000
+- Health check: `GET /health` on port 9384

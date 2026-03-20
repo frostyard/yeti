@@ -1,6 +1,6 @@
 # Database Schema
 
-Claws uses SQLite (via `better-sqlite3`) stored at `~/.claws/claws.db`.
+Yeti uses SQLite (via `better-sqlite3`) stored at `~/.yeti/yeti.db`.
 The database is configured with WAL journal mode and NORMAL synchronous
 level for performance.
 
@@ -15,7 +15,7 @@ at startup) and operational visibility.
 |--------|------|-------------|-------------|
 | `id` | INTEGER | PRIMARY KEY AUTOINCREMENT | Unique task identifier |
 | `job_name` | TEXT | NOT NULL | Job that created this task (e.g. `issue-worker`, `ci-fixer`) |
-| `repo` | TEXT | NOT NULL | Full repo name (e.g. `St-John-Software/claws`) |
+| `repo` | TEXT | NOT NULL | Full repo name (e.g. `frostyard/yeti`) |
 | `item_number` | INTEGER | NOT NULL | Issue or PR number (0 for doc-maintainer) |
 | `trigger_label` | TEXT | nullable | Label that triggered this task |
 | `worktree_path` | TEXT | nullable | Filesystem path to the task's worktree |
@@ -91,6 +91,6 @@ Stores log output captured during job runs via `AsyncLocalStorage` context.
 
 Old runs and logs are pruned on startup and daily via `pruneOldLogs()`.
 Retention is configured via `logRetentionDays` (default: 14 days) and
-`logRetentionPerJob` (default: 20) in `~/.claws/config.json`. The pruner
+`logRetentionPerJob` (default: 20) in `~/.yeti/config.json`. The pruner
 deletes runs older than the retention period but always keeps the most
 recent N runs per job type. Orphaned log entries are cascade-deleted.
