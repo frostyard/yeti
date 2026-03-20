@@ -25,22 +25,9 @@ if [[ -f "$ENV_FILE" ]]; then
   set +a
 fi
 
-CONFIG_SLACK_WEBHOOK=$(node -e "try{console.log(JSON.parse(require('fs').readFileSync('$CONFIG_FILE','utf-8')).slackWebhook||'')}catch{console.log('')}" 2>/dev/null || echo "")
-SLACK_WEBHOOK="${YETI_SLACK_WEBHOOK:-$CONFIG_SLACK_WEBHOOK}"
-
 CONFIG_PORT=$(node -e "try{console.log(JSON.parse(require('fs').readFileSync('$CONFIG_FILE','utf-8')).port||9384)}catch{console.log(9384)}" 2>/dev/null || echo "9384")
 PORT="${PORT:-$CONFIG_PORT}"
 HEALTH_URL="http://localhost:$PORT/health"
-
-[[ -n "$SLACK_WEBHOOK" ]] || log "Warning: No Slack webhook configured (checked YETI_SLACK_WEBHOOK in $ENV_FILE and slackWebhook in $CONFIG_FILE)"
-slack() {
-  if [[ -z "$SLACK_WEBHOOK" ]]; then log "Warning: SLACK_WEBHOOK is empty, skipping notification"; return 0; fi
-  local payload
-  payload=$(jq -n --arg t "$1" '{"text":$t}')
-  if ! curl -sf -X POST -H 'Content-Type: application/json' --data "$payload" "$SLACK_WEBHOOK" 2>&1; then
-    log "Warning: Slack notification failed"
-  fi
-}
 
 # 1. Get latest release tag
 LATEST_TAG=$(sudo -u yeti gh release list -R "$REPO" --limit 1 --json tagName --jq '.[0].tagName')
@@ -67,8 +54,6 @@ if [[ -f "$SKIP_FILE" ]] && grep -qxF "$LATEST_TAG" "$SKIP_FILE"; then
 fi
 
 log "Updating from $CURRENT_TAG to $LATEST_TAG"
-
-RELEASE_BODY=$(sudo -u yeti gh release view "$LATEST_TAG" -R "$REPO" --json body --jq '.body' 2>/dev/null || echo "")
 
 # 3. Download and extract
 TMPFILE=$(sudo -u yeti mktemp /tmp/yeti-XXXXXX.tar.gz)
@@ -151,20 +136,17 @@ if [[ "$healthy" != "true" ]]; then
 
     if [[ "$rollback_healthy" == "true" ]]; then
       log "Rollback successful"
-      slack "Deploy of yeti $LATEST_TAG failed — rolled back to $CURRENT_TAG"
       echo "$LATEST_TAG" >> "$SKIP_FILE"
       log "Added $LATEST_TAG to skip list"
       exit 1
     else
       log "ERROR: Rollback also failed — manual intervention required"
-      slack "Deploy of yeti $LATEST_TAG failed — rollback also failed, manual intervention required"
       echo "$LATEST_TAG" >> "$SKIP_FILE"
       log "Added $LATEST_TAG to skip list"
       exit 1
     fi
   else
     log "ERROR: No previous version to rollback to"
-    slack "Deploy of yeti $LATEST_TAG failed — no previous version to rollback to"
     echo "$LATEST_TAG" >> "$SKIP_FILE"
     log "Added $LATEST_TAG to skip list"
     exit 1
@@ -175,8 +157,3 @@ fi
 echo "$LATEST_TAG" > "$VERSION_FILE"
 rm -rf "$INSTALL_DIR/dist.prev" "$STAGING_DIR"
 log "Update to $LATEST_TAG complete"
-DEPLOY_MSG="Deployed yeti $LATEST_TAG"
-if [[ -n "$RELEASE_BODY" ]]; then
-  DEPLOY_MSG=$(printf '%s\n\n%s' "$DEPLOY_MSG" "$RELEASE_BODY")
-fi
-slack "$DEPLOY_MSG"
