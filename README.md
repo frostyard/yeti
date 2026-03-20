@@ -65,6 +65,35 @@ The process handles `SIGTERM` gracefully, so systemd can stop it cleanly.
 
 The `yeti-updater.timer` checks for new GitHub releases every 60 seconds. When a new release is found, `deploy/deploy.sh` downloads the tarball, swaps the `dist/` directory, restarts the service, and verifies health via `http://localhost:9384/health`. If the health check fails, it automatically rolls back to the previous version.
 
+## Upgrading
+
+### `enabledJobs` migration (required)
+
+Starting from the release that introduces `enabledJobs`, you must explicitly list which jobs to run in `~/.yeti/config.json`. Without this field, **no jobs will start**.
+
+**Before upgrading**, add `enabledJobs` to your config:
+
+```json
+{
+  "enabledJobs": [
+    "issue-worker",
+    "issue-refiner",
+    "ci-fixer",
+    "review-addresser",
+    "doc-maintainer",
+    "auto-merger",
+    "repo-standards",
+    "improvement-identifier",
+    "issue-auditor",
+    "triage-yeti-errors"
+  ]
+}
+```
+
+The example above enables all jobs (matching previous default behavior). Remove any jobs you don't want to run.
+
+**If you upgrade without updating config**, yeti will start but log a warning: *"No jobs enabled — yeti is running but idle."* You can then add `enabledJobs` to your config and yeti will pick it up via live reload — no restart needed.
+
 ## Configuration
 
 Configuration is resolved per-field in this priority order:
@@ -109,6 +138,7 @@ The service will start without it, but all Slack notifications will be silently 
 | `intervals.issueRefinerMs` | — | `300000` (5 min) | Issue refiner poll interval |
 | `intervals.ciFixerMs` | — | `600000` (10 min) | CI fixer poll interval |
 | `intervals.reviewAddresserMs` | — | `300000` (5 min) | Review addresser poll interval |
+| `enabledJobs` | — | `[]` (no jobs) | Which jobs to register with the scheduler (live-reloadable) |
 
 ### External tool authentication
 
