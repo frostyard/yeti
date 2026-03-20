@@ -1,5 +1,5 @@
 import { execFile } from "node:child_process";
-import { GITHUB_OWNERS, LABELS, LABEL_SPECS, SKIPPED_ITEMS, PRIORITIZED_ITEMS, type Repo } from "./config.js";
+import { GITHUB_OWNERS, LABELS, LABEL_SPECS, SKIPPED_ITEMS, PRIORITIZED_ITEMS, ALLOWED_REPOS, SELF_REPO, type Repo } from "./config.js";
 import * as log from "./log.js";
 import { notify } from "./notify.js";
 import { reportError } from "./error-reporter.js";
@@ -115,6 +115,24 @@ let repoCachePromise: Promise<Repo[]> | null = null;
 export function clearRepoCache(): void {
   repoCache = null;
   repoCachePromise = null;
+}
+
+function filterRepos(repos: Repo[]): Repo[] {
+  if (ALLOWED_REPOS === null) return repos;
+
+  const selfRepoShort = SELF_REPO.split("/").pop()!.toLowerCase();
+  const allowSet = new Set(ALLOWED_REPOS.map(r => r.toLowerCase()));
+  allowSet.add(selfRepoShort);
+
+  // Warn about config entries that don't match any discovered repo
+  const discoveredNames = new Set(repos.map(r => r.name.toLowerCase()));
+  for (const name of ALLOWED_REPOS) {
+    if (!discoveredNames.has(name.toLowerCase()) && name.toLowerCase() !== selfRepoShort) {
+      log.warn(`allowedRepos: "${name}" does not match any discovered repository`);
+    }
+  }
+
+  return repos.filter(r => allowSet.has(r.name.toLowerCase()));
 }
 
 // ── Category-based queue cache (populated by jobs as they classify items) ──
@@ -302,15 +320,16 @@ export async function listRepos(): Promise<Repo[]> {
 
   repoCachePromise = fetchRepos();
   try {
-    const repos = await repoCachePromise;
+    const fetched = await repoCachePromise;
 
     // If the fetch returned empty but we had repos before, a transient error
     // (e.g. rate limit) likely caused all owners to fail. Return stale cache.
-    if (repos.length === 0 && repoCache && repoCache.repos.length > 0) {
+    if (fetched.length === 0 && repoCache && repoCache.repos.length > 0) {
       log.warn(`listRepos: fetch returned 0 repos, returning stale cache (${repoCache.repos.length} repos)`);
       return repoCache.repos;
     }
 
+    const repos = filterRepos(fetched);
     repoCache = { repos, fetchedAt: Date.now() };
     return repos;
   } finally {

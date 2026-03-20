@@ -78,6 +78,7 @@ if [[ ! -f "$CONFIG_FILE" ]]; then
   "pausedJobs": [],
   "skippedItems": [],
   "prioritizedItems": [],
+  "allowedRepos": [],
   "enabledJobs": []
 }
 CONF
