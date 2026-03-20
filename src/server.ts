@@ -10,7 +10,6 @@ import type { Scheduler } from "./scheduler.js";
 import { msUntilHour } from "./scheduler.js";
 import { slackStatus, isSlackBotConfigured } from "./slack.js";
 import { whatsappStatus, isPairing, startPairing, stopPairing, cancelPairing, unpair } from "./whatsapp.js";
-import * as emailMonitor from "./jobs/email-monitor.js";
 import { VERSION } from "./version.js";
 import { buildStatusPage } from "./pages/dashboard.js";
 import { buildQueuePage } from "./pages/queue.js";
@@ -324,27 +323,10 @@ async function handleRequest(req: http.IncomingMessage, res: http.ServerResponse
     if (params["slackWebhook"] !== undefined) updates.slackWebhook = params["slackWebhook"];
     if (params["slackBotToken"] !== undefined) updates.slackBotToken = params["slackBotToken"];
     if (params["slackIdeasChannel"] !== undefined) updates.slackIdeasChannel = params["slackIdeasChannel"];
-    if (params["kwyjiboBaseUrl"] !== undefined) updates.kwyjiboBaseUrl = params["kwyjiboBaseUrl"];
-    if (params["kwyjiboApiKey"] !== undefined) updates.kwyjiboApiKey = params["kwyjiboApiKey"];
     if (params["whatsappAllowedNumbers"] !== undefined) {
       updates.whatsappAllowedNumbers = params["whatsappAllowedNumbers"].split(",").map(s => s.trim()).filter(Boolean);
     }
     if (params["openaiApiKey"] !== undefined) updates.openaiApiKey = params["openaiApiKey"];
-    if (params["emailUser"] !== undefined) updates.emailUser = params["emailUser"];
-    if (params["emailAppPassword"] !== undefined) updates.emailAppPassword = params["emailAppPassword"];
-    if (params["emailRecipient"] !== undefined) updates.emailRecipient = params["emailRecipient"];
-    if (params["emailVegBoxSender"] !== undefined) updates.emailVegBoxSender = params["emailVegBoxSender"];
-
-    // Runners
-    if (params["runners"] !== undefined) {
-      try {
-        const parsed = JSON.parse(params["runners"]);
-        if (Array.isArray(parsed)) updates.runners = parsed;
-      } catch {
-        // Invalid JSON — skip silently
-      }
-    }
-
     // Intervals
     const intervalUpdates: Record<string, number> = {};
     for (const [key, value] of Object.entries(params)) {
@@ -472,9 +454,7 @@ async function handleRequest(req: http.IncomingMessage, res: http.ServerResponse
         slack: slackStatus(),
         slackBot: { configured: isSlackBotConfigured() },
         whatsapp: WHATSAPP_ENABLED ? whatsappStatus() : { configured: false, connected: false, pairingRequired: false },
-        email: config.EMAIL_ENABLED
-          ? emailMonitor.getEmailStatus()
-          : { configured: false, lastCheck: null, lastError: null },
+        email: { configured: false, lastCheck: null, lastError: null },
       }),
     );
     return;
@@ -504,9 +484,7 @@ async function handleRequest(req: http.IncomingMessage, res: http.ServerResponse
       slackStatus(),
       { configured: isSlackBotConfigured() },
       WHATSAPP_ENABLED ? whatsappStatus() : { configured: false, connected: false, pairingRequired: false },
-      config.EMAIL_ENABLED
-        ? emailMonitor.getEmailStatus()
-        : { configured: false, lastCheck: null, lastError: null },
+      { configured: false, lastCheck: null, lastError: null },
       runningTasks,
       latestRuns,
       theme,
