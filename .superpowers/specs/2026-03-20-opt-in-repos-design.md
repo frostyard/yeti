@@ -9,8 +9,11 @@
 1. New `allowedRepos` config field — array of short repo names (e.g., `["yeti", "my-app"]`)
 2. Self-repo (derived from `SELF_REPO`) is always implicitly included, even if the list is empty
 3. Empty list = only self-repo gets jobs
-4. Live-reloadable — changing the list takes effect on the next `listRepos()` call after cache clear
-5. Env var support: `YETI_ALLOWED_REPOS` as comma-separated string
+4. **Absent/undefined field = no filtering** — all discovered repos are processed (backward compatible). Only when `allowedRepos` is explicitly set does filtering activate.
+5. Live-reloadable — changing the list takes effect on the next `listRepos()` call after cache clear
+6. Env var support: `YETI_ALLOWED_REPOS` as comma-separated string
+7. Comparison is case-insensitive — both config values and repo names are lowercased before matching
+8. Short names apply across all configured `githubOwners` — if two owners have a repo with the same name, both are included
 
 ## Approach: Filter in `listRepos()`
 
@@ -24,10 +27,11 @@ Filtering happens in `listRepos()` in `github.ts`, after `fetchRepos()` returns 
 
 ### Filtering logic
 
-1. Build the effective allow-set: `ALLOWED_REPOS` union `{shortName(SELF_REPO)}`
-2. After `fetchRepos()` returns, keep only repos where `repo.name` is in the allow-set
-3. Log a warning for any names in `ALLOWED_REPOS` that don't match a discovered repo (typo detection)
-4. The filtered list is what gets cached and returned to all consumers
+1. If `ALLOWED_REPOS` is `null` (field absent from config), skip filtering entirely — return all repos
+2. Build the effective allow-set (lowercased): `ALLOWED_REPOS` union `{shortName(SELF_REPO)}`
+3. After `fetchRepos()` returns, keep only repos where `repo.name.toLowerCase()` is in the allow-set
+4. Log a warning (once per cache refresh) for any names in `ALLOWED_REPOS` that don't match a discovered repo (typo detection)
+5. The filtered list is what gets cached and returned to all consumers
 
 ### Self-repo extraction
 
@@ -38,19 +42,22 @@ The self-repo short name is derived from `SELF_REPO` (e.g., `"frostyard/yeti"` �
 In `src/config.ts`:
 
 - Add `allowedRepos?: string[]` to `ConfigFile`
-- Parse with env var `YETI_ALLOWED_REPOS` (comma-separated), fallback to `file.allowedRepos ?? []`
-- Export as `ALLOWED_REPOS: readonly string[]`
+- Parse with env var `YETI_ALLOWED_REPOS` (comma-separated), fallback to `file.allowedRepos ?? null`
+- `null` means field is absent → no filtering. `[]` means explicit empty list → only self-repo.
+- Export as `ALLOWED_REPOS: readonly string[] | null`
 - Include in `reloadConfig()`
 
 ## Testing
 
 All tests target `listRepos()` in `github.test.ts`:
 
-1. **Filters to allowed repos + self-repo** — configure `ALLOWED_REPOS` to `["repo-a"]`, mock 3 repos from GitHub, assert only `repo-a` and the self-repo are returned
-2. **Empty allow-list returns only self-repo** — configure `ALLOWED_REPOS` to `[]`, assert only self-repo returned
-3. **Self-repo included even when not in list** — explicitly verify self-repo appears without being listed
-4. **Warning for unknown repo names** — configure an allow-list entry that doesn't match any discovered repo, assert warning logged
-5. **Config reload applies new filter** — change `ALLOWED_REPOS`, clear cache, verify next call returns updated results
+1. **`null` (absent) — no filtering** — configure `ALLOWED_REPOS` to `null`, assert all repos returned
+2. **Filters to allowed repos + self-repo** — configure `ALLOWED_REPOS` to `["repo-a"]`, mock 3 repos from GitHub, assert only `repo-a` and the self-repo are returned
+3. **Empty allow-list returns only self-repo** — configure `ALLOWED_REPOS` to `[]`, assert only self-repo returned
+4. **Self-repo included even when not in list** — explicitly verify self-repo appears without being listed
+5. **Case-insensitive matching** — configure `ALLOWED_REPOS` to `["Repo-A"]`, assert `repo-a` is still included
+6. **Warning for unknown repo names** — configure an allow-list entry that doesn't match any discovered repo, assert warning logged
+7. **Config reload applies new filter** — change `ALLOWED_REPOS`, clear cache, verify next call returns updated results
 
 ## Deployment
 
@@ -60,7 +67,11 @@ Add `allowedRepos` to the bootstrap config template in `deploy/install.sh`, defa
 
 - Update `CLAUDE.md` to mention `ALLOWED_REPOS` in the `config.ts` module description
 - Update `README.md` config table with the new field
-- Add a migration guide section to `README.md` explaining the behavior change
+- Add a migration guide section to `README.md` explaining the behavior change:
+  - **No action required on upgrade** — absent field means no filtering (all repos processed, same as before)
+  - To restrict repos, add `allowedRepos` to `~/.yeti/config.json` with the desired short names
+  - Self-repo is always included implicitly
+  - Example config snippet
 - Update `yeti/` docs if config documentation exists there
 
 ## Relationship to enabledJobs
