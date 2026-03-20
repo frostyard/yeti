@@ -75,6 +75,7 @@ export interface ConfigFile {
   pausedJobs?: string[];
   skippedItems?: Array<{ repo: string; number: number }>;
   prioritizedItems?: Array<{ repo: string; number: number }>;
+  allowedRepos?: string[];
 }
 
 function loadConfig() {
@@ -166,6 +167,9 @@ function loadConfig() {
   const pausedJobs = file.pausedJobs ?? [];
   const skippedItems = file.skippedItems ?? [];
   const prioritizedItems = file.prioritizedItems ?? [];
+  const allowedRepos = process.env["YETI_ALLOWED_REPOS"] !== undefined
+    ? process.env["YETI_ALLOWED_REPOS"].split(",").map((s) => s.trim()).filter(Boolean)
+    : file.allowedRepos ?? null;
 
   if (!slackWebhook) {
     console.warn(
@@ -173,7 +177,7 @@ function loadConfig() {
     );
   }
 
-  return { slackWebhook, slackBotToken, slackIdeasChannel, githubOwners, selfRepo, port, intervals, schedules, logRetentionDays, logRetentionPerJob, whatsappEnabled, whatsappAllowedNumbers, whatsappAuthDir, openaiApiKey, discordBotToken, discordChannelId, discordAllowedUsers, authToken, maxClaudeWorkers, claudeTimeoutMs, pausedJobs, skippedItems, prioritizedItems };
+  return { slackWebhook, slackBotToken, slackIdeasChannel, githubOwners, selfRepo, port, intervals, schedules, logRetentionDays, logRetentionPerJob, whatsappEnabled, whatsappAllowedNumbers, whatsappAuthDir, openaiApiKey, discordBotToken, discordChannelId, discordAllowedUsers, authToken, maxClaudeWorkers, claudeTimeoutMs, pausedJobs, skippedItems, prioritizedItems, allowedRepos };
 }
 
 const config = loadConfig();
@@ -198,6 +202,7 @@ export let CLAUDE_TIMEOUT_MS = config.claudeTimeoutMs;
 export let PAUSED_JOBS: readonly string[] = config.pausedJobs;
 export let SKIPPED_ITEMS: ReadonlyArray<{ repo: string; number: number }> = config.skippedItems;
 export let PRIORITIZED_ITEMS: ReadonlyArray<{ repo: string; number: number }> = config.prioritizedItems;
+export let ALLOWED_REPOS: readonly string[] | null = config.allowedRepos;
 // Immutable — requires restart (bot connection)
 export const DISCORD_BOT_TOKEN = config.discordBotToken;
 export const DISCORD_CHANNEL_ID = config.discordChannelId;
@@ -248,6 +253,7 @@ export function reloadConfig(): void {
   PAUSED_JOBS = fresh.pausedJobs;
   SKIPPED_ITEMS = fresh.skippedItems;
   PRIORITIZED_ITEMS = fresh.prioritizedItems;
+  ALLOWED_REPOS = fresh.allowedRepos;
   DISCORD_ALLOWED_USERS = fresh.discordAllowedUsers;
   notifyListeners();
 }
