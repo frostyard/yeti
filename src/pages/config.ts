@@ -23,7 +23,7 @@ export function buildConfigPage(saved: boolean, theme: Theme): string {
     whatsappAllowedNumbers: "WHATSAPP_ALLOWED_NUMBERS",
     openaiApiKey: "OPENAI_API_KEY",
     emailUser: "YETI_EMAIL_USER",
-    emailAppPassword: "BRENDAN_SERVER_GMAIL_APP_PASSWORD",
+    emailAppPassword: "YETI_EMAIL_APP_PASSWORD",
     emailRecipient: "YETI_EMAIL_RECIPIENT",
     emailEnabled: "YETI_EMAIL_ENABLED",
     authToken: "YETI_AUTH_TOKEN",
