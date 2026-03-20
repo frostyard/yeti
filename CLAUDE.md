@@ -40,7 +40,7 @@ Yeti is a self-hosted GitHub automation daemon that polls repositories on timers
 - **`scheduler.ts`** — Interval/daily-hour job runner with skip-if-busy semantics (no queue pile-up). Supports pause/resume, manual trigger, live interval updates.
 - **`claude.ts`** — Bounded concurrent queue (default 2 workers) for `claude` CLI processes. Also manages git worktree lifecycle (`createWorktree`/`removeWorktree`/`ensureClone`). Each process has a configurable timeout (default 20min) with SIGTERM→SIGKILL escalation.
 - **`github.ts`** — All GitHub interaction via `gh` CLI (never HTTP API directly). Exponential-backoff retry on transient errors, rate-limit circuit breaker (60s cooldown), TTL cache with in-flight dedup.
-- **`config.ts`** — Configuration priority: env vars > `~/.yeti/config.json` > defaults. Uses ESM `export let` for live reloads without restart. Exports `LABELS`, `INTERVALS`, `SCHEDULES`, `ALLOWED_REPOS`, etc.
+- **`config.ts`** — Configuration priority: env vars > `~/.yeti/config.json` > defaults. Uses ESM `export let` for live reloads without restart. Exports `LABELS`, `INTERVALS`, `SCHEDULES`, `ALLOWED_REPOS`, `ENABLED_JOBS`, etc.
 - **`db.ts`** — SQLite (`~/.yeti/yeti.db`) with tables: `tasks`, `job_runs`, `job_logs`. Log capture via `AsyncLocalStorage` run context.
 - **`server.ts`** — HTTP dashboard with job status, work queue, log viewer, config editor, WhatsApp pairing. Token-based auth when `authToken` is set.
 - **`error-reporter.ts`** — Deduplicating error reporter: logs + Slack + GitHub issues (`[yeti-error]`). 30-min cooldown per fingerprint. Filters `ShutdownError` and `RateLimitError`.
@@ -50,6 +50,8 @@ Yeti is a self-hosted GitHub automation daemon that polls repositories on timers
 ### Jobs (`src/jobs/`)
 
 Each job exports a `run()` function. Jobs discover work via comment analysis, reactions, labels, and PR state — not solely labels. Four labels exist: `Refined` (trigger), `Ready` (informational), `In Review` (informational), `Priority` (queue ordering). Processed items are tracked via thumbsup reactions on comments.
+
+Jobs must be listed in the `enabledJobs` config array to run. An empty or missing `enabledJobs` means no jobs start.
 
 ### Key patterns
 

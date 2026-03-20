@@ -148,6 +148,8 @@ function mockScheduler(): Scheduler {
         ["ci-fixer", { intervalMs: 600000 }],
       ]),
     ),
+    addJob: vi.fn(),
+    removeJob: vi.fn(),
   };
 }
 
