@@ -14,7 +14,7 @@ import QRCode from "qrcode";
 import { WHATSAPP_ALLOWED_NUMBERS, WHATSAPP_AUTH_DIR } from "./config.js";
 import * as log from "./log.js";
 import { reportError } from "./error-reporter.js";
-import { notify } from "./slack.js";
+import { notify } from "./notify.js";
 
 export interface WhatsAppMessage {
   from: string;

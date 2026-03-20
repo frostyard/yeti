@@ -1,5 +1,5 @@
 import { AsyncLocalStorage } from "node:async_hooks";
-import { notify } from "./slack.js";
+import { notify } from "./notify.js";
 import { insertJobLog } from "./db.js";
 
 interface RunContext {

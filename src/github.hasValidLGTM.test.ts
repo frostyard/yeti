@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 
 vi.mock("./config.js", () => ({ GITHUB_OWNERS: [], LABEL_SPECS: {} }));
 vi.mock("./log.js", () => ({ info: vi.fn(), warn: vi.fn(), error: vi.fn() }));
-vi.mock("./slack.js", () => ({ notify: vi.fn() }));
+vi.mock("./notify.js", () => ({ notify: vi.fn() }));
 vi.mock("./error-reporter.js", () => ({ reportError: vi.fn() }));
 
 // Mock child_process.execFile to control gh CLI responses

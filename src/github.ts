@@ -1,7 +1,7 @@
 import { execFile } from "node:child_process";
 import { GITHUB_OWNERS, LABELS, LABEL_SPECS, SKIPPED_ITEMS, PRIORITIZED_ITEMS, type Repo } from "./config.js";
 import * as log from "./log.js";
-import { notify } from "./slack.js";
+import { notify } from "./notify.js";
 import { reportError } from "./error-reporter.js";
 
 const RATE_LIMIT_RE = /rate limit/i;

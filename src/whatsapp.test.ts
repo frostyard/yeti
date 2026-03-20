@@ -61,7 +61,7 @@ vi.mock("./error-reporter.js", () => ({
 }));
 
 const { mockNotify } = vi.hoisted(() => ({ mockNotify: vi.fn() }));
-vi.mock("./slack.js", () => ({ notify: mockNotify }));
+vi.mock("./notify.js", () => ({ notify: mockNotify }));
 
 // Mock baileys so we don't actually connect
 vi.mock("baileys", () => ({

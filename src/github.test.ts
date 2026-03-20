@@ -35,11 +35,11 @@ vi.mock("./error-reporter.js", () => ({
   reportError: vi.fn(),
 }));
 
-vi.mock("./slack.js", () => ({
+vi.mock("./notify.js", () => ({
   notify: vi.fn(),
 }));
 
-import { notify } from "./slack.js";
+import { notify } from "./notify.js";
 
 import {
   listRepos,

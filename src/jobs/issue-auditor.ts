@@ -3,7 +3,7 @@ import * as gh from "../github.js";
 import { isRateLimited } from "../github.js";
 import * as log from "../log.js";
 import { reportError } from "../error-reporter.js";
-import { notify } from "../slack.js";
+import { notify } from "../notify.js";
 import { extractFingerprint, REPORT_HEADER as YETI_ERROR_REPORT_HEADER } from "./triage-yeti-errors.js";
 import { findPlanComment, parsePlan } from "../plan-parser.js";
 
