@@ -103,6 +103,8 @@ function makeScheduler(overrides: Partial<Scheduler> = {}): Scheduler {
     resumeJob: vi.fn().mockReturnValue(true),
     pausedJobs: vi.fn().mockReturnValue(new Set<string>()),
     jobScheduleInfo: vi.fn().mockReturnValue(undefined),
+    addJob: vi.fn(),
+    removeJob: vi.fn(),
     ...overrides,
   };
 }

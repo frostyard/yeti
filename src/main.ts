@@ -214,6 +214,7 @@ const server = createServer(scheduler);
 
 let prevIntervals = { ...INTERVALS };
 let prevSchedules = { ...SCHEDULES };
+let prevEnabledJobs = new Set(ENABLED_JOBS);
 
 onConfigChange(() => {
   gh.clearRepoCache();
@@ -249,6 +250,28 @@ onConfigChange(() => {
   for (const name of schedulerPaused) {
     if (!configPaused.has(name)) scheduler.resumeJob(name);
   }
+
+  // Sync enabled jobs
+  const newEnabled = new Set(config.ENABLED_JOBS);
+
+  for (const name of newEnabled) {
+    if (!prevEnabledJobs.has(name)) {
+      const job = jobs.find(j => j.name === name);
+      if (job) {
+        scheduler.addJob(job);
+        log.info(`Enabled job: ${name}`);
+      }
+    }
+  }
+
+  for (const name of prevEnabledJobs) {
+    if (!newEnabled.has(name)) {
+      scheduler.removeJob(name);
+      log.info(`Disabled job: ${name}`);
+    }
+  }
+
+  prevEnabledJobs = newEnabled;
 });
 
 // ── WhatsApp gateway ──
