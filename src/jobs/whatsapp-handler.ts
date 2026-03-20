@@ -28,7 +28,7 @@ export function createHandler(
         }
 
         log.info("[whatsapp-handler] Transcribing voice note...");
-        text = await transcribe(msg.audioBuffer, "voice-note.ogg", "Claws, Yeti, GitHub");
+        text = await transcribe(msg.audioBuffer, "voice-note.ogg", "Yeti, GitHub");
         log.info(`[whatsapp-handler] Transcription: ${text.slice(0, 200)}`);
       }
 
