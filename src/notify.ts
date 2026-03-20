@@ -1,6 +1,7 @@
 import { notify as slackNotify } from "./slack.js";
+import { notify as discordNotify } from "./discord.js";
 
 export function notify(text: string): void {
   slackNotify(text);
-  // Discord notify will be added in Task 5
+  discordNotify(text);
 }
