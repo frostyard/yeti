@@ -69,3 +69,7 @@ Tests are co-located (`*.test.ts` next to source). Heavy mocking of external bou
 - Version tags: `v<YYYY-MM-DD>.<N>` — release workflow on push to `main`
 - Release tarball: `dist/` + `deploy/` + `node_modules/`
 - Health check: `GET /health` on port 9384
+
+## Deployment Scripts
+
+After any change to `src/config.ts` (new config fields, removed fields, env var changes), update the bootstrap templates in `deploy/install.sh` to match. Also review `deploy/deploy.sh` if the deployment lifecycle changes.
