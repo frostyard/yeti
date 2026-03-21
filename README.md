@@ -169,7 +169,7 @@ These scan all open issues/PRs and will do work without any Yeti-specific labels
 
 | Job | Trigger | What it does |
 |-----|---------|--------------|
-| **issue-refiner** | Any open issue without a plan comment | Generates an implementation plan comment |
+| **issue-refiner** | Issues labelled `Needs Refinement` | Generates an implementation plan comment |
 | **ci-fixer** | Any PR with failing checks or merge conflicts | Attempts to fix CI failures and conflicts |
 | **improvement-identifier** | Periodic scan of codebase | Creates PRs for code improvement opportunities |
 | **issue-auditor** | All open issues | Audits and classifies issue state, applies labels |

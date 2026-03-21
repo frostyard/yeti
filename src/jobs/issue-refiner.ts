@@ -172,6 +172,7 @@ async function processIssue(repo: Repo, issue: gh.Issue): Promise<void> {
     }
 
     await gh.addLabel(fullName, issue.number, LABELS.ready);
+    await gh.removeLabel(fullName, issue.number, LABELS.needsRefinement);
 
     if (isCiUnrelatedIssue(issue)) {
       await gh.addLabel(fullName, issue.number, LABELS.refined);
@@ -396,7 +397,12 @@ export async function run(repos: Repo[]): Promise<void> {
         );
 
         if (lastPlanIdx === -1) {
-          // No plan comment exists — produce a new plan
+          // No plan comment exists — require Needs Refinement label for new plans
+          // (exempt ci-unrelated and yeti-error issues — machine-generated with well-defined workflows)
+          if (!isCiUnrelatedIssue(issue) && extractFingerprint(issue.title) === null &&
+              !issue.labels.some((l) => l.name === LABELS.needsRefinement)) {
+            continue;
+          }
           gh.populateQueueCache("needs-refinement", repo.fullName, { number: issue.number, title: issue.title, type: "issue", updatedAt: issue.updatedAt, priority: gh.hasPriorityLabel(issue.labels) });
           tasks.push(
             processIssue(repo, issue).catch((err) =>

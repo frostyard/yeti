@@ -6,6 +6,7 @@ vi.mock("../config.js", () => ({
     refined: "Refined",
     ready: "Ready",
     priority: "Priority",
+    needsRefinement: "Needs Refinement",
   },
 }));
 
@@ -94,7 +95,7 @@ describe("issue-refiner", () => {
   });
 
   it("happy path — new plan", async () => {
-    const issue = mockIssue({ body: "Test issue body" });
+    const issue = mockIssue({ body: "Test issue body", labels: [{ name: "Needs Refinement" }] });
     mockGh.listOpenIssues.mockResolvedValueOnce([issue]);
 
     await run([repo]);
@@ -112,7 +113,7 @@ describe("issue-refiner", () => {
   });
 
   it("includes issue comments in fresh plan prompt", async () => {
-    const issue = mockIssue({ body: "Test issue body" });
+    const issue = mockIssue({ body: "Test issue body", labels: [{ name: "Needs Refinement" }] });
     mockGh.listOpenIssues.mockResolvedValueOnce([issue]);
     mockGh.getIssueComments.mockResolvedValue([
       { id: 901, body: "## Yeti Error Investigation Report\n\nRoot cause: missing null check", login: "yeti-bot" },
@@ -126,7 +127,7 @@ describe("issue-refiner", () => {
   });
 
   it("empty output — logs warning but still adds Ready label", async () => {
-    const issue = mockIssue({ body: "Test issue body" });
+    const issue = mockIssue({ body: "Test issue body", labels: [{ name: "Needs Refinement" }] });
     mockGh.listOpenIssues.mockResolvedValueOnce([issue]);
     mockClaude.runClaude.mockResolvedValue("");
 
@@ -137,7 +138,7 @@ describe("issue-refiner", () => {
   });
 
   it("error handling — records task as failed", async () => {
-    const issue = mockIssue({ body: "Test issue body" });
+    const issue = mockIssue({ body: "Test issue body", labels: [{ name: "Needs Refinement" }] });
     mockGh.listOpenIssues.mockResolvedValueOnce([issue]);
     mockClaude.runClaude.mockRejectedValue(new Error("claude error"));
 
@@ -203,8 +204,8 @@ describe("issue-refiner", () => {
 
   it("processes multiple repos and issues, error on one does not stop others", async () => {
     const repo2 = mockRepo({ fullName: "test-org/repo2", name: "repo2" });
-    const issue1 = mockIssue({ number: 1, body: "Issue 1 body" });
-    const issue2 = mockIssue({ number: 2, body: "Issue 2 body" });
+    const issue1 = mockIssue({ number: 1, body: "Issue 1 body", labels: [{ name: "Needs Refinement" }] });
+    const issue2 = mockIssue({ number: 2, body: "Issue 2 body", labels: [{ name: "Needs Refinement" }] });
 
     mockGh.listOpenIssues
       .mockResolvedValueOnce([issue1])
@@ -225,6 +226,7 @@ describe("issue-refiner", () => {
   it("includes image context in prompt when images are found", async () => {
     const issue = mockIssue({
       body: "Add this: ![design](https://example.com/design.png)",
+      labels: [{ name: "Needs Refinement" }],
     });
     mockGh.listOpenIssues.mockResolvedValueOnce([issue]);
     mockGh.getIssueComments.mockResolvedValue([
@@ -264,7 +266,7 @@ describe("issue-refiner", () => {
   });
 
   it("processes issues with no body", async () => {
-    const issue = mockIssue({ body: "" });
+    const issue = mockIssue({ body: "", labels: [{ name: "Needs Refinement" }] });
     mockGh.listOpenIssues.mockResolvedValueOnce([issue]);
 
     await run([repo]);
@@ -315,7 +317,7 @@ describe("issue-refiner", () => {
   });
 
   it("regular issue — does not auto-add Refined label", async () => {
-    const issue = mockIssue({ body: "Test issue body" });
+    const issue = mockIssue({ body: "Test issue body", labels: [{ name: "Needs Refinement" }] });
     mockGh.listOpenIssues.mockResolvedValueOnce([issue]);
 
     await run([repo]);
@@ -383,6 +385,26 @@ describe("issue-refiner", () => {
 
     expect(mockClaude.createWorktree).not.toHaveBeenCalled();
     expect(mockGh.commentOnIssue).not.toHaveBeenCalled();
+  });
+
+  it("skips issues without Needs Refinement label", async () => {
+    const issue = mockIssue({ body: "Test issue body", labels: [] });
+    mockGh.listOpenIssues.mockResolvedValueOnce([issue]);
+
+    await run([repo]);
+
+    expect(mockClaude.createWorktree).not.toHaveBeenCalled();
+    expect(mockGh.commentOnIssue).not.toHaveBeenCalled();
+  });
+
+  it("removes Needs Refinement label after posting plan", async () => {
+    const issue = mockIssue({ body: "Test issue body", labels: [{ name: "Needs Refinement" }] });
+    mockGh.listOpenIssues.mockResolvedValueOnce([issue]);
+
+    await run([repo]);
+
+    expect(mockGh.removeLabel).toHaveBeenCalledWith(repo.fullName, issue.number, "Needs Refinement");
+    expect(mockGh.addLabel).toHaveBeenCalledWith(repo.fullName, issue.number, "Ready");
   });
 
   it("skips [yeti-error] issues without investigation report", async () => {
