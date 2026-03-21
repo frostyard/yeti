@@ -60,7 +60,7 @@ deploy/
 
 **`main.ts`** — Wires everything together. Initializes the SQLite database,
 recovers orphaned tasks from a previous crash (cleans up dangling worktrees,
-marks tasks failed), prunes old logs, registers all 10 jobs with the scheduler
+marks tasks failed), prunes old logs, registers all 11 jobs with the scheduler
 (interval jobs staggered by 2 seconds to prevent thundering herd), starts the
 HTTP server, sets up live config reloading (interval and schedule changes
 propagated to the scheduler without restart), awaits `discord.ready()` before
@@ -73,10 +73,10 @@ Claude processes, and close the database.
 
 **`config.ts`** — Loads configuration in priority order: environment variables >
 `~/.yeti/config.json` > hardcoded defaults. Exports `LABELS` (`refined`,
-`ready`, `priority`, `inReview`, `needsRefinement`), `LABEL_SPECS` (synced to
-all repos by repo-standards — includes colors and descriptions for all five
-labels), `LEGACY_LABELS` (set of old labels cleaned up as stale, including
-`yeti-mergeable` and `yeti-error`), `INTERVALS`, `SCHEDULES`, `ENABLED_JOBS`,
+`ready`, `priority`, `inReview`, `needsRefinement`, `needsPlanReview`),
+`LABEL_SPECS` (synced to all repos by repo-standards — includes colors and
+descriptions for all six labels), `LEGACY_LABELS` (set of old labels cleaned up as stale: `Plan Produced`,
+`Reviewed`, `prod-report`, `investigated`, `yeti-mergeable`, `yeti-error`), `INTERVALS`, `SCHEDULES`, `ENABLED_JOBS`,
 and connection strings. `WORK_DIR` is always `~/.yeti`. Jobs must be listed in
 `ENABLED_JOBS` (the `enabledJobs` config field) to be registered with the
 scheduler — an empty or missing `enabledJobs` means no jobs start.
@@ -106,7 +106,7 @@ caching and in-flight request deduplication (PR lists, check status, issue
 comments). Jobs populate a category-based queue cache via
 `populateQueueCache()`, and the dashboard reads it via `getQueueSnapshot()`.
 Categories: `ready`, `needs-refinement`, `refined`, `needs-review-addressing`,
-`auto-mergeable`, `needs-triage`. The `listRepos()` function falls back to a
+`auto-mergeable`, `needs-triage`, `needs-plan-review`. The `listRepos()` function falls back to a
 stale cache when the fresh fetch returns empty (transient failure protection).
 Provides `isItemSkipped()` and `isItemPrioritized()` helpers that check
 items against the `skippedItems` and `prioritizedItems` config lists,
@@ -239,12 +239,13 @@ The web dashboard is a first-class consumer of job, config, and queue data. Page
 
 ## Jobs
 
-Ten scheduled jobs run on timers or schedules, plus one event-driven handler.
+Eleven scheduled jobs run on timers or schedules.
 See [Jobs](jobs.md) for detailed behavior of each.
 
 | Job | Trigger | Interval | Summary |
 |-----|---------|----------|---------|
 | `issue-refiner` | Issues labelled `Needs Refinement` | 5 min | Posts implementation plans for issues with `Needs Refinement` label (exempt: `[ci-unrelated]` and `[yeti-error]` issues), refines plans based on unreacted human feedback, responds to follow-up questions on issues with open PRs |
+| `plan-reviewer` | Issues labelled `Needs Plan Review` | 10 min | Adversarial review of implementation plans using configurable AI backend |
 | `issue-worker` | Label `Refined` | 5 min | Implements the issue, creates a PR |
 | `ci-fixer` | Any open PR with failing checks | 10 min | Resolves merge conflicts, fixes CI failures |
 | `review-addresser` | Yeti PRs with unreacted review comments | 5 min | Fetches unresolved review comments, pushes fix commits, reacts with thumbsup to track addressed comments |
@@ -260,9 +261,10 @@ See [Jobs](jobs.md) for detailed behavior of each.
 ### Content-Based State Machine
 
 Issues and PRs are discovered by analysing comments, reactions, and PR state —
-not labels. Five labels are used:
+not labels. Six labels are used:
 
 - `Needs Refinement` — trigger for issue-refiner (requests an AI-generated implementation plan)
+- `Needs Plan Review` — trigger for plan-reviewer (requests adversarial AI review of the plan)
 - `Refined` — trigger for issue-worker (requests implementation of the plan)
 - `Ready` — informational, signals "Yeti is done, your turn"
 - `In Review` — informational, signals an issue has an open PR under review
@@ -270,8 +272,9 @@ not labels. Five labels are used:
 
 ```
 Issues:
-  Needs Refinement label →  (refiner posts plan)         →  Needs Refinement removed, Ready added
-  Unreacted feedback     →  (refiner refines plan)       →  Ready label re-added
+  Needs Refinement label →  (refiner posts plan)         →  Needs Plan Review added (if plan-reviewer enabled) or Ready added
+  Needs Plan Review label → (plan-reviewer critiques)    →  Needs Plan Review removed, Ready added
+  Unreacted feedback     →  (refiner refines plan)       →  Needs Plan Review or Ready label re-added
   Open PR + follow-up Q  →  (refiner posts response)     →  👍 reactions added (no label changes)
   Refined label          →  (worker creates PR)          →  Refined removed, Ready removed, In Review added
   [yeti-error] title    →  (triage-yeti-errors)        →  investigation report posted
@@ -477,6 +480,7 @@ defaults.
 | `intervals.reviewAddresserMs` | — | `300000` (5 min) |
 | `intervals.autoMergerMs` | — | `600000` (10 min) |
 | `intervals.triageYetiErrorsMs` | — | `600000` (10 min) |
+| `intervals.planReviewerMs` | — | `600000` (10 min) |
 | `schedules.docMaintainerHour` | — | `1` (1 AM local time) |
 | `schedules.repoStandardsHour` | — | `2` (2 AM local time) |
 | `schedules.improvementIdentifierHour` | — | `3` (3 AM local time) |
@@ -488,6 +492,9 @@ defaults.
 | `discordAllowedUsers` | `YETI_DISCORD_ALLOWED_USERS` | `[]` (comma-separated user IDs) |
 | `maxClaudeWorkers` | `YETI_MAX_CLAUDE_WORKERS` | `2` |
 | `claudeTimeoutMs` | `YETI_CLAUDE_TIMEOUT_MS` | `1200000` (20 min, minimum 60s) |
+| `maxCopilotWorkers` | `YETI_MAX_COPILOT_WORKERS` | `1` |
+| `copilotTimeoutMs` | `YETI_COPILOT_TIMEOUT_MS` | `1200000` (20 min, minimum 60s) |
+| `jobAi` | — | `{}` (per-job AI backend/model overrides) |
 | `authToken` | `YETI_AUTH_TOKEN` | *(empty — auth disabled)* |
 | `pausedJobs` | — | `[]` (job names to pause on startup) |
 | `enabledJobs` | — | `[]` (job names to register with the scheduler; empty = no jobs run) |
@@ -502,7 +509,7 @@ Controls which jobs are registered with the scheduler at startup.
 - **Field**: `enabledJobs` (string array)
 - **Default**: `[]` — no jobs run if the field is absent or empty
 - **Live-reloadable**: yes (changes take effect without restart)
-- **Available values**: `issue-worker`, `issue-refiner`, `ci-fixer`, `review-addresser`, `doc-maintainer`, `auto-merger`, `repo-standards`, `improvement-identifier`, `issue-auditor`, `triage-yeti-errors`
+- **Available values**: `issue-worker`, `issue-refiner`, `plan-reviewer`, `ci-fixer`, `review-addresser`, `doc-maintainer`, `auto-merger`, `repo-standards`, `improvement-identifier`, `issue-auditor`, `triage-yeti-errors`
 
 **Migration note**: existing configs without `enabledJobs` will have no jobs start after upgrading. Add the desired job names to `enabledJobs` in `~/.yeti/config.json` before upgrading.
 
