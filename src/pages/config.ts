@@ -17,9 +17,6 @@ export function buildConfigPage(saved: boolean, theme: Theme): string {
     githubOwners: "YETI_GITHUB_OWNERS",
     selfRepo: "YETI_SELF_REPO",
     port: "PORT",
-    whatsappEnabled: "WHATSAPP_ENABLED",
-    whatsappAllowedNumbers: "WHATSAPP_ALLOWED_NUMBERS",
-    openaiApiKey: "OPENAI_API_KEY",
     discordBotToken: "YETI_DISCORD_BOT_TOKEN",
     discordChannelId: "YETI_DISCORD_CHANNEL_ID",
     discordAllowedUsers: "YETI_DISCORD_ALLOWED_USERS",
@@ -92,19 +89,6 @@ ${htmlOpenTag(theme)}
     <label for="slackIdeasChannel">Slack Ideas Channel ID</label>
     <input type="text" name="slackIdeasChannel" id="slackIdeasChannel" value="${escapeHtml(String(cfg.slackIdeasChannel ?? ""))}"${isDisabled("slackIdeasChannel") ? " disabled" : ""}>
     ${envNote("slackIdeasChannel")}
-
-    <label for="whatsappEnabled">WhatsApp Enabled</label>
-    <div><input type="checkbox" name="whatsappEnabled" id="whatsappEnabled" value="true"${cfg.whatsappEnabled ? " checked" : ""} disabled>
-    <span class="field-note">Read-only — requires restart. Pair via <a href="/whatsapp">/whatsapp</a></span></div>
-
-    <label for="whatsappAllowedNumbers">WhatsApp Allowed Numbers (comma-separated)</label>
-    <input type="text" name="whatsappAllowedNumbers" id="whatsappAllowedNumbers" value="${escapeHtml(Array.isArray(cfg.whatsappAllowedNumbers) ? (cfg.whatsappAllowedNumbers as string[]).join(", ") : "")}"${isDisabled("whatsappAllowedNumbers") ? " disabled" : ""}>
-    ${envNote("whatsappAllowedNumbers")}
-
-    <label for="openaiApiKey">OpenAI API Key</label>
-    <input type="password" name="openaiApiKey" id="openaiApiKey" placeholder="${escapeHtml(String(cfg.openaiApiKey ?? ""))}"${isDisabled("openaiApiKey") ? " disabled" : ""}>
-    ${envNote("openaiApiKey")}
-    <div class="field-note">Leave empty to keep current value</div>
 
     <h2>Discord</h2>
     <label for="discordBotToken">Discord Bot Token</label>

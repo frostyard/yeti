@@ -3,7 +3,6 @@ import http from "node:http";
 
 vi.mock("./config.js", () => ({
   SERVER_PORT: 0,
-  WHATSAPP_ENABLED: false,
   AUTH_TOKEN: "",
   LABELS: {
     refined: "Refined",
@@ -17,15 +16,12 @@ vi.mock("./config.js", () => ({
     slackWebhook: "****cdef",
     githubOwners: ["owner1"],
     selfRepo: "owner1/repo1",
-    openaiApiKey: "Not configured",
     authToken: "Not configured",
     port: 9384,
     intervals: { issueWorkerMs: 300000, issueRefinerMs: 300000, ciFixerMs: 600000, reviewAddresserMs: 300000, bugInvestigatorMs: 600000, autoMergerMs: 600000 },
     schedules: { docMaintainerHour: 1, repoStandardsHour: 2, improvementIdentifierHour: 3 },
     logRetentionDays: 14,
     logRetentionPerJob: 20,
-    whatsappEnabled: false,
-    whatsappAllowedNumbers: [],
   }),
   writeConfig: vi.fn(),
   SKIPPED_ITEMS: [],
@@ -50,10 +46,6 @@ vi.mock("./claude.js", () => ({
 vi.mock("./slack.js", () => ({
   slackStatus: vi.fn().mockReturnValue({ configured: true, lastResult: "ok" }),
   isSlackBotConfigured: vi.fn().mockReturnValue(false),
-}));
-
-vi.mock("./whatsapp.js", () => ({
-  whatsappStatus: vi.fn().mockReturnValue({ configured: false, connected: false }),
 }));
 
 vi.mock("./discord.js", () => ({

@@ -457,7 +457,7 @@ export function buildNav(theme: Theme): string {
   const selectHtml = options
     .map(v => `<option value="${v}"${v === theme ? " selected" : ""}>${labels[v]}</option>`)
     .join("");
-  return `<nav><a href="/">Dashboard</a><a href="/queue">Queue</a><a href="/logs">Logs</a><a href="/whatsapp">WhatsApp</a><a href="/config">Config</a><select id="theme-select" onchange="setTheme(this.value)">${selectHtml}</select></nav>`;
+  return `<nav><a href="/">Dashboard</a><a href="/queue">Queue</a><a href="/logs">Logs</a><a href="/config">Config</a><select id="theme-select" onchange="setTheme(this.value)">${selectHtml}</select></nav>`;
 }
 
 export const THEME_SCRIPT = `<script>function setTheme(v){document.cookie="yeti_theme="+v+";Path=/;SameSite=Strict;Max-Age=31536000";if(v==="system"){document.documentElement.removeAttribute("data-theme")}else{document.documentElement.setAttribute("data-theme",v)}}</script>`;
@@ -489,17 +489,6 @@ export function emailLabel(email: {
   if (email.lastError) return { text: "Error", cls: "slack-error" };
   if (email.lastCheck) return { text: "Connected", cls: "running" };
   return { text: "Configured (untested)", cls: "slack-untested" };
-}
-
-export function whatsappLabel(wa: {
-  configured: boolean;
-  connected: boolean;
-  pairingRequired: boolean;
-}): { text: string; cls: string; link: boolean } {
-  if (!wa.configured) return { text: "Not configured", cls: "idle", link: false };
-  if (wa.connected) return { text: "Connected", cls: "running", link: true };
-  if (wa.pairingRequired) return { text: "Pairing required", cls: "slack-error", link: true };
-  return { text: "Disconnected", cls: "slack-error", link: true };
 }
 
 export function discordLabel(discord: {

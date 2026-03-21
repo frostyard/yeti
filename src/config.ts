@@ -47,9 +47,6 @@ export interface ConfigFile {
   githubOwners?: string[];
   selfRepo?: string;
   port?: number;
-  whatsappEnabled?: boolean;
-  whatsappAllowedNumbers?: string[];
-  openaiApiKey?: string;
   discordBotToken?: string;
   discordChannelId?: string;
   discordAllowedUsers?: string[];
@@ -125,18 +122,6 @@ function loadConfig() {
     issueAuditorHour: file.schedules?.issueAuditorHour ?? 5, // 5 AM local time
   };
 
-  const whatsappEnabled =
-    process.env["WHATSAPP_ENABLED"] === "true" || file.whatsappEnabled === true;
-
-  const whatsappAllowedNumbers = process.env["WHATSAPP_ALLOWED_NUMBERS"]
-    ? process.env["WHATSAPP_ALLOWED_NUMBERS"].split(",").map((s) => s.trim()).filter(Boolean)
-    : file.whatsappAllowedNumbers ?? [];
-
-  const whatsappAuthDir = path.join(WORK_DIR, "whatsapp-auth");
-
-  const openaiApiKey =
-    process.env["OPENAI_API_KEY"] ?? file.openaiApiKey ?? "";
-
   const discordBotToken =
     process.env["YETI_DISCORD_BOT_TOKEN"] ?? file.discordBotToken ?? "";
 
@@ -179,7 +164,7 @@ function loadConfig() {
     );
   }
 
-  return { slackWebhook, slackBotToken, slackIdeasChannel, githubOwners, selfRepo, port, intervals, schedules, logRetentionDays, logRetentionPerJob, whatsappEnabled, whatsappAllowedNumbers, whatsappAuthDir, openaiApiKey, discordBotToken, discordChannelId, discordAllowedUsers, authToken, maxClaudeWorkers, claudeTimeoutMs, pausedJobs, skippedItems, prioritizedItems, allowedRepos, enabledJobs };
+  return { slackWebhook, slackBotToken, slackIdeasChannel, githubOwners, selfRepo, port, intervals, schedules, logRetentionDays, logRetentionPerJob, discordBotToken, discordChannelId, discordAllowedUsers, authToken, maxClaudeWorkers, claudeTimeoutMs, pausedJobs, skippedItems, prioritizedItems, allowedRepos, enabledJobs };
 }
 
 const config = loadConfig();
@@ -194,10 +179,6 @@ export let INTERVALS = config.intervals;
 export let SCHEDULES = config.schedules;
 export let LOG_RETENTION_DAYS = config.logRetentionDays;
 export let LOG_RETENTION_PER_JOB = config.logRetentionPerJob;
-export const WHATSAPP_ENABLED = config.whatsappEnabled; // immutable — requires restart (QR pairing)
-export let WHATSAPP_ALLOWED_NUMBERS: readonly string[] = config.whatsappAllowedNumbers;
-export const WHATSAPP_AUTH_DIR = config.whatsappAuthDir;
-export let OPENAI_API_KEY = config.openaiApiKey;
 export let AUTH_TOKEN = config.authToken;
 export let MAX_CLAUDE_WORKERS = config.maxClaudeWorkers;
 export let CLAUDE_TIMEOUT_MS = config.claudeTimeoutMs;
@@ -248,8 +229,6 @@ export function reloadConfig(): void {
   SCHEDULES = fresh.schedules;
   LOG_RETENTION_DAYS = fresh.logRetentionDays;
   LOG_RETENTION_PER_JOB = fresh.logRetentionPerJob;
-  WHATSAPP_ALLOWED_NUMBERS = fresh.whatsappAllowedNumbers;
-  OPENAI_API_KEY = fresh.openaiApiKey;
   AUTH_TOKEN = fresh.authToken;
   MAX_CLAUDE_WORKERS = fresh.maxClaudeWorkers;
   CLAUDE_TIMEOUT_MS = fresh.claudeTimeoutMs;
@@ -262,7 +241,7 @@ export function reloadConfig(): void {
   notifyListeners();
 }
 
-const SENSITIVE_KEYS = new Set(["slackWebhook", "slackBotToken", "openaiApiKey", "authToken", "discordBotToken"]);
+const SENSITIVE_KEYS = new Set(["slackWebhook", "slackBotToken", "authToken", "discordBotToken"]);
 
 function maskValue(value: string): string {
   if (!value) return "Not configured";

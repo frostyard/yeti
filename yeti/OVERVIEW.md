@@ -23,8 +23,6 @@ src/
 ├── discord.ts           Discord bot — notifications + job control commands (!yeti …)
 ├── error-reporter.ts    Deduplicating GitHub issue-based error reporter (filters ShutdownError, RateLimitError)
 ├── images.ts            Image/attachment extraction + download for issue/PR context
-├── whatsapp.ts          WhatsApp Web client (Baileys) — QR pairing, message routing, transient error filtering
-├── transcribe.ts        Voice-note transcription via OpenAI Whisper API
 ├── version.ts           Build-time injected version string
 ├── plan-parser.ts       Parses multi-PR implementation plans into phases
 ├── shutdown.ts          Graceful shutdown flag + ShutdownError class (shared across modules)
@@ -34,7 +32,6 @@ src/
 │   ├── queue.ts         Work queue page HTML builder
 │   ├── logs.ts          Log list, detail, and issue logs page HTML builders
 │   ├── config.ts        Config editor page HTML builder
-│   ├── whatsapp.ts      WhatsApp status/pairing page HTML builder
 │   ├── login.ts         Login page HTML builder
 │   └── layout.ts        Shared layout (header, theme support, formatters)
 └── jobs/
@@ -47,8 +44,7 @@ src/
     ├── auto-merger.ts          Auto-merges Dependabot and approved Yeti PRs
     ├── repo-standards.ts       Syncs labels and cleans legacy labels
     ├── improvement-identifier.ts  Identifies codebase improvements via Claude, implements as PRs
-    ├── issue-auditor.ts        Daily audit ensuring no issues fall between the cracks
-    └── whatsapp-handler.ts     Interprets WhatsApp messages via Claude, creates GitHub issues
+    └── issue-auditor.ts        Daily audit ensuring no issues fall between the cracks
 
 deploy/
 ├── yeti.service           systemd service unit
@@ -66,8 +62,7 @@ recovers orphaned tasks from a previous crash (cleans up dangling worktrees,
 marks tasks failed), prunes old logs, registers all 10 jobs with the scheduler
 (interval jobs staggered by 2 seconds to prevent thundering herd), starts the
 HTTP server, sets up live config reloading (interval and schedule changes
-propagated to the scheduler without restart), initializes the WhatsApp gateway
-if enabled, and installs SIGINT/SIGTERM handlers that cancel queued tasks,
+propagated to the scheduler without restart), and installs SIGINT/SIGTERM handlers that cancel queued tasks,
 drain running jobs (5 min timeout), terminate active Claude processes, and
 close the database.
 
@@ -177,9 +172,6 @@ Routes:
 - `GET /logs/issue` — Issue-specific logs page (`?repo=...&number=...`)
 - `GET /config` / `POST /config` — Config viewer/editor (HTML form)
 - `GET /config/api` — JSON config (sensitive fields masked)
-- `GET /whatsapp` — WhatsApp status/pairing page
-- `GET /whatsapp/pair` — SSE endpoint streaming QR codes for pairing
-- `POST /whatsapp/unpair` — Clear WhatsApp auth state
 
 Supports dark/light/system themes. When `authToken` is configured, mutating
 endpoints and config views require authentication via
@@ -245,7 +237,6 @@ See [Jobs](jobs.md) for detailed behavior of each.
 | `repo-standards` | Daily at 2 AM (+ on startup) | Scheduled | Syncs labels and cleans legacy labels |
 | `improvement-identifier` | Daily at 3 AM | Scheduled | Analyzes codebase via Claude, implements improvements as PRs |
 | `issue-auditor` | Daily at 5 AM | Scheduled | Reconciles issue states, manages Ready and In Review labels |
-| `whatsapp-handler` | WhatsApp message | Event-driven | Interprets messages via Claude, creates GitHub issues |
 
 ## Key Patterns
 
@@ -338,9 +329,7 @@ Errors flow through two stages:
 1. **Error reporter** (`error-reporter.ts`) — Uses a 30-minute cooldown per
    fingerprint. Recurrences add comments to the existing `[yeti-error]` issue
    rather than opening new ones. `ShutdownError` and `RateLimitError` are
-   filtered before any reporting. Source-level filtering also applies: the
-   WhatsApp module's Baileys logger suppresses transient errors (keep-alive
-   timeouts, stream errors) at warn level before they reach the reporter.
+   filtered before any reporting.
 2. **Triage** (`triage-yeti-errors.ts`) — Discovers `[yeti-error]` issues
    by title pattern (no label required), runs two-phase deduplication (by
    fingerprint before investigation, then by root cause after), and posts an
@@ -465,12 +454,9 @@ defaults.
 | `schedules.issueAuditorHour` | — | `5` (5 AM local time) |
 | `logRetentionDays` | — | `14` |
 | `logRetentionPerJob` | — | `20` |
-| `whatsappEnabled` | `WHATSAPP_ENABLED` | `false` |
-| `whatsappAllowedNumbers` | `WHATSAPP_ALLOWED_NUMBERS` | `[]` |
 | `discordBotToken` | `YETI_DISCORD_BOT_TOKEN` | *(empty — Discord disabled if unset)* |
 | `discordChannelId` | `YETI_DISCORD_CHANNEL_ID` | *(empty)* |
 | `discordAllowedUsers` | `YETI_DISCORD_ALLOWED_USERS` | `[]` (comma-separated user IDs) |
-| `openaiApiKey` | `OPENAI_API_KEY` | *(empty)* |
 | `maxClaudeWorkers` | `YETI_MAX_CLAUDE_WORKERS` | `2` |
 | `claudeTimeoutMs` | `YETI_CLAUDE_TIMEOUT_MS` | `1200000` (20 min, minimum 60s) |
 | `authToken` | `YETI_AUTH_TOKEN` | *(empty — auth disabled)* |
@@ -495,18 +481,14 @@ at runtime — no restart required. The config module uses ESM live bindings
 (`export let`) so all consumers see updated values on their next access.
 Interval and schedule changes are propagated to the scheduler via
 `onConfigChange()` listeners that call `updateInterval()` /
-`updateScheduledHour()`. The only exceptions are `port` (requires socket
-re-bind) and `whatsappEnabled` (requires QR pairing), which are shown as
-read-only in the UI.
+`updateScheduledHour()`. The only exception is `port` (requires socket
+re-bind), which is shown as read-only in the UI.
 
 Env vars always take priority over `config.json`. Fields set via env var
 are shown as disabled in the config UI with a note indicating the override.
 
 External tools `gh` and `claude` must be authenticated separately — Yeti does
 not manage their credentials.
-
-The WhatsApp gateway requires a one-time QR-code pairing step. See
-[WhatsApp Setup](whatsapp-setup.md) for the full walkthrough.
 
 The Discord integration requires creating a Discord application, bot token, and private channel. See
 [Discord Setup](discord-setup.md) for the full walkthrough.
@@ -529,7 +511,6 @@ The Discord integration requires creating a Discord application, bot token, and 
 ├── config.json          Configuration file
 ├── env                  Environment overrides (loaded by systemd)
 ├── yeti.db             SQLite database
-├── whatsapp-auth/       Baileys auth state (created on first QR pairing)
 ├── repos/
 │   └── <owner>/<repo>/  Main clone per repository
 └── worktrees/

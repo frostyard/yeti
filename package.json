@@ -11,16 +11,13 @@
     "test:watch": "vitest"
   },
   "dependencies": {
-    "baileys": "^7.0.0-rc.1",
     "better-sqlite3": "^12",
     "discord.js": "^14.25.1",
-    "qrcode": "^1.5.4",
     "yaml": "^2.8.2"
   },
   "devDependencies": {
     "@types/better-sqlite3": "^7",
     "@types/node": "^25",
-    "@types/qrcode": "^1.5.6",
     "tsx": "^4",
     "typescript": "^5",
     "vitest": "^4.1.0"

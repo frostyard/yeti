@@ -53,9 +53,6 @@ if [[ ! -f "$CONFIG_FILE" ]]; then
   "discordBotToken": "",
   "discordChannelId": "",
   "discordAllowedUsers": [],
-  "whatsappEnabled": false,
-  "whatsappAllowedNumbers": [],
-  "openaiApiKey": "",
   "authToken": "",
   "maxClaudeWorkers": 2,
   "claudeTimeoutMs": 1200000,
@@ -101,9 +98,6 @@ if [[ ! -f "$ENV_FILE" ]]; then
 
 # Discord
 # YETI_DISCORD_BOT_TOKEN=
-
-# OpenAI (used for WhatsApp voice transcription)
-# OPENAI_API_KEY=
 
 # Dashboard auth
 # YETI_AUTH_TOKEN=

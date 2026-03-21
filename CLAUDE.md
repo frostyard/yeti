@@ -42,7 +42,7 @@ Yeti is a self-hosted GitHub automation daemon that polls repositories on timers
 - **`github.ts`** — All GitHub interaction via `gh` CLI (never HTTP API directly). Exponential-backoff retry on transient errors, rate-limit circuit breaker (60s cooldown), TTL cache with in-flight dedup.
 - **`config.ts`** — Configuration priority: env vars > `~/.yeti/config.json` > defaults. Uses ESM `export let` for live reloads without restart. Exports `LABELS`, `INTERVALS`, `SCHEDULES`, `ALLOWED_REPOS`, `ENABLED_JOBS`, etc.
 - **`db.ts`** — SQLite (`~/.yeti/yeti.db`) with tables: `tasks`, `job_runs`, `job_logs`. Log capture via `AsyncLocalStorage` run context.
-- **`server.ts`** — HTTP dashboard with job status, work queue, log viewer, config editor, WhatsApp pairing. Token-based auth when `authToken` is set.
+- **`server.ts`** — HTTP dashboard with job status, work queue, log viewer, config editor. Token-based auth when `authToken` is set.
 - **`error-reporter.ts`** — Deduplicating error reporter: logs + Slack + GitHub issues (`[yeti-error]`). 30-min cooldown per fingerprint. Filters `ShutdownError` and `RateLimitError`.
 - **`discord.ts`** — Discord bot integration for notifications and job control commands. Uses discord.js. Supports GitHub commands: issue creation (`!yeti issue`), issue/PR analysis via Claude (`!yeti look`), and labeling issues as Refined (`!yeti assign`). Repos are short names scoped to the configured GitHub org.
 - **`notify.ts`** — Fan-out notification module. Forwards messages to both Slack and Discord.

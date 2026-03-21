@@ -32,11 +32,8 @@ beforeEach(() => {
   // Clear env vars that would override config file values
   delete process.env["YETI_SLACK_WEBHOOK"];
   delete process.env["YETI_AUTH_TOKEN"];
-  delete process.env["OPENAI_API_KEY"];
   delete process.env["YETI_GITHUB_OWNERS"];
   delete process.env["YETI_SELF_REPO"];
-  delete process.env["WHATSAPP_ENABLED"];
-  delete process.env["WHATSAPP_ALLOWED_NUMBERS"];
   delete process.env["PORT"];
   fs.mkdirSync(tmpDir, { recursive: true });
 });
@@ -51,7 +48,6 @@ afterEach(() => {
   // Clear env vars we may have set
   delete process.env["YETI_SLACK_WEBHOOK"];
   delete process.env["YETI_AUTH_TOKEN"];
-  delete process.env["OPENAI_API_KEY"];
 });
 
 // We dynamically import config to get fresh state each time we need it
@@ -69,7 +65,6 @@ describe("config", () => {
       cp,
       JSON.stringify({
         slackWebhook: "https://hooks.slack.com/services/T123/B456/abcdef",
-        openaiApiKey: "sk-openai-key-98765",
         authToken: "my-secret-token-xyz",
         githubOwners: ["owner1"],
         selfRepo: "owner1/repo1",
@@ -80,7 +75,6 @@ describe("config", () => {
 
     // Sensitive fields should be masked (last 4 chars visible)
     expect(display.slackWebhook).toBe("****cdef");
-    expect(display.openaiApiKey).toBe("****8765");
     expect(display.authToken).toBe("****-xyz");
 
     // Non-sensitive fields should be shown as-is
@@ -97,11 +91,9 @@ describe("config", () => {
     // Remove env vars that would override
     delete process.env["YETI_SLACK_WEBHOOK"];
     delete process.env["YETI_AUTH_TOKEN"];
-    delete process.env["OPENAI_API_KEY"];
-  
+
     const display = getConfigForDisplay();
     expect(display.slackWebhook).toBe("Not configured");
-    expect(display.openaiApiKey).toBe("Not configured");
     expect(display.authToken).toBe("Not configured");
   });
 
