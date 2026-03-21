@@ -52,7 +52,9 @@ Yeti is a self-hosted GitHub automation daemon that polls repositories on timers
 
 ### Jobs (`src/jobs/`)
 
-Each job exports a `run()` function. Jobs discover work via comment analysis, reactions, labels, and PR state — not solely labels. Six labels exist: `Needs Refinement` (trigger for issue-refiner), `Needs Plan Review` (trigger for plan-reviewer), `Refined` (trigger for issue-worker), `Ready` (informational), `In Review` (informational), `Priority` (queue ordering). Processed items are tracked via thumbsup reactions on comments.
+Each job exports a `run()` function. Jobs discover work via comment analysis, reactions, labels, and PR state — not solely labels. Six labels exist: `Needs Refinement` (trigger for issue-refiner), `Needs Plan Review` (trigger for plan-reviewer), `Refined` (trigger for issue-worker), `Ready` (human decision needed), `In Review` (informational), `Priority` (queue ordering). Processed items are tracked via thumbsup reactions on comments.
+
+When plan-reviewer is enabled, the workflow is human-in-the-loop: issue-refiner produces a plan → plan-reviewer critiques it → both land on the issue as comments with `Ready` label → a human reads the plan and critique, then either adds `Refined` to approve or posts feedback to trigger another refinement cycle. The adversarial review is for the human, not for automatic AI-to-AI refinement.
 
 Jobs must be listed in the `enabledJobs` config array to run. An empty or missing `enabledJobs` means no jobs start.
 

@@ -194,11 +194,16 @@ All other PRs (non-Yeti, non-Dependabot) are ignored by auto-merger.
 Issues move through labels to track state:
 
 ```
-(new issue)         →  (refiner runs)  →  Plan comment posted
-                    →  (reviewer runs) →  Plan reviewed         [if plan-reviewer enabled]
+(new issue)         →  (refiner runs)  →  Plan comment posted  →  Ready
+                    →  (reviewer runs) →  Plan reviewed         →  Ready  [if plan-reviewer enabled]
+                    →  Human reviews plan + critique, then either:
+                         • Adds "Refined" to approve implementation
+                         • Posts feedback → refiner refines → reviewer re-reviews
 Refined             →  (worker runs)   →  PR created  →  In Review
 In Review + LGTM    →  (merger runs)   →  PR merged
 ```
+
+The `Ready` label always means "waiting for a human decision." When plan-reviewer is enabled, the human sees both the plan and an adversarial critique before deciding whether to proceed. The review is **for the human**, not for automatic refinement — this prevents infinite back-and-forth between AIs.
 
 The `Priority` label is used for queue ordering across all jobs but does not trigger any job on its own.
 

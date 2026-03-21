@@ -97,13 +97,23 @@ Copilot (or Gemini via Copilot) critiques it.
 - Reacts 👍 to the plan comment (marks as processed)
 - Removes `Needs Plan Review` label, adds `Ready` label
 
-### Interaction with issue-refiner
+### Human-in-the-loop workflow
 
-When `plan-reviewer` is in `enabledJobs`, issue-refiner adds `Needs Plan Review`
-instead of `Ready` after producing or refining a plan. After plan-reviewer
-completes its review, it transitions the issue to `Ready`. If a human posts
-feedback on a reviewed plan, issue-refiner picks it up, refines, and the
-conditional label logic routes it through plan-reviewer again.
+The adversarial review is **for the human**, not for automatic refinement.
+When plan-reviewer is enabled, the full lifecycle is:
+
+1. **issue-refiner** produces or refines a plan → adds `Needs Plan Review`
+2. **plan-reviewer** critiques the plan via a different AI → posts `## Plan Review` → adds `Ready`
+3. **Human** reads both the plan and the adversarial critique, then decides:
+   - **Plan is good** → add `Refined` label to start implementation
+   - **Review raised valid concerns** → post feedback comments on the issue →
+     issue-refiner detects unreacted comments, refines the plan, and routes it
+     back through plan-reviewer for another review cycle
+
+The review does **not** automatically feed back into refinement. This is
+intentional — without a human gatekeeper, the two AIs could enter an infinite
+loop of critiquing and revising each other's plans. The `Ready` label always
+means "a human needs to look at this."
 
 ## issue-worker
 
