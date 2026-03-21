@@ -58,12 +58,14 @@ async function processIssue(repo: Repo, issue: gh.Issue, planComment: gh.IssueCo
       gh.hasPriorityLabel(issue.labels),
     );
 
-    if (reviewOutput.trim()) {
-      await gh.commentOnIssue(fullName, issue.number, `${REVIEW_HEADER}\n\n${reviewOutput}`);
-      log.info(`[plan-reviewer] Posted review for ${fullName}#${issue.number}`);
-    } else {
-      log.warn(`[plan-reviewer] Empty review output for ${fullName}#${issue.number}`);
+    if (!reviewOutput.trim()) {
+      log.warn(`[plan-reviewer] Empty review output for ${fullName}#${issue.number} — will retry next cycle`);
+      db.recordTaskFailed(taskId, "Empty review output");
+      return;
     }
+
+    await gh.commentOnIssue(fullName, issue.number, `${REVIEW_HEADER}\n\n${reviewOutput}`);
+    log.info(`[plan-reviewer] Posted review for ${fullName}#${issue.number}`);
 
     // Mark plan comment as processed
     await gh.addReaction(fullName, planComment.id, "+1");

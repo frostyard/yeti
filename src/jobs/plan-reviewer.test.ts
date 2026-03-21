@@ -198,4 +198,27 @@ describe("plan-reviewer", () => {
       { backend: "copilot" },
     );
   });
+
+  it("does not mark as processed when review output is empty", async () => {
+    const issue = mockIssue({
+      body: "Test issue body",
+      labels: [{ name: "Needs Plan Review" }],
+    });
+    mockGh.listOpenIssues.mockResolvedValueOnce([issue]);
+    mockGh.getIssueComments.mockResolvedValue([
+      { id: 501, body: planCommentBody, login: "yeti-bot" },
+    ]);
+    mockGh.getCommentReactions.mockResolvedValue([]);
+    mockClaude.runAI.mockResolvedValue("");
+
+    await run([repo]);
+
+    // Should NOT react, remove label, or post comment
+    expect(mockGh.addReaction).not.toHaveBeenCalled();
+    expect(mockGh.removeLabel).not.toHaveBeenCalled();
+    expect(mockGh.commentOnIssue).not.toHaveBeenCalled();
+
+    // Should record failure so it retries
+    expect(mockDb.recordTaskFailed).toHaveBeenCalledWith(1, "Empty review output");
+  });
 });
