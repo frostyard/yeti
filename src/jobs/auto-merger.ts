@@ -14,7 +14,7 @@ export async function run(repos: Repo[]): Promise<void> {
         if (gh.isItemSkipped(repo.fullName, pr.number)) continue;
         try {
           const isDependabot = pr.author.login === "dependabot[bot]";
-          const isYetiPR = pr.headRefName.startsWith("yeti/issue-");
+          const isYetiPR = pr.headRefName.startsWith("yeti/issue-") || pr.headRefName.startsWith("yeti/improve-");
           const isDocPR = pr.headRefName.startsWith("yeti/docs-");
 
           if (!isDependabot && !isYetiPR && !isDocPR) continue;
