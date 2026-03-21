@@ -1003,7 +1003,7 @@ describe("runAI", () => {
     expect(result).toBe("copilot output");
     expect(mockSpawn).toHaveBeenCalledWith(
       "copilot",
-      ["-p", "--allow-all-tools", "-s", "--no-ask-user"],
+      ["-p", "test prompt", "--allow-all-tools", "-s", "--no-ask-user"],
       expect.objectContaining({ cwd: "/tmp/test" }),
     );
   });
@@ -1019,7 +1019,7 @@ describe("runAI", () => {
     await promise;
     expect(mockSpawn).toHaveBeenCalledWith(
       "copilot",
-      ["-p", "--allow-all-tools", "-s", "--no-ask-user", "--model", "gemini-3-pro"],
+      ["-p", "test prompt", "--allow-all-tools", "-s", "--no-ask-user", "--model", "gemini-3-pro"],
       expect.objectContaining({ cwd: "/tmp/test" }),
     );
   });

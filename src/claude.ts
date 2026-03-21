@@ -33,12 +33,13 @@ export interface AiOptions {
 interface BackendConfig {
   binary: string;
   args: string[];
+  promptVia: "stdin" | "flag";  // "stdin" = pipe via stdin, "flag" = pass as -p argument
   name: string;
 }
 
 const BACKENDS: Record<AiBackend, BackendConfig> = {
-  claude: { binary: "claude", args: ["-p", "--dangerously-skip-permissions"], name: "Claude" },
-  copilot: { binary: "copilot", args: ["-p", "--allow-all-tools", "-s", "--no-ask-user"], name: "Copilot" },
+  claude: { binary: "claude", args: ["-p", "--dangerously-skip-permissions"], promptVia: "stdin", name: "Claude" },
+  copilot: { binary: "copilot", args: ["--allow-all-tools", "-s", "--no-ask-user"], promptVia: "flag", name: "Copilot" },
 };
 
 // ── Bounded concurrent queue ──
@@ -443,6 +444,9 @@ export function runAI(prompt: string, cwd: string, options?: AiOptions): Promise
 
   return new Promise((resolve, reject) => {
     const args = [...config.args];
+    if (config.promptVia === "flag") {
+      args.unshift("-p", prompt);
+    }
     if (options?.model) {
       args.push("--model", options.model);
     }
@@ -529,7 +533,9 @@ export function runAI(prompt: string, cwd: string, options?: AiOptions): Promise
       reject(new Error(`Failed to spawn ${config.name}: ${err.message}`));
     });
 
-    child.stdin.write(prompt);
+    if (config.promptVia === "stdin") {
+      child.stdin.write(prompt);
+    }
     child.stdin.end();
   });
 }
