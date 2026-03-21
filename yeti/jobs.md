@@ -366,11 +366,11 @@ Only processes repos that Yeti has previously cloned. For each repo:
 
 - **Syncs label definitions** — calls `ensureAllLabels()` to create/update
   all labels defined in `LABEL_SPECS` (from `config.ts`) with correct colors
-  and descriptions (`Refined`, `Ready`, `Priority`, `In Review`)
+  and descriptions (`Refined`, `Ready`, `Priority`, `In Review`,
+  `Needs Refinement`, `Needs Plan Review`)
 - **Cleans up legacy labels** — removes labels in the `LEGACY_LABELS` set
-  (old labels from the previous label-driven system: `Needs Refinement`,
-  `Plan Produced`, `Reviewed`, `prod-report`, `investigated`,
-  `yeti-mergeable`, `yeti-error`)
+  (old labels from the previous label-driven system: `Plan Produced`,
+  `Reviewed`, `prod-report`, `investigated`, `yeti-mergeable`, `yeti-error`)
 
 Does not create worktrees, PRs, or invoke Claude — purely label management
 via the `gh` CLI.
