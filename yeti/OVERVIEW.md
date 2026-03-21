@@ -536,6 +536,7 @@ The Discord integration requires creating a Discord application, bot token, and 
 ├── config.json          Configuration file
 ├── env                  Environment overrides (loaded by systemd)
 ├── yeti.db             SQLite database
+├── last-version         Tracks last announced version (deployment announcements)
 ├── repos/
 │   └── <owner>/<repo>/  Main clone per repository
 └── worktrees/
