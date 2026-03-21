@@ -24,6 +24,7 @@ src/
 ├── images.ts            Image/attachment extraction + download for issue/PR context
 ├── version.ts           Build-time injected version string
 ├── plan-parser.ts       Parses multi-PR implementation plans into phases
+├── startup-announce.ts  Announces new deployments via notify (version-change detection)
 ├── shutdown.ts          Graceful shutdown flag + ShutdownError class (shared across modules)
 ├── test-helpers.ts      Test factories (mockRepo, mockIssue, mockPR)
 ├── pages/
@@ -61,9 +62,11 @@ recovers orphaned tasks from a previous crash (cleans up dangling worktrees,
 marks tasks failed), prunes old logs, registers all 10 jobs with the scheduler
 (interval jobs staggered by 2 seconds to prevent thundering herd), starts the
 HTTP server, sets up live config reloading (interval and schedule changes
-propagated to the scheduler without restart), and installs SIGINT/SIGTERM handlers that cancel queued tasks,
-drain running jobs (5 min timeout), terminate active Claude processes, and
-close the database.
+propagated to the scheduler without restart), announces new deployments via
+`startup-announce.ts` (sends a notification when the version changes, skipping
+`"dev"` and same-version restarts), and installs SIGINT/SIGTERM handlers that
+cancel queued tasks, drain running jobs (5 min timeout), terminate active
+Claude processes, and close the database.
 
 **`config.ts`** — Loads configuration in priority order: environment variables >
 `~/.yeti/config.json` > hardcoded defaults. Exports `LABELS` (`refined`,
@@ -214,6 +217,12 @@ URLs, and binary attachment types. The main entry point `processTextForImages()`
 runs both pipelines and returns a combined prompt section. Used by
 issue-refiner, issue-worker, and review-addresser to give Claude visual and
 file context.
+
+**`startup-announce.ts`** — Announces new deployments. Compares the current
+`VERSION` against `~/.yeti/last-version`; if they differ (or the file doesn't
+exist), sends a notification via `notify()` and updates the file. Skips the
+announcement when `VERSION` is `"dev"` (local development) or matches the
+stored version (same-version restart / crash recovery).
 
 **`notify.ts`** — Notification dispatcher. Forwards to `discord.ts` so callers only need one import. All internal modules that send notifications import from `notify.ts`.
 

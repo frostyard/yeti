@@ -25,6 +25,7 @@ import { setShuttingDown } from "./shutdown.js";
 import { cancelQueuedTasks, cancelCurrentTask } from "./claude.js";
 import { reportError } from "./error-reporter.js";
 import { VERSION } from "./version.js";
+import { announceIfNewVersion } from "./startup-announce.js";
 
 log.info(`yeti ${VERSION} starting up`);
 
@@ -281,6 +282,8 @@ if (isDiscordConfigured()) {
   });
   log.info("Discord bot enabled");
 }
+
+announceIfNewVersion(VERSION, WORK_DIR);
 
 let shuttingDown = false;
 
