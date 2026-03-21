@@ -2,6 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import * as log from "./log.js";
 import { notify } from "./notify.js";
+import { discordStatus } from "./discord.js";
 
 export function announceIfNewVersion(version: string, workDir: string): void {
   if (version === "dev") return;
@@ -16,7 +17,12 @@ export function announceIfNewVersion(version: string, workDir: string): void {
 
   if (lastVersion !== version) {
     notify(`Yeti started with updated version ${version}`);
-    log.info(`Announced deployment: ${version}`);
+    const status = discordStatus();
+    if (status.connected) {
+      log.info(`Announced deployment: ${version}`);
+    } else {
+      log.warn(`Skipped deployment announcement (Discord not connected): ${version}`);
+    }
     fs.writeFileSync(versionFile, version);
   }
 }

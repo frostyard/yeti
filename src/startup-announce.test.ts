@@ -12,6 +12,11 @@ vi.mock("./log.js", () => ({
   debug: vi.fn(),
 }));
 
+const mockDiscordStatus = vi.fn().mockReturnValue({ configured: false, connected: false, lastResult: null });
+vi.mock("./discord.js", () => ({
+  discordStatus: (...args: unknown[]) => mockDiscordStatus(...args),
+}));
+
 vi.mock("node:fs", async () => {
   const actual = await vi.importActual<typeof import("node:fs")>("node:fs");
   return {
@@ -25,11 +30,13 @@ vi.mock("node:fs", async () => {
 });
 
 import { notify } from "./notify.js";
+import * as log from "./log.js";
 import { announceIfNewVersion } from "./startup-announce.js";
 
 describe("announceIfNewVersion", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockDiscordStatus.mockReturnValue({ configured: false, connected: false, lastResult: null });
   });
 
   it("notifies and writes version file when version differs from last-version", () => {
@@ -85,5 +92,25 @@ describe("announceIfNewVersion", () => {
     announceIfNewVersion("v2025-01-02.1", "/tmp/.yeti");
 
     expect(notify).not.toHaveBeenCalled();
+  });
+
+  it("logs 'Announced deployment' when Discord is connected", () => {
+    vi.mocked(fs.readFileSync).mockReturnValue("v2025-01-01.1");
+    mockDiscordStatus.mockReturnValue({ configured: true, connected: true, lastResult: "ok" });
+
+    announceIfNewVersion("v2025-01-02.1", "/tmp/.yeti");
+
+    expect(log.info).toHaveBeenCalledWith("Announced deployment: v2025-01-02.1");
+    expect(log.warn).not.toHaveBeenCalled();
+  });
+
+  it("logs warning when Discord is not connected", () => {
+    vi.mocked(fs.readFileSync).mockReturnValue("v2025-01-01.1");
+    mockDiscordStatus.mockReturnValue({ configured: true, connected: false, lastResult: null });
+
+    announceIfNewVersion("v2025-01-02.1", "/tmp/.yeti");
+
+    expect(log.warn).toHaveBeenCalledWith("Skipped deployment announcement (Discord not connected): v2025-01-02.1");
+    expect(log.info).not.toHaveBeenCalled();
   });
 });

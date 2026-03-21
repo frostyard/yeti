@@ -281,6 +281,10 @@ if (isDiscordConfigured()) {
     reportError("discord:start", "Discord bot failed to start", err).catch(() => {});
   });
   log.info("Discord bot enabled");
+
+  await discord.ready().catch((err) => {
+    log.warn(`[discord] Not ready for announcement: ${(err as Error).message}`);
+  });
 }
 
 announceIfNewVersion(VERSION, WORK_DIR);
