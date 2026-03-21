@@ -226,10 +226,6 @@ export function clearQueueCache(): void {
 
 let _selfLogin: string | null = null;
 
-export function clearSelfLoginCache(): void {
-  _selfLogin = null;
-}
-
 export async function getSelfLogin(): Promise<string> {
   if (!_selfLogin) {
     const raw = await gh(["api", "user", "--jq", ".login"]);
