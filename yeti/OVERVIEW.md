@@ -193,8 +193,8 @@ logs are associated with the job run that produced them.
 
 **`error-reporter.ts`** — On error: logs to console (+ Discord via notify), then (with a
 30-minute per-fingerprint cooldown) either comments on an existing
-`[yeti-error]` issue in `SELF_REPO` or creates a new one with the
-`yeti-error` label. These issues are then picked up by the
+`[yeti-error]` issue in `SELF_REPO` or creates a new one (no label
+applied — discovery is by title pattern). These issues are then picked up by the
 triage-yeti-errors job for automated investigation. Two error types are
 filtered before any reporting: `ShutdownError` (logged at info level —
 shutdown cancellations are expected) and `RateLimitError` (logged at warn
