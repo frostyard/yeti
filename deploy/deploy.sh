@@ -1,7 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-REPO="frostyard/yeti"
 INSTALL_DIR="/opt/yeti"
 VERSION_FILE="$INSTALL_DIR/.current-version"
 STAGING_DIR="$INSTALL_DIR/staging"
@@ -9,7 +8,7 @@ SKIP_FILE="$INSTALL_DIR/.skipped-versions"
 
 log() { echo "$(date -Iseconds) [deploy] $*"; }
 
-# Resolve config path from the service user's home directory
+# Resolve the service user's home directory
 CURRENT_UNIT="/etc/systemd/system/yeti.service"
 if [[ -f "$CURRENT_UNIT" ]]; then
   YETI_USER=$(grep '^User=' "$CURRENT_UNIT" | cut -d= -f2)
@@ -23,6 +22,15 @@ if [[ -f "$ENV_FILE" ]]; then
   set -a
   source "$ENV_FILE"
   set +a
+fi
+
+# Resolve repo: .repo file (from release tarball) → config selfRepo → default
+if [[ -f "$INSTALL_DIR/.repo" ]]; then
+  REPO=$(cat "$INSTALL_DIR/.repo")
+elif [[ -f "$CONFIG_FILE" ]]; then
+  REPO=$(node -e "try{const c=JSON.parse(require('fs').readFileSync('$CONFIG_FILE','utf-8'));console.log(c.selfRepo||'frostyard/yeti')}catch{console.log('frostyard/yeti')}" 2>/dev/null)
+else
+  REPO="frostyard/yeti"
 fi
 
 CONFIG_PORT=$(node -e "try{console.log(JSON.parse(require('fs').readFileSync('$CONFIG_FILE','utf-8')).port||9384)}catch{console.log(9384)}" 2>/dev/null || echo "9384")
@@ -88,7 +96,6 @@ if [[ -d "$STAGING_DIR/node_modules" ]]; then
 fi
 
 # 7. Reinstall systemd units (preserve User/Group/PATH from installed unit)
-CURRENT_UNIT="/etc/systemd/system/yeti.service"
 if [[ -f "$CURRENT_UNIT" ]]; then
   YETI_USER=$(grep '^User=' "$CURRENT_UNIT" | cut -d= -f2)
   YETI_PATH=$(grep '^Environment=PATH=' "$CURRENT_UNIT" | sed 's/^Environment=PATH=//')
