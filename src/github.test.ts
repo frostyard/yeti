@@ -347,7 +347,7 @@ describe("gh retry logic", () => {
     expect(prNumber).toBe(1);
   });
 
-  it("sends Slack notification when rate limit cooldown expires and API calls resume", async () => {
+  it("sends notification when rate limit cooldown expires and API calls resume", async () => {
     const mockNotify = vi.mocked(notify);
 
     // Trip the circuit breaker

@@ -13,7 +13,6 @@ vi.mock("./config.js", () => ({
     "Ready":                { color: "0e8a16", description: "Yeti has finished — needs human attention" },
   },
   getConfigForDisplay: vi.fn().mockReturnValue({
-    slackWebhook: "****cdef",
     githubOwners: ["owner1"],
     selfRepo: "owner1/repo1",
     authToken: "Not configured",
@@ -43,11 +42,6 @@ vi.mock("./version.js", () => ({
 vi.mock("./claude.js", () => ({
   queueStatus: vi.fn().mockReturnValue({ pending: 2, active: 1 }),
   cancelCurrentTask: vi.fn().mockReturnValue(true),
-}));
-
-vi.mock("./slack.js", () => ({
-  slackStatus: vi.fn().mockReturnValue({ configured: true, lastResult: "ok" }),
-  isSlackBotConfigured: vi.fn().mockReturnValue(false),
 }));
 
 vi.mock("./discord.js", () => ({
@@ -231,7 +225,7 @@ describe("HTTP server", () => {
     expect(body.version).toBe("1.2.3-test");
   });
 
-  it("GET /status returns 200 with job states, slack status, and running tasks", async () => {
+  it("GET /status returns 200 with job states, discord status, and running tasks", async () => {
     const res = await request(server, "GET", "/status");
     expect(res.status).toBe(200);
     const body = JSON.parse(res.body);
@@ -239,7 +233,7 @@ describe("HTTP server", () => {
     expect(body.jobs).toEqual({ "issue-worker": true, "ci-fixer": false });
     expect(body.claudeQueue).toEqual({ pending: 2, active: 1 });
     expect(typeof body.uptime).toBe("number");
-    expect(body.slack).toEqual({ configured: true, lastResult: "ok" });
+    expect(body.discord).toBeDefined();
     expect(body.runningTasks).toEqual([
       { jobName: "issue-worker", repo: "org/repo", itemNumber: 42, startedAt: "2025-01-01 00:00:00" },
     ]);
@@ -313,14 +307,13 @@ describe("HTTP server", () => {
     expect(res.status).toBe(200);
     expect(res.headers["content-type"]).toBe("application/json");
     const body = JSON.parse(res.body);
-    expect(body.slackWebhook).toBe("****cdef");
     expect(body.githubOwners).toEqual(["owner1"]);
   });
 
   it("POST /config saves values and redirects", async () => {
     const { writeConfig: wc } = await import("./config.js");
     const res = await request(server, "POST", "/config", {
-      body: "selfRepo=new%2Frepo&logRetentionDays=30&interval_issueWorkerMs=10&schedule_docMaintainerHour=3&slackWebhook=&authToken=",
+      body: "selfRepo=new%2Frepo&logRetentionDays=30&interval_issueWorkerMs=10&schedule_docMaintainerHour=3&authToken=",
     });
     expect(res.status).toBe(303);
     expect(res.headers.location).toBe("/config?saved=1");
@@ -379,7 +372,6 @@ describe("HTTP server", () => {
   it("GET /config renders allowedRepos as empty when null", async () => {
     const { getConfigForDisplay } = await import("./config.js");
     (getConfigForDisplay as ReturnType<typeof vi.fn>).mockReturnValueOnce({
-      slackWebhook: "****cdef",
       githubOwners: ["owner1"],
       selfRepo: "owner1/repo1",
       authToken: "Not configured",

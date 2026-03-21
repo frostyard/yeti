@@ -164,8 +164,8 @@ export const PAGE_CSS = `
       border-radius: 4px;
       font-size: 0.8rem;
     }
-    .slack-untested { color: var(--warning); }
-    .slack-untested::before {
+    .status-untested { color: var(--warning); }
+    .status-untested::before {
       content: "";
       display: inline-block;
       width: 8px;
@@ -174,8 +174,8 @@ export const PAGE_CSS = `
       background: var(--warning);
       margin-right: 6px;
     }
-    .slack-error { color: var(--danger); }
-    .slack-error::before {
+    .status-error { color: var(--danger); }
+    .status-error::before {
       content: "";
       display: inline-block;
       width: 8px;
@@ -462,43 +462,14 @@ export function buildNav(theme: Theme): string {
 
 export const THEME_SCRIPT = `<script>function setTheme(v){document.cookie="yeti_theme="+v+";Path=/;SameSite=Strict;Max-Age=31536000";if(v==="system"){document.documentElement.removeAttribute("data-theme")}else{document.documentElement.setAttribute("data-theme",v)}}</script>`;
 
-export function slackLabel(slack: {
-  configured: boolean;
-  lastResult: "ok" | "error" | null;
-}): { text: string; cls: string } {
-  if (!slack.configured) return { text: "Not configured", cls: "idle" };
-  if (slack.lastResult === null)
-    return { text: "Configured (untested)", cls: "slack-untested" };
-  if (slack.lastResult === "ok") return { text: "Connected", cls: "running" };
-  return { text: "Error", cls: "slack-error" };
-}
-
-export function slackBotLabel(slackBot: {
-  configured: boolean;
-}): { text: string; cls: string } {
-  if (!slackBot.configured) return { text: "Not configured", cls: "idle" };
-  return { text: "Configured", cls: "running" };
-}
-
-export function emailLabel(email: {
-  configured: boolean;
-  lastCheck: string | null;
-  lastError: string | null;
-}): { text: string; cls: string } {
-  if (!email.configured) return { text: "Not configured", cls: "idle" };
-  if (email.lastError) return { text: "Error", cls: "slack-error" };
-  if (email.lastCheck) return { text: "Connected", cls: "running" };
-  return { text: "Configured (untested)", cls: "slack-untested" };
-}
-
 export function discordLabel(discord: {
   configured: boolean;
   connected: boolean;
   lastResult: "ok" | "error" | null;
 }): { text: string; cls: string } {
   if (!discord.configured) return { text: "Not configured", cls: "idle" };
-  if (!discord.connected) return { text: "Disconnected", cls: "slack-error" };
-  if (discord.lastResult === "error") return { text: "Error", cls: "slack-error" };
+  if (!discord.connected) return { text: "Disconnected", cls: "status-error" };
+  if (discord.lastResult === "error") return { text: "Error", cls: "status-error" };
   if (discord.lastResult === "ok") return { text: "Connected", cls: "running" };
-  return { text: "Connected (untested)", cls: "slack-untested" };
+  return { text: "Connected (untested)", cls: "status-untested" };
 }

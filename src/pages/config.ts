@@ -11,9 +11,6 @@ export function buildConfigPage(saved: boolean, theme: Theme): string {
   const cfg = getConfigForDisplay();
 
   const envMap: Record<string, string> = {
-    slackWebhook: "YETI_SLACK_WEBHOOK",
-    slackBotToken: "YETI_SLACK_BOT_TOKEN",
-    slackIdeasChannel: "YETI_SLACK_IDEAS_CHANNEL",
     allowedRepos: "YETI_ALLOWED_REPOS",
     githubOwners: "YETI_GITHUB_OWNERS",
     selfRepo: "YETI_SELF_REPO",
@@ -86,21 +83,6 @@ ${htmlOpenTag(theme)}
     <label for="port">Port</label>
     <input type="number" name="port" id="port" value="${Number(cfg.port)}" disabled>
     <div class="field-note">Read-only — requires restart to change</div>
-
-    <h2>Integrations</h2>
-    <label for="slackWebhook">Slack Webhook</label>
-    <input type="password" name="slackWebhook" id="slackWebhook" placeholder="${escapeHtml(String(cfg.slackWebhook ?? ""))}"${isDisabled("slackWebhook") ? " disabled" : ""}>
-    ${envNote("slackWebhook")}
-    <div class="field-note">Leave empty to keep current value</div>
-
-    <label for="slackBotToken">Slack Bot Token (Ideas)</label>
-    <input type="password" name="slackBotToken" id="slackBotToken" placeholder="${escapeHtml(String(cfg.slackBotToken ?? ""))}"${isDisabled("slackBotToken") ? " disabled" : ""}>
-    ${envNote("slackBotToken")}
-    <div class="field-note">Leave empty to keep current value</div>
-
-    <label for="slackIdeasChannel">Slack Ideas Channel ID</label>
-    <input type="text" name="slackIdeasChannel" id="slackIdeasChannel" value="${escapeHtml(String(cfg.slackIdeasChannel ?? ""))}"${isDisabled("slackIdeasChannel") ? " disabled" : ""}>
-    ${envNote("slackIdeasChannel")}
 
     <h2>Discord</h2>
     <label for="discordBotToken">Discord Bot Token</label>
