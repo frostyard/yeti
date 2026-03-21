@@ -39,9 +39,9 @@ Yeti is a self-hosted GitHub automation daemon that polls repositories on timers
 
 - **`main.ts`** — Entry point. Initializes SQLite DB, recovers orphaned tasks from prior crashes, registers ~10 jobs with the scheduler, starts the HTTP server, sets up live config reload and graceful shutdown (SIGINT/SIGTERM).
 - **`scheduler.ts`** — Interval/daily-hour job runner with skip-if-busy semantics (no queue pile-up). Supports pause/resume, manual trigger, live interval updates.
-- **`claude.ts`** — Bounded concurrent queue (default 2 workers) for `claude` CLI processes. Also manages git worktree lifecycle (`createWorktree`/`removeWorktree`/`ensureClone`). Each process has a configurable timeout (default 20min) with SIGTERM→SIGKILL escalation.
+- **`claude.ts`** — Multi-backend AI dispatch layer with bounded concurrent queues. Supports Claude CLI (default, 2 workers) and Copilot CLI (separate queue, default 1 worker) via `AiBackend` type. `runAI()` is the backend-agnostic entry point; `runClaude()` remains as a thin wrapper. Per-backend timeout with SIGTERM→SIGKILL escalation. Also manages git worktree lifecycle (`createWorktree`/`removeWorktree`/`ensureClone`).
 - **`github.ts`** — All GitHub interaction via `gh` CLI (never HTTP API directly). Exponential-backoff retry on transient errors, rate-limit circuit breaker (60s cooldown), TTL cache with in-flight dedup.
-- **`config.ts`** — Configuration priority: env vars > `~/.yeti/config.json` > defaults. Uses ESM `export let` for live reloads without restart. Exports `LABELS`, `INTERVALS`, `SCHEDULES`, `ALLOWED_REPOS`, `ENABLED_JOBS`, etc.
+- **`config.ts`** — Configuration priority: env vars > `~/.yeti/config.json` > defaults. Uses ESM `export let` for live reloads without restart. Exports `LABELS`, `INTERVALS`, `SCHEDULES`, `ALLOWED_REPOS`, `ENABLED_JOBS`, `JOB_AI`, etc. Per-job AI backend/model overrides via `jobAi` config map.
 - **`db.ts`** — SQLite (`~/.yeti/yeti.db`) with tables: `tasks`, `job_runs`, `job_logs`. Log capture via `AsyncLocalStorage` run context.
 - **`server.ts`** — HTTP dashboard with job status, work queue, log viewer, config editor. Token-based auth when `authToken` is set.
 - **`error-reporter.ts`** — Deduplicating error reporter: logs + Discord + GitHub issues (`[yeti-error]`). 30-min cooldown per fingerprint. Filters `ShutdownError` and `RateLimitError`.
@@ -50,7 +50,7 @@ Yeti is a self-hosted GitHub automation daemon that polls repositories on timers
 
 ### Jobs (`src/jobs/`)
 
-Each job exports a `run()` function. Jobs discover work via comment analysis, reactions, labels, and PR state — not solely labels. Five labels exist: `Needs Refinement` (trigger for issue-refiner), `Refined` (trigger for issue-worker), `Ready` (informational), `In Review` (informational), `Priority` (queue ordering). Processed items are tracked via thumbsup reactions on comments.
+Each job exports a `run()` function. Jobs discover work via comment analysis, reactions, labels, and PR state — not solely labels. Six labels exist: `Needs Refinement` (trigger for issue-refiner), `Needs Plan Review` (trigger for plan-reviewer), `Refined` (trigger for issue-worker), `Ready` (informational), `In Review` (informational), `Priority` (queue ordering). Processed items are tracked via thumbsup reactions on comments.
 
 Jobs must be listed in the `enabledJobs` config array to run. An empty or missing `enabledJobs` means no jobs start.
 

@@ -1,4 +1,4 @@
-import { LABELS, type Repo } from "../config.js";
+import { LABELS, ENABLED_JOBS, type Repo } from "../config.js";
 import * as gh from "../github.js";
 import { isRateLimited } from "../github.js";
 import * as claude from "../claude.js";
@@ -171,7 +171,11 @@ async function processIssue(repo: Repo, issue: gh.Issue): Promise<void> {
       log.warn(`[issue-refiner] Empty plan output for ${fullName}#${issue.number}`);
     }
 
-    await gh.addLabel(fullName, issue.number, LABELS.ready);
+    if (ENABLED_JOBS.includes("plan-reviewer")) {
+      await gh.addLabel(fullName, issue.number, LABELS.needsPlanReview);
+    } else {
+      await gh.addLabel(fullName, issue.number, LABELS.ready);
+    }
     await gh.removeLabel(fullName, issue.number, LABELS.needsRefinement);
 
     if (isCiUnrelatedIssue(issue)) {
@@ -253,7 +257,11 @@ async function processRefinement(
       await gh.addReaction(fullName, comment.id, "+1");
     }
 
-    await gh.addLabel(fullName, issue.number, LABELS.ready);
+    if (ENABLED_JOBS.includes("plan-reviewer")) {
+      await gh.addLabel(fullName, issue.number, LABELS.needsPlanReview);
+    } else {
+      await gh.addLabel(fullName, issue.number, LABELS.ready);
+    }
     db.recordTaskComplete(taskId);
   } catch (err) {
     db.recordTaskFailed(taskId, String(err));

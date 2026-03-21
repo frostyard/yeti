@@ -3,7 +3,7 @@ import { execFile, spawn } from "node:child_process";
 import type { ChildProcess } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
-import { WORK_DIR, MAX_CLAUDE_WORKERS, CLAUDE_TIMEOUT_MS, type Repo } from "./config.js";
+import { WORK_DIR, MAX_CLAUDE_WORKERS, CLAUDE_TIMEOUT_MS, MAX_COPILOT_WORKERS, COPILOT_TIMEOUT_MS, type Repo } from "./config.js";
 import * as log from "./log.js";
 import { isShuttingDown, ShutdownError } from "./shutdown.js";
 
@@ -20,6 +20,27 @@ export function datestamp(): string {
   const day = String(d.getDate()).padStart(2, "0");
   return `${y}${m}${day}`;
 }
+
+// ── AI backend types ──
+
+export type AiBackend = "claude" | "copilot";
+
+export interface AiOptions {
+  backend?: AiBackend;
+  model?: string;
+}
+
+interface BackendConfig {
+  binary: string;
+  args: string[];
+  promptVia: "stdin" | "flag";  // "stdin" = pipe via stdin, "flag" = pass as -p argument
+  name: string;
+}
+
+const BACKENDS: Record<AiBackend, BackendConfig> = {
+  claude: { binary: "claude", args: ["-p", "--dangerously-skip-permissions"], promptVia: "stdin", name: "Claude" },
+  copilot: { binary: "copilot", args: ["--allow-all-tools", "-s", "--no-ask-user"], promptVia: "flag", name: "Copilot" },
+};
 
 // ── Bounded concurrent queue ──
 // Runs up to MAX_CLAUDE_WORKERS claude processes in parallel.
@@ -75,6 +96,55 @@ export function cancelQueuedTasks(): void {
     count++;
   }
   if (count > 0) log.info(`Cancelled ${count} queued task(s)`);
+  cancelCopilotQueuedTasks();
+}
+
+// ── Copilot queue (separate from Claude queue) ──
+
+const copilotQueue: QueuedTask[] = [];
+let copilotActiveCount = 0;
+
+function drainCopilot(): void {
+  while (copilotQueue.length > 0 && copilotActiveCount < MAX_COPILOT_WORKERS) {
+    const idx = copilotQueue.findIndex((t) => t.priority);
+    const task = idx >= 0 ? copilotQueue.splice(idx, 1)[0] : copilotQueue.shift()!;
+    copilotActiveCount++;
+    (async () => {
+      try {
+        const result = await task.fn();
+        task.resolve(result);
+      } catch (err) {
+        task.reject(err);
+      } finally {
+        copilotActiveCount--;
+        drainCopilot();
+      }
+    })();
+  }
+}
+
+export function copilotQueueStatus(): { pending: number; active: number } {
+  return { pending: copilotQueue.length, active: copilotActiveCount };
+}
+
+export function enqueueCopilot<T>(fn: () => Promise<T>, priority = false): Promise<T> {
+  if (isShuttingDown()) {
+    return Promise.reject(new ShutdownError("Shutting down — task not started"));
+  }
+  return new Promise<T>((resolve, reject) => {
+    copilotQueue.push({ fn, resolve: resolve as (v: unknown) => void, reject, priority });
+    drainCopilot();
+  });
+}
+
+function cancelCopilotQueuedTasks(): void {
+  let count = 0;
+  while (copilotQueue.length > 0) {
+    const task = copilotQueue.shift()!;
+    task.reject(new ShutdownError("Shutting down — task cancelled"));
+    count++;
+  }
+  if (count > 0) log.info(`Cancelled ${count} queued copilot task(s)`);
 }
 
 // ── Git helpers ──
@@ -366,27 +436,133 @@ export async function regeneratePRDescription(
   return description.trim();
 }
 
+/** Run an AI backend with the given prompt. Respects backend-specific binary, args, and timeout. */
+export function runAI(prompt: string, cwd: string, options?: AiOptions): Promise<string> {
+  const backend = options?.backend ?? "claude";
+  const config = BACKENDS[backend];
+  const timeoutMs = backend === "copilot" ? COPILOT_TIMEOUT_MS : CLAUDE_TIMEOUT_MS;
+
+  return new Promise((resolve, reject) => {
+    const args = [...config.args];
+    if (config.promptVia === "flag") {
+      args.unshift("-p", prompt);
+    }
+    if (options?.model) {
+      args.push("--model", options.model);
+    }
+
+    const child = spawn(config.binary, args, {
+      cwd,
+      stdio: ["pipe", "pipe", "pipe"],
+    });
+    activeChildren.add(child);
+    const startTime = Date.now();
+
+    let stdout = "";
+    let stderr = "";
+
+    const heartbeat = setInterval(() => {
+      const elapsed = Math.round((Date.now() - startTime) / 1000);
+      log.info(`${config.name} process still running (PID ${child.pid}, elapsed ${elapsed}s, stdout ${stdout.length} bytes)`);
+    }, 5 * 60 * 1000);
+
+    let killTimer: NodeJS.Timeout | undefined;
+    const timeout = setTimeout(() => {
+      log.warn(`${config.name} process timed out after ${timeoutMs}ms — sending SIGTERM`);
+      log.warn(`Timeout diagnostics: cwd=${cwd}, stdout=${stdout.length} bytes, stderr=${stderr.length} bytes`);
+      if (stdout.length > 0) {
+        log.warn(`Last stdout (up to 2000 chars):\n${stdout.slice(-2000)}`);
+      } else {
+        log.warn("No stdout produced before timeout — process may have been waiting for input or stuck");
+      }
+      timedOutChildren.add(child);
+      child.kill("SIGTERM");
+      killTimer = setTimeout(() => {
+        log.warn(`${config.name} process did not exit after SIGTERM — sending SIGKILL`);
+        child.kill("SIGKILL");
+      }, 10_000);
+    }, timeoutMs);
+
+    child.stdout.on("data", (chunk: Buffer) => {
+      stdout += chunk.toString();
+    });
+    child.stderr.on("data", (chunk: Buffer) => {
+      const text = chunk.toString();
+      stderr += text;
+      for (const line of text.split("\n")) {
+        const trimmed = line.trim();
+        if (trimmed) log.debug(trimmed);
+      }
+    });
+
+    child.on("close", (code, signal) => {
+      clearTimeout(timeout);
+      clearTimeout(killTimer);
+      clearInterval(heartbeat);
+      activeChildren.delete(child);
+      if (timedOutChildren.has(child)) {
+        reject(new AiTimeoutError(
+          timeoutMs,
+          stdout.length,
+          stdout.slice(-3000),
+          stderr.slice(-1000),
+          cwd,
+        ));
+        return;
+      }
+      if (cancelledChildren.has(child) || (signal === "SIGTERM" && isShuttingDown())) {
+        reject(new ShutdownError("Task cancelled — shutting down"));
+        return;
+      }
+      if (signal) {
+        log.warn(`${config.name} was killed by signal ${signal}: ${stderr.slice(0, 500)}`);
+        reject(new Error(`${config.name} was killed by signal ${signal}`));
+        return;
+      }
+      if (code !== 0) {
+        log.warn(`${config.name} exited with code ${code}: ${stderr.slice(0, 500)}`);
+      }
+      resolve(stdout);
+    });
+
+    child.on("error", (err) => {
+      clearTimeout(timeout);
+      clearTimeout(killTimer);
+      clearInterval(heartbeat);
+      activeChildren.delete(child);
+      reject(new Error(`Failed to spawn ${config.name}: ${err.message}`));
+    });
+
+    if (config.promptVia === "stdin") {
+      child.stdin.write(prompt);
+    }
+    child.stdin.end();
+  });
+}
+
 export async function pushBranch(wtPath: string, branchName: string): Promise<void> {
   await git(["push", "-u", "origin", branchName], wtPath);
 }
 
 // ── Claude invocation ──
 
-export class ClaudeTimeoutError extends Error {
+export class AiTimeoutError extends Error {
   readonly lastOutput: string;
   readonly lastStderr: string;
   readonly outputBytes: number;
   readonly cwd: string;
 
   constructor(timeoutMs: number, outputBytes: number, lastOutput: string, lastStderr: string, cwd: string) {
-    super(`Claude process timed out after ${timeoutMs}ms`);
-    this.name = "ClaudeTimeoutError";
+    super(`AI process timed out after ${timeoutMs}ms`);
+    this.name = "AiTimeoutError";
     this.outputBytes = outputBytes;
     this.lastOutput = lastOutput;
     this.lastStderr = lastStderr;
     this.cwd = cwd;
   }
 }
+
+export { AiTimeoutError as ClaudeTimeoutError };
 
 const activeChildren = new Set<ChildProcess>();
 const cancelledChildren = new WeakSet<ChildProcess>();
@@ -455,7 +631,7 @@ export function runClaude(prompt: string, cwd: string): Promise<string> {
       clearInterval(heartbeat);
       activeChildren.delete(child);
       if (timedOutChildren.has(child)) {
-        reject(new ClaudeTimeoutError(
+        reject(new AiTimeoutError(
           CLAUDE_TIMEOUT_MS,
           stdout.length,
           stdout.slice(-3000),

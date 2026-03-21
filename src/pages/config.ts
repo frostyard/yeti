@@ -71,7 +71,7 @@ ${htmlOpenTag(theme)}
     <h2>Jobs &amp; Repos</h2>
     <label for="enabledJobs">Enabled Jobs (comma-separated)</label>
     <input type="text" name="enabledJobs" id="enabledJobs" value="${escapeHtml(Array.isArray(cfg.enabledJobs) ? (cfg.enabledJobs as string[]).join(", ") : "")}">
-    <div class="field-note">Valid jobs: issue-refiner, issue-worker, ci-fixer, review-addresser, doc-maintainer, auto-merger, repo-standards, improvement-identifier, issue-auditor, triage-yeti-errors</div>
+    <div class="field-note">Valid jobs: issue-refiner, issue-worker, ci-fixer, review-addresser, doc-maintainer, auto-merger, repo-standards, improvement-identifier, issue-auditor, triage-yeti-errors, plan-reviewer</div>
     <div class="field-note">Empty means no jobs will run.</div>
 
     <label for="allowedRepos">Allowed Repos (comma-separated short names)</label>
@@ -110,6 +110,33 @@ ${htmlOpenTag(theme)}
       `<label for="${escapeHtml(key)}">${escapeHtml(key.replace(/Hour$/, ""))}</label>
       <input type="number" name="schedule_${escapeHtml(key)}" id="${escapeHtml(key)}" value="${value}" min="0" max="23">`
     ).join("\n    ")}
+
+    <h2>AI Backends</h2>
+    <label for="maxCopilotWorkers">Max Copilot Workers</label>
+    <input type="number" name="maxCopilotWorkers" id="maxCopilotWorkers" value="${Number(cfg.maxCopilotWorkers ?? 1)}" min="0">
+    <div class="field-note">Number of concurrent Copilot CLI processes (0 to disable)</div>
+
+    <label for="copilotTimeoutMs">Copilot Timeout (minutes)</label>
+    <input type="number" name="copilotTimeoutMs" id="copilotTimeoutMs" value="${Math.round(Number(cfg.copilotTimeoutMs ?? 1200000) / 60000)}" min="1">
+
+    <h3>Per-Job AI Config</h3>
+    <div class="field-note">Override the AI backend and/or model for specific jobs. Leave model empty for default.</div>
+    <table class="config-table">
+      <thead><tr><th>Job</th><th>Backend</th><th>Model</th></tr></thead>
+      <tbody>
+        ${["issue-refiner", "issue-worker", "ci-fixer", "review-addresser", "doc-maintainer", "improvement-identifier", "plan-reviewer"].map(job => {
+          const jobCfg = (cfg.jobAi as Record<string, { backend?: string; model?: string }> | undefined)?.[job] ?? {};
+          return `<tr>
+            <td>${escapeHtml(job)}</td>
+            <td><select name="jobAi_${escapeHtml(job)}_backend">
+              <option value="claude"${jobCfg.backend !== "copilot" ? " selected" : ""}>claude</option>
+              <option value="copilot"${jobCfg.backend === "copilot" ? " selected" : ""}>copilot</option>
+            </select></td>
+            <td><input type="text" name="jobAi_${escapeHtml(job)}_model" value="${escapeHtml(jobCfg.model ?? "")}" placeholder="default"></td>
+          </tr>`;
+        }).join("\n        ")}
+      </tbody>
+    </table>
 
     <h2>Authentication</h2>
     <label for="authToken">Auth Token</label>

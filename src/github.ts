@@ -143,7 +143,8 @@ export type QueueCategory =
   | "refined"
   | "needs-review-addressing"
   | "auto-mergeable"
-  | "needs-triage";
+  | "needs-triage"
+  | "needs-plan-review";
 
 export interface QueueItem {
   repo: string;

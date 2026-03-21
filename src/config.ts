@@ -14,6 +14,7 @@ export const LABELS = {
   priority: "Priority",
   inReview: "In Review",
   needsRefinement: "Needs Refinement",
+  needsPlanReview: "Needs Plan Review",
 } as const;
 
 export const LABEL_SPECS: Record<string, { color: string; description: string }> = {
@@ -22,6 +23,7 @@ export const LABEL_SPECS: Record<string, { color: string; description: string }>
   "Priority":             { color: "d93f0b", description: "High-priority — processed first in all Yeti queues" },
   "In Review":            { color: "fbca04", description: "Issue has an open PR being reviewed" },
   "Needs Refinement":     { color: "d876e3", description: "Issue needs an AI-generated implementation plan" },
+  "Needs Plan Review":    { color: "c5def5", description: "Plan awaiting adversarial AI review" },
 };
 
 /** Labels that were previously managed by Yeti and can be cleaned up as stale. */
@@ -51,6 +53,9 @@ export interface ConfigFile {
   authToken?: string;
   maxClaudeWorkers?: number;
   claudeTimeoutMs?: number;
+  jobAi?: Record<string, { backend?: "claude" | "copilot"; model?: string }>;
+  maxCopilotWorkers?: number;
+  copilotTimeoutMs?: number;
   intervals?: {
     issueWorkerMs?: number;
     issueRefinerMs?: number;
@@ -58,6 +63,7 @@ export interface ConfigFile {
     reviewAddresserMs?: number;
     autoMergerMs?: number;
     triageYetiErrorsMs?: number;
+    planReviewerMs?: number;
   };
   schedules?: {
     docMaintainerHour?: number;
@@ -102,6 +108,7 @@ function loadConfig() {
     reviewAddresserMs: file.intervals?.reviewAddresserMs ?? 5 * 60 * 1000,
     autoMergerMs: file.intervals?.autoMergerMs ?? 10 * 60 * 1000,
     triageYetiErrorsMs: file.intervals?.triageYetiErrorsMs ?? 10 * 60 * 1000,
+    planReviewerMs: file.intervals?.planReviewerMs ?? 10 * 60 * 1000,
   };
 
   const schedules = {
@@ -137,6 +144,19 @@ function loadConfig() {
     ),
   );
 
+  const maxCopilotWorkers = parseInt(
+    process.env["YETI_MAX_COPILOT_WORKERS"] ?? String(file.maxCopilotWorkers ?? 1),
+    10,
+  );
+
+  const copilotTimeoutMs = Math.max(
+    60_000,
+    parseInt(
+      process.env["YETI_COPILOT_TIMEOUT_MS"] ?? String(file.copilotTimeoutMs ?? 20 * 60 * 1000),
+      10,
+    ),
+  );
+
   const logRetentionDays = file.logRetentionDays ?? 14;
   const logRetentionPerJob = file.logRetentionPerJob ?? 20;
   const pausedJobs = file.pausedJobs ?? [];
@@ -146,8 +166,9 @@ function loadConfig() {
     ? process.env["YETI_ALLOWED_REPOS"].split(",").map((s) => s.trim()).filter(Boolean)
     : file.allowedRepos ?? null;
   const enabledJobs = file.enabledJobs ?? [];
+  const jobAi = file.jobAi ?? {};
 
-  return { githubOwners, selfRepo, port, intervals, schedules, logRetentionDays, logRetentionPerJob, discordBotToken, discordChannelId, discordAllowedUsers, authToken, maxClaudeWorkers, claudeTimeoutMs, pausedJobs, skippedItems, prioritizedItems, allowedRepos, enabledJobs };
+  return { githubOwners, selfRepo, port, intervals, schedules, logRetentionDays, logRetentionPerJob, discordBotToken, discordChannelId, discordAllowedUsers, authToken, maxClaudeWorkers, claudeTimeoutMs, maxCopilotWorkers, copilotTimeoutMs, pausedJobs, skippedItems, prioritizedItems, allowedRepos, enabledJobs, jobAi };
 }
 
 const config = loadConfig();
@@ -167,6 +188,9 @@ export let SKIPPED_ITEMS: ReadonlyArray<{ repo: string; number: number }> = conf
 export let PRIORITIZED_ITEMS: ReadonlyArray<{ repo: string; number: number }> = config.prioritizedItems;
 export let ALLOWED_REPOS: readonly string[] | null = config.allowedRepos;
 export let ENABLED_JOBS: readonly string[] = config.enabledJobs;
+export let MAX_COPILOT_WORKERS = config.maxCopilotWorkers;
+export let COPILOT_TIMEOUT_MS = config.copilotTimeoutMs;
+export let JOB_AI: Readonly<Record<string, { backend?: "claude" | "copilot"; model?: string }>> = config.jobAi;
 // Immutable — requires restart (bot connection)
 export const DISCORD_BOT_TOKEN = config.discordBotToken;
 export const DISCORD_CHANNEL_ID = config.discordChannelId;
@@ -214,6 +238,9 @@ export function reloadConfig(): void {
   PRIORITIZED_ITEMS = fresh.prioritizedItems;
   ALLOWED_REPOS = fresh.allowedRepos;
   ENABLED_JOBS = fresh.enabledJobs;
+  MAX_COPILOT_WORKERS = fresh.maxCopilotWorkers;
+  COPILOT_TIMEOUT_MS = fresh.copilotTimeoutMs;
+  JOB_AI = fresh.jobAi;
   DISCORD_ALLOWED_USERS = fresh.discordAllowedUsers;
   notifyListeners();
 }
@@ -258,6 +285,8 @@ export function writeConfig(updates: Partial<ConfigFile>): void {
       existing.intervals = { ...existing.intervals, ...(value as ConfigFile["intervals"]) };
     } else if (key === "schedules" && typeof value === "object" && value !== null) {
       existing.schedules = { ...existing.schedules, ...(value as ConfigFile["schedules"]) };
+    } else if (key === "jobAi" && typeof value === "object" && value !== null) {
+      existing.jobAi = { ...existing.jobAi, ...(value as ConfigFile["jobAi"]) };
     } else {
       (existing as Record<string, unknown>)[key] = value;
     }
