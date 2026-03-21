@@ -62,9 +62,11 @@ recovers orphaned tasks from a previous crash (cleans up dangling worktrees,
 marks tasks failed), prunes old logs, registers all 10 jobs with the scheduler
 (interval jobs staggered by 2 seconds to prevent thundering herd), starts the
 HTTP server, sets up live config reloading (interval and schedule changes
-propagated to the scheduler without restart), announces new deployments via
-`startup-announce.ts` (sends a notification when the version changes, skipping
-`"dev"` and same-version restarts), and installs SIGINT/SIGTERM handlers that
+propagated to the scheduler without restart), awaits `discord.ready()` before
+announcing new deployments via `startup-announce.ts` (sends a notification when
+the version changes, skipping `"dev"` and same-version restarts; if Discord
+readiness times out, logs a warning and continues), and installs
+SIGINT/SIGTERM handlers that
 cancel queued tasks, drain running jobs (5 min timeout), terminate active
 Claude processes, and close the database.
 
@@ -222,11 +224,13 @@ file context.
 `VERSION` against `~/.yeti/last-version`; if they differ (or the file doesn't
 exist), sends a notification via `notify()` and updates the file. Skips the
 announcement when `VERSION` is `"dev"` (local development) or matches the
-stored version (same-version restart / crash recovery).
+stored version (same-version restart / crash recovery). Checks
+`discordStatus().connected` and logs a warning (rather than a success message)
+when Discord is not connected at announcement time.
 
 **`notify.ts`** — Notification dispatcher. Forwards to `discord.ts` so callers only need one import. All internal modules that send notifications import from `notify.ts`.
 
-**`discord.ts`** — Discord bot integration using discord.js. Connects as a bot user, sends notifications to a configured channel, and handles `!yeti` commands from authorised users. Commands: `status`, `jobs`, `trigger <job>`, `pause <job>`, `resume <job>`, `help`. Requires `discordBotToken`, `discordChannelId`, and `discordAllowedUsers` in config. Only processes messages from the configured channel and from users in the allow-list. Uses `console.log` for its own error output to avoid recursive notify loops. The scheduler reference is injected at startup to enable job control commands. See [Discord Setup](discord-setup.md).
+**`discord.ts`** — Discord bot integration using discord.js. Connects as a bot user, sends notifications to a configured channel, and handles `!yeti` commands from authorised users. Commands: `status`, `jobs`, `trigger <job>`, `pause <job>`, `resume <job>`, `help`. Requires `discordBotToken`, `discordChannelId`, and `discordAllowedUsers` in config. Only processes messages from the configured channel and from users in the allow-list. Uses `console.log` for its own error output to avoid recursive notify loops. The scheduler reference is injected at startup to enable job control commands. Exports a `ready()` function that returns a `Promise<void>` resolving when the bot's WebSocket handshake completes and the channel is available (10-second timeout; resolves immediately if Discord is not configured). Used by `main.ts` to ensure notifications can be delivered before the deployment announcement. See [Discord Setup](discord-setup.md).
 
 ### Dashboard (`src/pages/`)
 
@@ -411,6 +415,15 @@ repository.
 - `refactor: <title>` — automated improvements
 - `docs: update documentation for <repo>` — doc maintenance
 
+### Tree-Diff Guard
+
+All PR-creating jobs gate on both `hasNewCommits` (commit count vs base) and
+`hasTreeDiff` (actual tree difference via `git diff --quiet`) before
+pushing or creating PRs. This prevents failures when Claude makes commits
+that produce no effective changes (e.g. reverting its own work). Jobs that
+push to existing PR branches (ci-fixer, review-addresser) also use this
+check to avoid pushing identical trees.
+
 ### Duplicate PR Guards
 
 PR-creating jobs check for existing open PRs before creating new ones to
@@ -421,6 +434,10 @@ prevent pile-up when previous PRs haven't been merged:
 - **ci-fixer**: Uses consolidated per-repo `[ci-unrelated]` issues rather
   than per-fingerprint issues, so all unrelated CI failures for a repo
   are tracked in a single issue
+
+`getOpenPRForIssue()` (used by issue-worker) bypasses the `listPRs` TTL
+cache (`fresh: true`) to avoid race conditions where a concurrent PR is
+invisible during the 60-second cache window.
 
 ### Item Skip & Prioritize
 
