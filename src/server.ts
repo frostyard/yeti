@@ -1,7 +1,7 @@
 import http from "node:http";
 import crypto from "node:crypto";
 import { queueStatus, cancelCurrentTask } from "./claude.js";
-import { SERVER_PORT, WHATSAPP_ENABLED, getConfigForDisplay, writeConfig, type ConfigFile } from "./config.js";
+import { SERVER_PORT, getConfigForDisplay, writeConfig, type ConfigFile } from "./config.js";
 import * as config from "./config.js";
 import { getQueueSnapshot, enrichQueueItemsWithPRStatus, mergePR, removeQueueItem, type QueueCategory } from "./github.js";
 import { getRecentJobRuns, getRecentWorkItems, getDistinctJobNames, getJobRun, getJobRunLogs, getJobRunLogsSince, getLatestRunIdsByJob, getRunningTasks, getTasksByRunId, getWorkItemsForRuns, searchRunsByItem, getRunsForIssue, getLogsForRuns } from "./db.js";
@@ -9,14 +9,12 @@ import * as log from "./log.js";
 import type { Scheduler } from "./scheduler.js";
 import { msUntilHour } from "./scheduler.js";
 import { slackStatus, isSlackBotConfigured } from "./slack.js";
-import { whatsappStatus, isPairing, startPairing, stopPairing, cancelPairing, unpair } from "./whatsapp.js";
 import { discordStatus } from "./discord.js";
 import { VERSION } from "./version.js";
 import { buildStatusPage } from "./pages/dashboard.js";
 import { buildQueuePage } from "./pages/queue.js";
 import { buildLogsListPage, buildLogDetailPage, buildIssueLogsPage } from "./pages/logs.js";
 import { buildConfigPage } from "./pages/config.js";
-import { buildWhatsAppPage } from "./pages/whatsapp.js";
 import { buildLoginPage } from "./pages/login.js";
 
 // Re-export for backwards compatibility with tests and other consumers
@@ -324,10 +322,6 @@ async function handleRequest(req: http.IncomingMessage, res: http.ServerResponse
     if (params["slackWebhook"] !== undefined) updates.slackWebhook = params["slackWebhook"];
     if (params["slackBotToken"] !== undefined) updates.slackBotToken = params["slackBotToken"];
     if (params["slackIdeasChannel"] !== undefined) updates.slackIdeasChannel = params["slackIdeasChannel"];
-    if (params["whatsappAllowedNumbers"] !== undefined) {
-      updates.whatsappAllowedNumbers = params["whatsappAllowedNumbers"].split(",").map(s => s.trim()).filter(Boolean);
-    }
-    if (params["openaiApiKey"] !== undefined) updates.openaiApiKey = params["openaiApiKey"];
     if (params["discordBotToken"] !== undefined) updates.discordBotToken = params["discordBotToken"];
     if (params["discordChannelId"] !== undefined) updates.discordChannelId = params["discordChannelId"];
     if (params["discordAllowedUsers"] !== undefined) {
@@ -372,14 +366,6 @@ async function handleRequest(req: http.IncomingMessage, res: http.ServerResponse
     }
 
     res.writeHead(303, headers);
-    res.end();
-    return;
-  }
-
-  if (req.method === "POST" && req.url === "/whatsapp/unpair") {
-    if (!requireAuth(req, res)) return;
-    await unpair();
-    res.writeHead(303, { Location: "/whatsapp" });
     res.end();
     return;
   }
@@ -459,7 +445,6 @@ async function handleRequest(req: http.IncomingMessage, res: http.ServerResponse
         jobSchedules,
         slack: slackStatus(),
         slackBot: { configured: isSlackBotConfigured() },
-        whatsapp: WHATSAPP_ENABLED ? whatsappStatus() : { configured: false, connected: false, pairingRequired: false },
         email: { configured: false, lastCheck: null, lastError: null },
         discord: discordStatus(),
       }),
@@ -490,7 +475,6 @@ async function handleRequest(req: http.IncomingMessage, res: http.ServerResponse
       queueStatus(),
       slackStatus(),
       { configured: isSlackBotConfigured() },
-      WHATSAPP_ENABLED ? whatsappStatus() : { configured: false, connected: false, pairingRequired: false },
       { configured: false, lastCheck: null, lastError: null },
       discordStatus(),
       runningTasks,
@@ -502,44 +486,6 @@ async function handleRequest(req: http.IncomingMessage, res: http.ServerResponse
     );
     res.writeHead(200, { "Content-Type": "text/html" });
     res.end(html);
-    return;
-  }
-
-  if (req.url === "/whatsapp") {
-    if (!requireAuth(req, res)) return;
-    res.writeHead(200, { "Content-Type": "text/html" });
-    res.end(buildWhatsAppPage(theme));
-    return;
-  }
-
-  if (req.url === "/whatsapp/pair") {
-    if (!requireAuth(req, res)) return;
-
-    if (isPairing()) {
-      cancelPairing();
-    }
-
-    res.writeHead(200, {
-      "Content-Type": "text/event-stream",
-      "Cache-Control": "no-cache",
-      Connection: "keep-alive",
-    });
-
-    const listener = (event: import("./whatsapp.js").PairingEvent) => {
-      res.write(`data: ${JSON.stringify(event)}\n\n`);
-      if (event.type === "connected" || event.type === "error" || event.type === "timeout") {
-        res.end();
-      }
-    };
-
-    res.on("close", () => {
-      stopPairing();
-    });
-
-    startPairing(listener).catch((err) => {
-      res.write(`data: ${JSON.stringify({ type: "error", message: String(err) })}\n\n`);
-      res.end();
-    });
     return;
   }
 

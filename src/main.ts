@@ -1,7 +1,7 @@
 import { execFile } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
-import { INTERVALS, SCHEDULES, LOG_RETENTION_DAYS, LOG_RETENTION_PER_JOB, WORK_DIR, WHATSAPP_ENABLED, ENABLED_JOBS, onConfigChange } from "./config.js";
+import { INTERVALS, SCHEDULES, LOG_RETENTION_DAYS, LOG_RETENTION_PER_JOB, WORK_DIR, ENABLED_JOBS, onConfigChange } from "./config.js";
 import * as config from "./config.js";
 import * as log from "./log.js";
 import * as gh from "./github.js";
@@ -19,8 +19,6 @@ import * as repoStandards from "./jobs/repo-standards.js";
 import * as improvementIdentifier from "./jobs/improvement-identifier.js";
 import * as triageYetiErrors from "./jobs/triage-yeti-errors.js";
 import * as issueAuditor from "./jobs/issue-auditor.js";
-import * as whatsapp from "./whatsapp.js";
-import { createHandler as createWhatsAppHandler } from "./jobs/whatsapp-handler.js";
 import * as discord from "./discord.js";
 import { isDiscordConfigured } from "./discord.js";
 import { setShuttingDown } from "./shutdown.js";
@@ -274,17 +272,6 @@ onConfigChange(() => {
   prevEnabledJobs = newEnabled;
 });
 
-// ── WhatsApp gateway ──
-
-if (WHATSAPP_ENABLED) {
-  const waHandler = createWhatsAppHandler(() => gh.listRepos());
-  whatsapp.start(waHandler).catch((err) => {
-    log.error(`[whatsapp] Failed to start: ${err}`);
-    reportError("whatsapp:start", "WhatsApp gateway failed to start", err).catch(() => {});
-  });
-  log.info("WhatsApp gateway enabled");
-}
-
 // ── Discord bot ──
 
 if (isDiscordConfigured()) {
@@ -304,10 +291,6 @@ async function shutdown() {
 
   log.info("Shutting down...");
   clearInterval(pruneInterval);
-
-  if (WHATSAPP_ENABLED) {
-    await whatsapp.stop();
-  }
 
   if (isDiscordConfigured()) {
     await discord.stop();

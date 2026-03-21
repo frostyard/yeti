@@ -1,5 +1,5 @@
 import type { Theme } from "./layout.js";
-import { PAGE_CSS, escapeHtml, repoShortName, itemLogsUrl, formatUptime, formatRelativeTime, formatCountdown, htmlOpenTag, buildNav, THEME_SCRIPT, slackLabel, slackBotLabel, whatsappLabel, emailLabel, discordLabel } from "./layout.js";
+import { PAGE_CSS, escapeHtml, repoShortName, itemLogsUrl, formatUptime, formatRelativeTime, formatCountdown, htmlOpenTag, buildNav, THEME_SCRIPT, slackLabel, slackBotLabel, emailLabel, discordLabel } from "./layout.js";
 import { msUntilHour } from "../scheduler.js";
 
 interface RunningTaskInfo {
@@ -16,7 +16,6 @@ export function buildStatusPage(
   queue: { pending: number; active: number },
   slack: { configured: boolean; lastResult: "ok" | "error" | null },
   slackBot: { configured: boolean },
-  wa: { configured: boolean; connected: boolean; pairingRequired: boolean },
   email: { configured: boolean; lastCheck: string | null; lastError: string | null },
   discord: { configured: boolean; connected: boolean; lastResult: "ok" | "error" | null },
   runningTasks: RunningTaskInfo[],
@@ -28,7 +27,6 @@ export function buildStatusPage(
 ): string {
   const sl = slackLabel(slack);
   const sbl = slackBotLabel(slackBot);
-  const wl = whatsappLabel(wa);
   const el = emailLabel(email);
   const dc = discordLabel(discord);
 
@@ -144,8 +142,6 @@ ${htmlOpenTag(theme)}
     <dd id="slack-status" class="${sl.cls}">${sl.text}</dd>
     <dt>Slack Bot (Ideas)</dt>
     <dd id="slackbot-status" class="${sbl.cls}">${sbl.text}</dd>
-    <dt>WhatsApp</dt>
-    <dd id="wa-status" class="${wl.cls}">${wl.link ? `<a href="/whatsapp">${wl.text}</a>` : wl.text}</dd>
     <dt>Email</dt>
     <dd id="email-status" class="${el.cls}">${el.text}</dd>
     <dt>Discord</dt>
@@ -268,11 +264,6 @@ ${htmlOpenTag(theme)}
             if (!data.slackBot.configured) { sbl.textContent = 'Not configured'; sbl.className = 'idle'; }
             else { sbl.textContent = 'Configured'; sbl.className = 'running'; }
           }
-          var wa = document.getElementById('wa-status');
-          if (!data.whatsapp.configured) { wa.innerHTML = 'Not configured'; wa.className = 'idle'; }
-          else if (data.whatsapp.connected) { wa.innerHTML = '<a href="/whatsapp">Connected</a>'; wa.className = 'running'; }
-          else if (data.whatsapp.pairingRequired) { wa.innerHTML = '<a href="/whatsapp">Pairing required</a>'; wa.className = 'slack-error'; }
-          else { wa.innerHTML = '<a href="/whatsapp">Disconnected</a>'; wa.className = 'slack-error'; }
           var em = document.getElementById('email-status');
           if (data.email) {
             if (!data.email.configured) { em.textContent = 'Not configured'; em.className = 'idle'; }
