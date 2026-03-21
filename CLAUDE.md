@@ -29,6 +29,7 @@ npx vitest run -t "returns ms until"          # run tests matching a name patter
 - **TDD** - Use TDD (test driven development) for all code changes
 - **Worktrees** - Use git worktrees
 - **Branching** - Before making any changes, create a branch. One branch per plan.
+- **Dashboard awareness** — Any change to config fields, job behavior, queue categories, or status data must be reflected in the web dashboard (`src/server.ts` and `src/pages/`). Before considering a task complete, check whether the dashboard needs updates: new config fields need form controls in `src/pages/config.ts`, new job states or queue categories need display in `src/pages/dashboard.ts` or `src/pages/queue.ts`, and changes to log/task schemas need corresponding updates in `src/pages/logs.ts`.
 
 ## Architecture
 
@@ -72,6 +73,12 @@ Tests are co-located (`*.test.ts` next to source). Heavy mocking of external bou
 - Release tarball: `dist/` + `deploy/` + `node_modules/`
 - Health check: `GET /health` on port 9384
 
-## Deployment Scripts
+## Cross-Cutting Concerns
 
-After any change to `src/config.ts` (new config fields, removed fields, env var changes), update the bootstrap templates in `deploy/install.sh` to match. Also review `deploy/deploy.sh` if the deployment lifecycle changes.
+After any change to `src/config.ts` (new config fields, removed fields, env var changes), update both `deploy/install.sh` **and** `src/pages/config.ts`.
+
+After any change to job behavior or queue categories, review `src/pages/dashboard.ts` and `src/pages/queue.ts`.
+
+After adding or changing API routes in `src/server.ts`, ensure corresponding page builders in `src/pages/` are updated.
+
+Also review `deploy/deploy.sh` if the deployment lifecycle changes.
