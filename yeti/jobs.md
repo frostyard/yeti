@@ -35,7 +35,8 @@ Three modes:
 - Creates a worktree on branch `yeti/plan-<N>-<hex4>`
 - Asks Claude for a fresh implementation plan
 - Posts the plan as a comment prefixed with `## Implementation Plan`
-- Adds the `Ready` label (signals "Yeti is done, your turn")
+- If `plan-reviewer` is in `enabledJobs`: adds `Needs Plan Review` label (triggers adversarial review)
+- Otherwise: adds the `Ready` label (signals "Yeti is done, your turn")
 
 ### Refinement (unreacted human comments after plan)
 
@@ -46,7 +47,8 @@ Three modes:
 - **Edits the original plan comment in-place** (rather than posting a new one),
   keeping context concise as plans are refined iteratively
 - Reacts 👍 to each addressed comment
-- Re-adds the `Ready` label
+- If `plan-reviewer` is in `enabledJobs`: adds `Needs Plan Review` label (re-triggers adversarial review)
+- Otherwise: re-adds the `Ready` label
 - If no plan comment is found (e.g. it was deleted), falls back to posting a
   fresh plan comment
 
@@ -73,6 +75,35 @@ detect unreacted comments and update its plan. Repeat until satisfied, then add
 All prompts instruct Claude to read `yeti/OVERVIEW.md` first if it exists.
 Images embedded in issue bodies are downloaded and provided to Claude for
 visual context.
+
+## plan-reviewer
+
+**Source**: `src/jobs/plan-reviewer.ts`
+**Trigger**: Issues labelled `Needs Plan Review`
+**Interval**: 10 minutes
+
+Adversarial review job that critiques implementation plans using a configurable
+AI backend (defaults to the backend specified in `jobAi["plan-reviewer"]`).
+Designed for cross-AI adversarial review — e.g. Claude produces the plan,
+Copilot (or Gemini via Copilot) critiques it.
+
+- Scans open issues with the `Needs Plan Review` label
+- Skips issues with the `Refined` label (being implemented)
+- Finds the most recent `## Implementation Plan` comment
+- Skips if the plan comment already has a 👍 reaction from Yeti (already reviewed)
+- Creates a worktree for codebase context
+- Uses the configured backend/model from `JOB_AI["plan-reviewer"]` (uses `enqueueCopilot` for copilot backend, `enqueue` for claude)
+- Posts review as a comment prefixed with `## Plan Review`
+- Reacts 👍 to the plan comment (marks as processed)
+- Removes `Needs Plan Review` label, adds `Ready` label
+
+### Interaction with issue-refiner
+
+When `plan-reviewer` is in `enabledJobs`, issue-refiner adds `Needs Plan Review`
+instead of `Ready` after producing or refining a plan. After plan-reviewer
+completes its review, it transitions the issue to `Ready`. If a human posts
+feedback on a reviewed plan, issue-refiner picks it up, refines, and the
+conditional label logic routes it through plan-reviewer again.
 
 ## issue-worker
 

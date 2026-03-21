@@ -9,14 +9,16 @@ const CATEGORY_DISPLAY: Record<QueueCategory, { label: string; color: string }> 
   "needs-review-addressing": { label: "Needs Review Addressing", color: "e4e669" },
   "auto-mergeable": { label: "Auto-Mergeable", color: "0e8a16" },
   "needs-triage": { label: "Needs Triage", color: "d73a49" },
+  "needs-plan-review": { label: "Needs Plan Review", color: "c5def5" },
 };
 
 const CATEGORY_PRIORITY: Record<QueueCategory, number> = {
   "needs-review-addressing": 0,
   "auto-mergeable": 1,
   "refined": 2,
-  "needs-refinement": 3,
-  "needs-triage": 4,
+  "needs-plan-review": 3,
+  "needs-refinement": 4,
+  "needs-triage": 5,
   "ready": 0,
 };
 

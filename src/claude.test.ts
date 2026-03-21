@@ -4,6 +4,8 @@ vi.mock("./config.js", () => ({
   WORK_DIR: "/tmp/test-yeti",
   MAX_CLAUDE_WORKERS: 2,
   CLAUDE_TIMEOUT_MS: 20 * 60 * 1000,
+  MAX_COPILOT_WORKERS: 1,
+  COPILOT_TIMEOUT_MS: 20 * 60 * 1000,
 }));
 
 vi.mock("./log.js", () => ({
@@ -36,7 +38,7 @@ vi.mock("node:fs", () => ({
   },
 }));
 
-import { enqueue, queueStatus, randomSuffix, datestamp, hasNewCommits, hasTreeDiff, generatePRDescription, generateDocsPRDescription, regeneratePRDescription, runClaude, cancelCurrentTask, cancelQueuedTasks, createWorktree, createWorktreeFromBranch, ensureClone, ClaudeTimeoutError } from "./claude.js";
+import { enqueue, queueStatus, randomSuffix, datestamp, hasNewCommits, hasTreeDiff, generatePRDescription, generateDocsPRDescription, regeneratePRDescription, runClaude, cancelCurrentTask, cancelQueuedTasks, createWorktree, createWorktreeFromBranch, ensureClone, ClaudeTimeoutError, runAI, copilotQueueStatus, enqueueCopilot, AiTimeoutError } from "./claude.js";
 import { ShutdownError } from "./shutdown.js";
 import * as shutdown from "./shutdown.js";
 import fs from "node:fs";
@@ -955,5 +957,104 @@ describe("enqueue shutdown guard", () => {
     const promise = enqueue(() => Promise.resolve("x"));
     await expect(promise).rejects.toThrow("Shutting down — task not started");
     await expect(promise).rejects.toBeInstanceOf(ShutdownError);
+  });
+});
+
+function createMockChild() {
+  const child = new EventEmitter() as ChildProcess & EventEmitter;
+  const stdoutEmitter = new EventEmitter();
+  const stderrEmitter = new EventEmitter();
+  const stdinMock = { write: vi.fn(), end: vi.fn() };
+  Object.assign(child, {
+    stdout: stdoutEmitter,
+    stderr: stderrEmitter,
+    stdin: stdinMock,
+  });
+  return child;
+}
+
+describe("runAI", () => {
+  it("defaults to claude backend when no options provided", async () => {
+    const child = createMockChild();
+    mockSpawn.mockReturnValueOnce(child as unknown as ChildProcess);
+
+    const promise = runAI("test prompt", "/tmp/test");
+    child.stdout!.emit("data", Buffer.from("claude output"));
+    child.emit("close", 0, null);
+
+    const result = await promise;
+    expect(result).toBe("claude output");
+    expect(mockSpawn).toHaveBeenCalledWith(
+      "claude",
+      ["-p", "--dangerously-skip-permissions"],
+      expect.objectContaining({ cwd: "/tmp/test" }),
+    );
+  });
+
+  it("uses copilot backend when specified", async () => {
+    const child = createMockChild();
+    mockSpawn.mockReturnValueOnce(child as unknown as ChildProcess);
+
+    const promise = runAI("test prompt", "/tmp/test", { backend: "copilot" });
+    child.stdout!.emit("data", Buffer.from("copilot output"));
+    child.emit("close", 0, null);
+
+    const result = await promise;
+    expect(result).toBe("copilot output");
+    expect(mockSpawn).toHaveBeenCalledWith(
+      "copilot",
+      ["-p", "--allow-all-tools", "-s", "--no-ask-user"],
+      expect.objectContaining({ cwd: "/tmp/test" }),
+    );
+  });
+
+  it("appends --model flag when model option is provided", async () => {
+    const child = createMockChild();
+    mockSpawn.mockReturnValueOnce(child as unknown as ChildProcess);
+
+    const promise = runAI("test prompt", "/tmp/test", { backend: "copilot", model: "gemini-3-pro" });
+    child.stdout!.emit("data", Buffer.from("output"));
+    child.emit("close", 0, null);
+
+    await promise;
+    expect(mockSpawn).toHaveBeenCalledWith(
+      "copilot",
+      ["-p", "--allow-all-tools", "-s", "--no-ask-user", "--model", "gemini-3-pro"],
+      expect.objectContaining({ cwd: "/tmp/test" }),
+    );
+  });
+
+  it("appends --model flag for claude backend", async () => {
+    const child = createMockChild();
+    mockSpawn.mockReturnValueOnce(child as unknown as ChildProcess);
+
+    const promise = runAI("test prompt", "/tmp/test", { model: "claude-sonnet-4-6" });
+    child.stdout!.emit("data", Buffer.from("output"));
+    child.emit("close", 0, null);
+
+    await promise;
+    expect(mockSpawn).toHaveBeenCalledWith(
+      "claude",
+      ["-p", "--dangerously-skip-permissions", "--model", "claude-sonnet-4-6"],
+      expect.objectContaining({ cwd: "/tmp/test" }),
+    );
+  });
+});
+
+describe("AiTimeoutError alias", () => {
+  it("ClaudeTimeoutError is the same as AiTimeoutError", () => {
+    expect(ClaudeTimeoutError).toBe(AiTimeoutError);
+  });
+});
+
+describe("copilot queue", () => {
+  it("reports copilot queue status independently", () => {
+    const status = copilotQueueStatus();
+    expect(status).toEqual({ pending: 0, active: 0 });
+  });
+
+  it("enqueues and resolves copilot tasks", async () => {
+    const result = await enqueueCopilot(() => Promise.resolve("copilot-result"));
+    expect(result).toBe("copilot-result");
   });
 });

@@ -1,6 +1,6 @@
 import http from "node:http";
 import crypto from "node:crypto";
-import { queueStatus, cancelCurrentTask } from "./claude.js";
+import { queueStatus, copilotQueueStatus, cancelCurrentTask } from "./claude.js";
 import { SERVER_PORT, getConfigForDisplay, writeConfig, type ConfigFile } from "./config.js";
 import * as config from "./config.js";
 import { getQueueSnapshot, enrichQueueItemsWithPRStatus, mergePR, removeQueueItem, type QueueCategory } from "./github.js";
@@ -27,7 +27,7 @@ const startedAt = new Date().toISOString();
 // ── Queue page category groups ──
 
 const MY_ATTENTION_CATEGORIES: QueueCategory[] = ["ready"];
-const YETI_ATTENTION_CATEGORIES: QueueCategory[] = ["needs-refinement", "refined", "needs-review-addressing", "auto-mergeable", "needs-triage"];
+const YETI_ATTENTION_CATEGORIES: QueueCategory[] = ["needs-refinement", "refined", "needs-review-addressing", "auto-mergeable", "needs-triage", "needs-plan-review"];
 
 // ── Auth helpers ──
 
@@ -305,6 +305,35 @@ async function handleRequest(req: http.IncomingMessage, res: http.ServerResponse
       updates.schedules = scheduleUpdates as ConfigFile["schedules"];
     }
 
+    // AI Backends
+    if (params["maxCopilotWorkers"] !== undefined) {
+      const v = parseInt(params["maxCopilotWorkers"], 10);
+      if (v >= 0) updates.maxCopilotWorkers = v;
+    }
+    if (params["copilotTimeoutMs"] !== undefined) {
+      const v = parseInt(params["copilotTimeoutMs"], 10);
+      if (v > 0) updates.copilotTimeoutMs = v * 60 * 1000; // minutes → ms
+    }
+    // Parse jobAi_* fields (e.g. jobAi_plan-reviewer_backend, jobAi_plan-reviewer_model)
+    const jobAiUpdates: Record<string, { backend?: "claude" | "copilot"; model?: string }> = {};
+    for (const [key, value] of Object.entries(params)) {
+      if (!key.startsWith("jobAi_")) continue;
+      const rest = key.slice("jobAi_".length);
+      const lastUnderscore = rest.lastIndexOf("_");
+      if (lastUnderscore < 0) continue;
+      const jobName = rest.slice(0, lastUnderscore);
+      const field = rest.slice(lastUnderscore + 1);
+      if (!jobAiUpdates[jobName]) jobAiUpdates[jobName] = {};
+      if (field === "backend" && (value === "claude" || value === "copilot")) {
+        jobAiUpdates[jobName].backend = value;
+      } else if (field === "model") {
+        jobAiUpdates[jobName].model = value || undefined;
+      }
+    }
+    if (Object.keys(jobAiUpdates).length > 0) {
+      updates.jobAi = jobAiUpdates;
+    }
+
     // Auth
     if (params["authToken"] !== undefined) updates.authToken = params["authToken"];
 
@@ -354,6 +383,7 @@ async function handleRequest(req: http.IncomingMessage, res: http.ServerResponse
       jobs[name] = running;
     }
     const cq = queueStatus();
+    const cpq = copilotQueueStatus();
     const runningTasks = getRunningTasks().map(t => ({
       jobName: t.job_name,
       repo: t.repo,
@@ -393,6 +423,7 @@ async function handleRequest(req: http.IncomingMessage, res: http.ServerResponse
         jobs,
         pausedJobs: [...pausedSet],
         claudeQueue: { pending: cq.pending, active: cq.active },
+        copilotQueue: { pending: cpq.pending, active: cpq.active },
         runningTasks,
         jobSchedules,
         discord: discordStatus(),
@@ -429,6 +460,7 @@ async function handleRequest(req: http.IncomingMessage, res: http.ServerResponse
       startedAt,
       paused,
       schedInfo,
+      copilotQueueStatus(),
     );
     res.writeHead(200, { "Content-Type": "text/html" });
     res.end(html);

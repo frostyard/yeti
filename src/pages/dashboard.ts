@@ -21,6 +21,7 @@ export function buildStatusPage(
   startedAt: string,
   paused?: Set<string>,
   scheduleInfo?: Map<string, { intervalMs: number; scheduledHour?: number }>,
+  copilotQueue?: { pending: number; active: number },
 ): string {
   const dc = discordLabel(discord);
 
@@ -130,6 +131,13 @@ ${htmlOpenTag(theme)}
     ${workingOnHtml}
     ${cancelBtnHtml}
   </dl>
+  ${copilotQueue ? `<h2>Copilot Queue</h2>
+  <dl class="meta">
+    <dt>Status</dt>
+    <dd id="copilot-queue-status" class="${copilotQueue.active > 0 ? "running" : "idle"}">${copilotQueue.active > 0 ? `Active (${copilotQueue.active})` : "Idle"}</dd>
+    <dt>Pending</dt>
+    <dd id="copilot-queue-pending">${copilotQueue.pending}</dd>
+  </dl>` : ""}
   <h2>Integrations</h2>
   <dl class="meta">
     <dt>Discord</dt>
@@ -238,6 +246,12 @@ ${htmlOpenTag(theme)}
           }
           var cb = document.getElementById('cancel-btn');
           if (cb) cb.style.display = data.claudeQueue.active > 0 ? '' : 'none';
+          if (data.copilotQueue) {
+            var cqs = document.getElementById('copilot-queue-status');
+            if (cqs) { cqs.textContent = data.copilotQueue.active > 0 ? 'Active (' + data.copilotQueue.active + ')' : 'Idle'; cqs.className = data.copilotQueue.active > 0 ? 'running' : 'idle'; }
+            var cqp = document.getElementById('copilot-queue-pending');
+            if (cqp) cqp.textContent = data.copilotQueue.pending;
+          }
           var taskByJob = {};
           if (data.runningTasks) {
             data.runningTasks.forEach(function(t) { taskByJob[t.jobName] = t; });

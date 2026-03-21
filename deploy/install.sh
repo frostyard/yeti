@@ -53,13 +53,17 @@ if [[ ! -f "$CONFIG_FILE" ]]; then
   "authToken": "",
   "maxClaudeWorkers": 2,
   "claudeTimeoutMs": 1200000,
+  "maxCopilotWorkers": 1,
+  "copilotTimeoutMs": 1200000,
+  "jobAi": {},
   "intervals": {
     "issueWorkerMs": 300000,
     "issueRefinerMs": 300000,
     "ciFixerMs": 600000,
     "reviewAddresserMs": 300000,
     "autoMergerMs": 600000,
-    "triageYetiErrorsMs": 600000
+    "triageYetiErrorsMs": 600000,
+    "planReviewerMs": 600000
   },
   "schedules": {
     "docMaintainerHour": 1,
@@ -78,7 +82,7 @@ if [[ ! -f "$CONFIG_FILE" ]]; then
 CONF
   chmod 600 "$CONFIG_FILE"
   log "Created $CONFIG_FILE — edit it to configure your instance"
-  log "Available jobs for enabledJobs: issue-worker, issue-refiner, ci-fixer, review-addresser, doc-maintainer, auto-merger, repo-standards, improvement-identifier, issue-auditor, triage-yeti-errors"
+  log "Available jobs for enabledJobs: issue-worker, issue-refiner, ci-fixer, review-addresser, doc-maintainer, auto-merger, repo-standards, improvement-identifier, issue-auditor, triage-yeti-errors, plan-reviewer"
 fi
 
 # Bootstrap env file if it doesn't exist (never overwrite user values)
@@ -94,6 +98,10 @@ if [[ ! -f "$ENV_FILE" ]]; then
 
 # Dashboard auth
 # YETI_AUTH_TOKEN=
+
+# Copilot backend
+# YETI_MAX_COPILOT_WORKERS=1
+# YETI_COPILOT_TIMEOUT_MS=1200000
 CONF
   chmod 600 "$ENV_FILE"
   log "Created $ENV_FILE — edit it to set environment overrides"

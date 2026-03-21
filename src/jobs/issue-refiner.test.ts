@@ -7,7 +7,9 @@ vi.mock("../config.js", () => ({
     ready: "Ready",
     priority: "Priority",
     needsRefinement: "Needs Refinement",
+    needsPlanReview: "Needs Plan Review",
   },
+  ENABLED_JOBS: [],
 }));
 
 vi.mock("../log.js", () => ({

@@ -14,7 +14,7 @@ src/
 ├── config.ts            Configuration loading (env > config file > defaults)
 ├── scheduler.ts         Interval/schedule-based job runner with skip-if-busy
 ├── github.ts            gh CLI wrapper with transient-error retry
-├── claude.ts            Claude CLI runner, bounded concurrent queue, git worktree helpers
+├── claude.ts            Multi-backend AI dispatch (Claude + Copilot), bounded concurrent queues, worktree helpers
 ├── db.ts                SQLite task tracking (better-sqlite3)
 ├── server.ts            HTTP server — dashboard, health, status, manual triggers
 ├── log.ts               Timestamped logging
@@ -36,6 +36,7 @@ src/
 │   └── layout.ts        Shared layout (header, theme support, formatters)
 └── jobs/
     ├── issue-refiner.ts        Discovers issues needing plans via comment analysis
+    ├── plan-reviewer.ts        Adversarial plan review using configurable AI backend
     ├── issue-worker.ts         Implements issues labelled "Refined" as PRs
     ├── ci-fixer.ts             Fixes failing CI and resolves merge conflicts
     ├── review-addresser.ts     Addresses review comments on Yeti PRs

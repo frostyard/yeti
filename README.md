@@ -30,7 +30,8 @@ Yeti runs as a systemd service on a Linux server. An accompanying timer-based up
 |------|---------|
 | Node.js 22 | Runtime |
 | `gh` CLI | GitHub API access (must be authenticated) |
-| `claude` CLI | AI execution |
+| `claude` CLI | AI execution (default backend) |
+| `copilot` CLI | AI execution (optional second backend for adversarial review) |
 | `git` | Worktree management |
 
 ### Building
@@ -170,6 +171,7 @@ These scan all open issues/PRs and will do work without any Yeti-specific labels
 | Job | Trigger | What it does |
 |-----|---------|--------------|
 | **issue-refiner** | Issues labelled `Needs Refinement` | Generates an implementation plan comment |
+| **plan-reviewer** | Issues labelled `Needs Plan Review` | Adversarial review of plans using a different AI backend |
 | **ci-fixer** | Any PR with failing checks or merge conflicts | Attempts to fix CI failures and conflicts |
 | **improvement-identifier** | Periodic scan of codebase | Creates PRs for code improvement opportunities |
 | **issue-auditor** | All open issues | Audits and classifies issue state, applies labels |
@@ -192,9 +194,10 @@ All other PRs (non-Yeti, non-Dependabot) are ignored by auto-merger.
 Issues move through labels to track state:
 
 ```
-(new issue)       →  (refiner runs)  →  Plan comment posted
-Refined           →  (worker runs)   →  PR created  →  In Review
-In Review + LGTM  →  (merger runs)   →  PR merged
+(new issue)         →  (refiner runs)  →  Plan comment posted
+                    →  (reviewer runs) →  Plan reviewed         [if plan-reviewer enabled]
+Refined             →  (worker runs)   →  PR created  →  In Review
+In Review + LGTM    →  (merger runs)   →  PR merged
 ```
 
 The `Priority` label is used for queue ordering across all jobs but does not trigger any job on its own.
@@ -207,7 +210,7 @@ src/
 ├── config.ts            Constants: owners, labels, intervals
 ├── scheduler.ts         Interval-based job runner (skip-if-busy)
 ├── github.ts            gh CLI wrapper
-├── claude.ts            Claude CLI runner + git worktree helpers
+├── claude.ts            Multi-backend AI dispatch (Claude + Copilot) + worktree helpers
 ├── log.ts               Timestamped logging
 ├── db.ts                SQLite for task tracking and job logs
 ├── server.ts            HTTP dashboard
@@ -216,6 +219,7 @@ src/
 ├── notify.ts            Notification dispatcher (Discord)
 └── jobs/
     ├── issue-refiner.ts           Refines issues into implementation plans
+    ├── plan-reviewer.ts           Adversarial plan review (configurable AI backend)
     ├── issue-worker.ts            Implements issues as PRs
     ├── ci-fixer.ts                Fixes failing CI on PRs
     ├── auto-merger.ts             Auto-merges approved PRs
