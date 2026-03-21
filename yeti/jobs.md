@@ -398,7 +398,7 @@ audit with targeted label fixes.
 issues that need human attention) and missing/stale "In Review" labels
 (added when an issue has an open PR, removed when it doesn't).
 
-**Slack notification**: Sent only when fixes are applied, with a summary of
+**Notification**: Sent only when fixes are applied, with a summary of
 which issues were fixed.
 
 Per-repo errors are caught and reported without blocking other repos.

@@ -8,7 +8,6 @@ import { getRecentJobRuns, getRecentWorkItems, getDistinctJobNames, getJobRun, g
 import * as log from "./log.js";
 import type { Scheduler } from "./scheduler.js";
 import { msUntilHour } from "./scheduler.js";
-import { slackStatus, isSlackBotConfigured } from "./slack.js";
 import { discordStatus } from "./discord.js";
 import { VERSION } from "./version.js";
 import { buildStatusPage } from "./pages/dashboard.js";
@@ -268,9 +267,6 @@ async function handleRequest(req: http.IncomingMessage, res: http.ServerResponse
     }
 
     // Integrations
-    if (params["slackWebhook"] !== undefined) updates.slackWebhook = params["slackWebhook"];
-    if (params["slackBotToken"] !== undefined) updates.slackBotToken = params["slackBotToken"];
-    if (params["slackIdeasChannel"] !== undefined) updates.slackIdeasChannel = params["slackIdeasChannel"];
     if (params["discordBotToken"] !== undefined) updates.discordBotToken = params["discordBotToken"];
     if (params["discordChannelId"] !== undefined) updates.discordChannelId = params["discordChannelId"];
     if (params["discordAllowedUsers"] !== undefined) {
@@ -399,9 +395,6 @@ async function handleRequest(req: http.IncomingMessage, res: http.ServerResponse
         claudeQueue: { pending: cq.pending, active: cq.active },
         runningTasks,
         jobSchedules,
-        slack: slackStatus(),
-        slackBot: { configured: isSlackBotConfigured() },
-        email: { configured: false, lastCheck: null, lastError: null },
         discord: discordStatus(),
       }),
     );
@@ -429,9 +422,6 @@ async function handleRequest(req: http.IncomingMessage, res: http.ServerResponse
       Math.floor(uptimeMs / 1000),
       jobs,
       queueStatus(),
-      slackStatus(),
-      { configured: isSlackBotConfigured() },
-      { configured: false, lastCheck: null, lastError: null },
       discordStatus(),
       runningTasks,
       latestRuns,

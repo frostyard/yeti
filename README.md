@@ -102,35 +102,10 @@ Configuration is resolved per-field in this priority order:
 2. **Config file** at `~/.yeti/config.json`
 3. **Hardcoded defaults** (where a sensible default exists)
 
-### Required setup before first run
-
-The `install.sh` script creates a skeleton `~/.yeti/config.json`. Before starting the service you **must** populate the following value — it has no usable default:
-
-| Config key | Env variable | Description |
-|---|---|---|
-| `slackWebhook` | `YETI_SLACK_WEBHOOK` | Slack incoming-webhook URL for deploy/error notifications |
-
-Set it in **either** `~/.yeti/config.json`:
-
-```json
-{
-  "slackWebhook": "https://hooks.slack.com/services/T.../B.../xxx"
-}
-```
-
-**or** in `~/.yeti/env` (loaded by the systemd unit):
-
-```sh
-YETI_SLACK_WEBHOOK=https://hooks.slack.com/services/T.../B.../xxx
-```
-
-The service will start without it, but all Slack notifications will be silently skipped.
-
 ### All configuration options
 
 | Config key | Env variable | Default | Description |
 |---|---|---|---|
-| `slackWebhook` | `YETI_SLACK_WEBHOOK` | *(empty — must be set)* | Slack incoming-webhook URL |
 | `githubOwners` | `YETI_GITHUB_OWNERS` | `["frostyard","frostyard"]` | GitHub accounts to scan (env var is comma-separated) |
 | `selfRepo` | `YETI_SELF_REPO` | `frostyard/yeti` | Repo used for self-referencing error issues |
 | `port` | `PORT` | `9384` | HTTP server port |
@@ -236,9 +211,9 @@ src/
 ├── log.ts               Timestamped logging
 ├── db.ts                SQLite for task tracking and job logs
 ├── server.ts            HTTP dashboard
-├── error-reporter.ts    Deduplicating error reporter (Slack + GitHub issues)
+├── error-reporter.ts    Deduplicating error reporter (Discord + GitHub issues)
 ├── discord.ts           Discord bot for notifications and commands
-├── notify.ts            Fan-out notifications (Slack + Discord)
+├── notify.ts            Notification dispatcher (Discord)
 └── jobs/
     ├── issue-refiner.ts           Refines issues into implementation plans
     ├── issue-worker.ts            Implements issues as PRs

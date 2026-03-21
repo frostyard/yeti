@@ -17,9 +17,8 @@ src/
 ├── claude.ts            Claude CLI runner, bounded concurrent queue, git worktree helpers
 ├── db.ts                SQLite task tracking (better-sqlite3)
 ├── server.ts            HTTP server — dashboard, health, status, manual triggers
-├── log.ts               Timestamped logging + Slack error escalation
-├── slack.ts             Slack incoming-webhook notifier
-├── notify.ts            Fan-out notifier — forwards to Slack and Discord
+├── log.ts               Timestamped logging
+├── notify.ts            Notification dispatcher — forwards to Discord
 ├── discord.ts           Discord bot — notifications + job control commands (!yeti …)
 ├── error-reporter.ts    Deduplicating GitHub issue-based error reporter (filters ShutdownError, RateLimitError)
 ├── images.ts            Image/attachment extraction + download for issue/PR context
@@ -188,11 +187,11 @@ footer appended after plan updates. Used by issue-worker to implement
 multi-phase plans sequentially and update the plan between phases.
 
 **`log.ts`** — Timestamped console logging with four levels: `debug`, `info`,
-`warn`, `error`. Errors also trigger Slack notifications. All log calls capture
+`warn`, `error`. Errors also trigger notifications via `notify.ts`. All log calls capture
 output into the `job_logs` table via `AsyncLocalStorage`-based run context, so
 logs are associated with the job run that produced them.
 
-**`error-reporter.ts`** — On error: logs to console + Slack, then (with a
+**`error-reporter.ts`** — On error: logs to console (+ Discord via notify), then (with a
 30-minute per-fingerprint cooldown) either comments on an existing
 `[yeti-error]` issue in `SELF_REPO` or creates a new one with the
 `yeti-error` label. These issues are then picked up by the
@@ -216,7 +215,7 @@ runs both pipelines and returns a combined prompt section. Used by
 issue-refiner, issue-worker, and review-addresser to give Claude visual and
 file context.
 
-**`notify.ts`** — Fan-out notification module. Calls both `slack.ts` and `discord.ts` so callers only need one import. All internal modules that send notifications import from `notify.ts`.
+**`notify.ts`** — Notification dispatcher. Forwards to `discord.ts` so callers only need one import. All internal modules that send notifications import from `notify.ts`.
 
 **`discord.ts`** — Discord bot integration using discord.js. Connects as a bot user, sends notifications to a configured channel, and handles `!yeti` commands from authorised users. Commands: `status`, `jobs`, `trigger <job>`, `pause <job>`, `resume <job>`, `help`. Requires `discordBotToken`, `discordChannelId`, and `discordAllowedUsers` in config. Only processes messages from the configured channel and from users in the allow-list. Uses `console.log` for its own error output to avoid recursive notify loops. The scheduler reference is injected at startup to enable job control commands. See [Discord Setup](discord-setup.md).
 
@@ -306,7 +305,7 @@ processes (5-second grace period), closes the database, and exits. The
 `shutdown.ts` module provides a shared `isShuttingDown()` flag that prevents
 the Claude queue from accepting new tasks during shutdown. Cancelled tasks
 throw `ShutdownError` (a distinct error class), which the error reporter
-suppresses — no Slack notifications or GitHub issues are created for shutdown
+suppresses — no notifications or GitHub issues are created for shutdown
 cancellations.
 
 ### Crash Recovery
@@ -321,7 +320,7 @@ The `gh` CLI wrapper retries up to 3 times with exponential backoff (1s, 2s,
 "Could not resolve to a", "TLS handshake timeout", "Something went wrong").
 Rate limit errors are handled separately: they trip a circuit breaker that
 blocks all GitHub API calls for 60 seconds, throwing `RateLimitError`
-immediately without retry. A single Slack notification is sent when the
+immediately without retry. A notification is sent when the
 circuit breaker trips, and another when the first API call succeeds after
 cooldown expires. Jobs that iterate over repos short-circuit their loops via
 `isRateLimited()` to avoid cascading failures during a rate-limit window.
@@ -441,9 +440,6 @@ defaults.
 
 | Config key | Env variable | Default |
 |---|---|---|
-| `slackWebhook` | `YETI_SLACK_WEBHOOK` | *(empty — must be set)* |
-| `slackIdeasChannel` | `YETI_SLACK_IDEAS_CHANNEL` | *(empty — optional for idea notifications)* |
-| `slackBotToken` | `YETI_SLACK_BOT_TOKEN` | *(empty — optional for Slack notifications)* |
 | `githubOwners` | `YETI_GITHUB_OWNERS` | `["frostyard"]` |
 | `selfRepo` | `YETI_SELF_REPO` | `frostyard/yeti` |
 | `port` | `PORT` | `9384` |

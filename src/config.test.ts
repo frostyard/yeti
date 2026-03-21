@@ -25,12 +25,8 @@ vi.mock("node:os", async () => {
   };
 });
 
-// Suppress the Slack webhook warning
-const origWarn = console.warn;
 beforeEach(() => {
-  console.warn = vi.fn();
   // Clear env vars that would override config file values
-  delete process.env["YETI_SLACK_WEBHOOK"];
   delete process.env["YETI_AUTH_TOKEN"];
   delete process.env["YETI_GITHUB_OWNERS"];
   delete process.env["YETI_SELF_REPO"];
@@ -39,14 +35,12 @@ beforeEach(() => {
 });
 
 afterEach(() => {
-  console.warn = origWarn;
   try {
     fs.rmSync(tmpDir, { recursive: true, force: true });
   } catch {
     // best effort
   }
   // Clear env vars we may have set
-  delete process.env["YETI_SLACK_WEBHOOK"];
   delete process.env["YETI_AUTH_TOKEN"];
 });
 
@@ -64,7 +58,6 @@ describe("config", () => {
     fs.writeFileSync(
       cp,
       JSON.stringify({
-        slackWebhook: "https://hooks.slack.com/services/T123/B456/abcdef",
         authToken: "my-secret-token-xyz",
         githubOwners: ["owner1"],
         selfRepo: "owner1/repo1",
@@ -74,7 +67,6 @@ describe("config", () => {
     const display = getConfigForDisplay();
 
     // Sensitive fields should be masked (last 4 chars visible)
-    expect(display.slackWebhook).toBe("****cdef");
     expect(display.authToken).toBe("****-xyz");
 
     // Non-sensitive fields should be shown as-is
@@ -89,11 +81,9 @@ describe("config", () => {
     fs.writeFileSync(cp, JSON.stringify({}));
 
     // Remove env vars that would override
-    delete process.env["YETI_SLACK_WEBHOOK"];
     delete process.env["YETI_AUTH_TOKEN"];
 
     const display = getConfigForDisplay();
-    expect(display.slackWebhook).toBe("Not configured");
     expect(display.authToken).toBe("Not configured");
   });
 
@@ -119,14 +109,14 @@ describe("config", () => {
     fs.mkdirSync(path.dirname(cp), { recursive: true });
     fs.writeFileSync(
       cp,
-      JSON.stringify({ slackWebhook: "https://hooks.slack.com/existing", authToken: "existing-token" }),
+      JSON.stringify({ authToken: "existing-token", discordBotToken: "existing-discord" }),
     );
 
-    writeConfig({ slackWebhook: "", authToken: "", selfRepo: "new/repo" });
+    writeConfig({ authToken: "", discordBotToken: "", selfRepo: "new/repo" });
 
     const written = JSON.parse(fs.readFileSync(cp, "utf-8"));
-    expect(written.slackWebhook).toBe("https://hooks.slack.com/existing");
     expect(written.authToken).toBe("existing-token");
+    expect(written.discordBotToken).toBe("existing-discord");
     expect(written.selfRepo).toBe("new/repo");
   });
 

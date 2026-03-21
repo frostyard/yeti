@@ -77,7 +77,7 @@ describe("reportError", () => {
     expect(gh.createIssue).not.toHaveBeenCalled();
   });
 
-  it("suppresses ShutdownError — no Slack notification, no GitHub issue", async () => {
+  it("suppresses ShutdownError — no notification, no GitHub issue", async () => {
     const err = new ShutdownError("Task cancelled — shutting down");
 
     await reportError("test:shutdown", "process-issue", err);

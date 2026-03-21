@@ -197,7 +197,7 @@ describe("issue-auditor", () => {
     expect(mockGh.addLabel).not.toHaveBeenCalled();
   });
 
-  it("sends Slack notification when fixes are made", async () => {
+  it("sends notification when fixes are made", async () => {
     const issue = mockIssue({ labels: [] });
     mockGh.listOpenIssues.mockResolvedValueOnce([issue]);
     mockGh.getIssueComments.mockResolvedValue([
@@ -210,7 +210,7 @@ describe("issue-auditor", () => {
     expect(mockNotify).toHaveBeenCalledWith(expect.stringContaining("Issue auditor"));
   });
 
-  it("no Slack notification when everything is clean", async () => {
+  it("no notification when everything is clean", async () => {
     mockGh.listOpenIssues.mockResolvedValueOnce([]);
 
     await run([repo]);

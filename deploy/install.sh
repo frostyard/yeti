@@ -47,9 +47,6 @@ if [[ ! -f "$CONFIG_FILE" ]]; then
   "githubOwners": ["frostyard"],
   "selfRepo": "frostyard/yeti",
   "port": 9384,
-  "slackWebhook": "",
-  "slackBotToken": "",
-  "slackIdeasChannel": "",
   "discordBotToken": "",
   "discordChannelId": "",
   "discordAllowedUsers": [],
@@ -91,10 +88,6 @@ if [[ ! -f "$ENV_FILE" ]]; then
   cat > "$ENV_FILE" << 'CONF'
 # Environment variables loaded by the yeti systemd unit.
 # Uncomment and set values as needed. These override config.json.
-
-# Slack
-# YETI_SLACK_WEBHOOK=https://hooks.slack.com/services/T.../B.../xxx
-# YETI_SLACK_BOT_TOKEN=xoxb-...
 
 # Discord
 # YETI_DISCORD_BOT_TOKEN=

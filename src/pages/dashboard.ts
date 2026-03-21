@@ -1,5 +1,5 @@
 import type { Theme } from "./layout.js";
-import { PAGE_CSS, escapeHtml, repoShortName, itemLogsUrl, formatUptime, formatRelativeTime, formatCountdown, htmlOpenTag, buildNav, THEME_SCRIPT, slackLabel, slackBotLabel, emailLabel, discordLabel } from "./layout.js";
+import { PAGE_CSS, escapeHtml, repoShortName, itemLogsUrl, formatUptime, formatRelativeTime, formatCountdown, htmlOpenTag, buildNav, THEME_SCRIPT, discordLabel } from "./layout.js";
 import { msUntilHour } from "../scheduler.js";
 
 interface RunningTaskInfo {
@@ -14,9 +14,6 @@ export function buildStatusPage(
   uptime: number,
   jobs: Record<string, boolean>,
   queue: { pending: number; active: number },
-  slack: { configured: boolean; lastResult: "ok" | "error" | null },
-  slackBot: { configured: boolean },
-  email: { configured: boolean; lastCheck: string | null; lastError: string | null },
   discord: { configured: boolean; connected: boolean; lastResult: "ok" | "error" | null },
   runningTasks: RunningTaskInfo[],
   latestRuns: Map<string, { runId: string; status: string; startedAt: string; completedAt: string | null }>,
@@ -25,9 +22,6 @@ export function buildStatusPage(
   paused?: Set<string>,
   scheduleInfo?: Map<string, { intervalMs: number; scheduledHour?: number }>,
 ): string {
-  const sl = slackLabel(slack);
-  const sbl = slackBotLabel(slackBot);
-  const el = emailLabel(email);
   const dc = discordLabel(discord);
 
   // Build a map of job name → running task detail for the jobs table
@@ -138,12 +132,6 @@ ${htmlOpenTag(theme)}
   </dl>
   <h2>Integrations</h2>
   <dl class="meta">
-    <dt>Slack</dt>
-    <dd id="slack-status" class="${sl.cls}">${sl.text}</dd>
-    <dt>Slack Bot (Ideas)</dt>
-    <dd id="slackbot-status" class="${sbl.cls}">${sbl.text}</dd>
-    <dt>Email</dt>
-    <dd id="email-status" class="${el.cls}">${el.text}</dd>
     <dt>Discord</dt>
     <dd id="discord-status" class="${dc.cls}">${dc.text}</dd>
   </dl>
@@ -254,30 +242,13 @@ ${htmlOpenTag(theme)}
           if (data.runningTasks) {
             data.runningTasks.forEach(function(t) { taskByJob[t.jobName] = t; });
           }
-          var sl = document.getElementById('slack-status');
-          if (!data.slack.configured) { sl.textContent = 'Not configured'; sl.className = 'idle'; }
-          else if (data.slack.lastResult === null) { sl.textContent = 'Configured (untested)'; sl.className = 'slack-untested'; }
-          else if (data.slack.lastResult === 'ok') { sl.textContent = 'Connected'; sl.className = 'running'; }
-          else { sl.textContent = 'Error'; sl.className = 'slack-error'; }
-          var sbl = document.getElementById('slackbot-status');
-          if (data.slackBot) {
-            if (!data.slackBot.configured) { sbl.textContent = 'Not configured'; sbl.className = 'idle'; }
-            else { sbl.textContent = 'Configured'; sbl.className = 'running'; }
-          }
-          var em = document.getElementById('email-status');
-          if (data.email) {
-            if (!data.email.configured) { em.textContent = 'Not configured'; em.className = 'idle'; }
-            else if (data.email.lastError) { em.textContent = 'Error'; em.className = 'slack-error'; }
-            else if (data.email.lastCheck) { em.textContent = 'Connected'; em.className = 'running'; }
-            else { em.textContent = 'Configured (untested)'; em.className = 'slack-untested'; }
-          }
           var dc = document.getElementById('discord-status');
           if (data.discord) {
             if (!data.discord.configured) { dc.textContent = 'Not configured'; dc.className = 'idle'; }
-            else if (!data.discord.connected) { dc.textContent = 'Disconnected'; dc.className = 'slack-error'; }
-            else if (data.discord.lastResult === 'error') { dc.textContent = 'Error'; dc.className = 'slack-error'; }
+            else if (!data.discord.connected) { dc.textContent = 'Disconnected'; dc.className = 'status-error'; }
+            else if (data.discord.lastResult === 'error') { dc.textContent = 'Error'; dc.className = 'status-error'; }
             else if (data.discord.lastResult === 'ok') { dc.textContent = 'Connected'; dc.className = 'running'; }
-            else { dc.textContent = 'Connected (untested)'; dc.className = 'slack-untested'; }
+            else { dc.textContent = 'Connected (untested)'; dc.className = 'status-untested'; }
           }
           var pausedSet = {};
           if (data.pausedJobs) data.pausedJobs.forEach(function(n) { pausedSet[n] = true; });

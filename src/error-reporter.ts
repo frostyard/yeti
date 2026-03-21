@@ -19,13 +19,13 @@ export async function reportError(
   }
 
   // RateLimitError is an expected transient condition handled by the circuit
-  // breaker — downgrade to warn so individual per-repo failures don't spam Slack.
+  // breaker — downgrade to warn so individual per-repo failures don't spam notifications.
   if (error instanceof RateLimitError) {
     log.warn(`[${fingerprint}] ${context}: ${error}`);
     return;
   }
 
-  // Always log to console/Slack regardless of dedup outcome
+  // Always log to console regardless of dedup outcome
   log.error(`[${fingerprint}] ${context}: ${error}`);
 
   if (isShuttingDown()) return;

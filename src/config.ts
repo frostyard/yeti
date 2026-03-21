@@ -41,9 +41,6 @@ export interface Repo {
 }
 
 export interface ConfigFile {
-  slackWebhook?: string;
-  slackBotToken?: string;
-  slackIdeasChannel?: string;
   githubOwners?: string[];
   selfRepo?: string;
   port?: number;
@@ -84,15 +81,6 @@ function loadConfig() {
   } catch {
     // No config file or invalid JSON — use defaults + env vars
   }
-
-  const slackWebhook =
-    process.env["YETI_SLACK_WEBHOOK"] ?? file.slackWebhook ?? "";
-
-  const slackBotToken =
-    process.env["YETI_SLACK_BOT_TOKEN"] ?? file.slackBotToken ?? "";
-
-  const slackIdeasChannel =
-    process.env["YETI_SLACK_IDEAS_CHANNEL"] ?? file.slackIdeasChannel ?? "";
 
   const githubOwners = process.env["YETI_GITHUB_OWNERS"]
     ? process.env["YETI_GITHUB_OWNERS"].split(",").map((s) => s.trim())
@@ -158,20 +146,11 @@ function loadConfig() {
     : file.allowedRepos ?? null;
   const enabledJobs = file.enabledJobs ?? [];
 
-  if (!slackWebhook) {
-    console.warn(
-      "Warning: No Slack webhook configured. Set YETI_SLACK_WEBHOOK or slackWebhook in ~/.yeti/config.json",
-    );
-  }
-
-  return { slackWebhook, slackBotToken, slackIdeasChannel, githubOwners, selfRepo, port, intervals, schedules, logRetentionDays, logRetentionPerJob, discordBotToken, discordChannelId, discordAllowedUsers, authToken, maxClaudeWorkers, claudeTimeoutMs, pausedJobs, skippedItems, prioritizedItems, allowedRepos, enabledJobs };
+  return { githubOwners, selfRepo, port, intervals, schedules, logRetentionDays, logRetentionPerJob, discordBotToken, discordChannelId, discordAllowedUsers, authToken, maxClaudeWorkers, claudeTimeoutMs, pausedJobs, skippedItems, prioritizedItems, allowedRepos, enabledJobs };
 }
 
 const config = loadConfig();
 
-export let SLACK_WEBHOOK = config.slackWebhook;
-export let SLACK_BOT_TOKEN = config.slackBotToken;
-export let SLACK_IDEAS_CHANNEL = config.slackIdeasChannel;
 export let GITHUB_OWNERS: readonly string[] = config.githubOwners;
 export let SELF_REPO = config.selfRepo;
 export const SERVER_PORT = config.port; // immutable — requires restart
@@ -220,9 +199,6 @@ function notifyListeners(): void {
 
 export function reloadConfig(): void {
   const fresh = loadConfig();
-  SLACK_WEBHOOK = fresh.slackWebhook;
-  SLACK_BOT_TOKEN = fresh.slackBotToken;
-  SLACK_IDEAS_CHANNEL = fresh.slackIdeasChannel;
   GITHUB_OWNERS = fresh.githubOwners;
   SELF_REPO = fresh.selfRepo;
   INTERVALS = fresh.intervals;
@@ -241,7 +217,7 @@ export function reloadConfig(): void {
   notifyListeners();
 }
 
-const SENSITIVE_KEYS = new Set(["slackWebhook", "slackBotToken", "authToken", "discordBotToken"]);
+const SENSITIVE_KEYS = new Set(["authToken", "discordBotToken"]);
 
 function maskValue(value: string): string {
   if (!value) return "Not configured";
