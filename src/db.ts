@@ -335,17 +335,17 @@ export function hasPreviousCiFixerTasks(repo: string, prNumber: number): boolean
 
 export function pruneOldLogs(retentionDays: number, keepPerJob = 20): number {
   const d = getDb();
-  const cutoff = `datetime('now', '-${retentionDays} days')`;
+  const cutoff = new Date(Date.now() - retentionDays * 86_400_000).toISOString();
   const result = d.prepare(`
     DELETE FROM job_runs
-    WHERE started_at < ${cutoff}
+    WHERE started_at < ?
     AND id NOT IN (
       SELECT id FROM (
         SELECT id, ROW_NUMBER() OVER (PARTITION BY job_name ORDER BY started_at DESC) AS rn
         FROM job_runs
       ) WHERE rn <= ?
     )
-  `).run(keepPerJob);
+  `).run(cutoff, keepPerJob);
   d.prepare(`DELETE FROM job_logs WHERE run_id NOT IN (SELECT run_id FROM job_runs)`).run();
   return result.changes;
 }
