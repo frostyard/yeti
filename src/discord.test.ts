@@ -487,6 +487,22 @@ describe("start and commands", () => {
     expect(msg.reply).toHaveBeenCalledWith("Unknown repo: **badrepo**");
   });
 
+  it("sets lastResult to ok after successful ready event", async () => {
+    await start(makeScheduler());
+    await mockEventHandlers["ready"]();
+    const status = discordStatus();
+    expect(status.lastResult).toBe("ok");
+    expect(status.connected).toBe(true);
+  });
+
+  it("sets lastResult to ok after shardReady reconnect", async () => {
+    await start(makeScheduler());
+    await mockEventHandlers["shardReady"]();
+    const status = discordStatus();
+    expect(status.lastResult).toBe("ok");
+    expect(status.connected).toBe(true);
+  });
+
   it("stop destroys client", async () => {
     await start(makeScheduler());
     await stop();
