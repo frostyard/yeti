@@ -45,13 +45,8 @@ export function startJobs(jobs: Job[], initialPaused?: readonly string[]): Sched
   let draining = false;
   let intervalIndex = 0;
 
-  for (const job of jobs) {
-    runningFlags.set(job.name, false);
-    pausedFlags.set(job.name, initialPausedSet.has(job.name));
-    scheduleConfigs.set(job.name, { intervalMs: job.intervalMs, scheduledHour: job.scheduledHour });
-    jobTimers.set(job.name, []);
-
-    const tick = async (manual?: boolean) => {
+  function makeTick(job: Job): (manual?: boolean) => Promise<void> {
+    return async (manual?: boolean) => {
       if (draining) return;
 
       if (!manual && pausedFlags.get(job.name)) return;
@@ -84,6 +79,15 @@ export function startJobs(jobs: Job[], initialPaused?: readonly string[]): Sched
         }
       });
     };
+  }
+
+  for (const job of jobs) {
+    runningFlags.set(job.name, false);
+    pausedFlags.set(job.name, initialPausedSet.has(job.name));
+    scheduleConfigs.set(job.name, { intervalMs: job.intervalMs, scheduledHour: job.scheduledHour });
+    jobTimers.set(job.name, []);
+
+    const tick = makeTick(job);
 
     ticks.set(job.name, tick);
 
@@ -241,37 +245,7 @@ export function startJobs(jobs: Job[], initialPaused?: readonly string[]): Sched
     scheduleConfigs.set(job.name, { intervalMs: job.intervalMs, scheduledHour: job.scheduledHour });
     jobTimers.set(job.name, []);
 
-    const tick = async (manual?: boolean) => {
-      if (draining) return;
-      if (!manual && pausedFlags.get(job.name)) return;
-      if (runningFlags.get(job.name)) {
-        log.info(`Skipping ${job.name} — previous run still in progress`);
-        return;
-      }
-
-      const runId = crypto.randomUUID();
-      runningFlags.set(job.name, true);
-
-      try {
-        insertJobRun(runId, job.name);
-      } catch {
-        // Don't block the job if run tracking fails
-      }
-
-      await withRunContext(runId, async () => {
-        log.info(`Starting job: ${job.name}`);
-        try {
-          await job.run();
-          log.info(`Finished job: ${job.name}`);
-          try { completeJobRun(runId, "completed"); } catch { /* best effort */ }
-        } catch (err) {
-          try { completeJobRun(runId, "failed"); } catch { /* best effort */ }
-          reportError(`scheduler:${job.name}`, job.name, err);
-        } finally {
-          runningFlags.set(job.name, false);
-        }
-      });
-    };
+    const tick = makeTick(job);
 
     ticks.set(job.name, tick);
 
