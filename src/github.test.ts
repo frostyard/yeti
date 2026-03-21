@@ -1594,6 +1594,26 @@ describe("allowedRepos filtering", () => {
     expect(second).toHaveLength(2);
     expect(second.map(r => r.name).sort()).toEqual(["repo-b", "test-repo"]);
   });
+
+  it("concurrent callers get filtered repos, not raw fetch results", async () => {
+    vi.useFakeTimers();
+    (config as any).ALLOWED_REPOS = ["repo-a"];
+    mockExecFile.mockImplementation((_cmd: string, _args: string[], _opts: any, cb: any) => {
+      // Simulate async delay so both calls are in-flight concurrently
+      setTimeout(() => cb(null, JSON.stringify(threeRepos), ""), 100);
+    });
+
+    const p1 = listRepos();
+    const p2 = listRepos();
+
+    await vi.advanceTimersByTimeAsync(100);
+
+    const [r1, r2] = await Promise.all([p1, p2]);
+    // Both callers must see the filtered result (repo-a + self-repo)
+    expect(r1.map(r => r.name).sort()).toEqual(["repo-a", "test-repo"]);
+    expect(r2.map(r => r.name).sort()).toEqual(["repo-a", "test-repo"]);
+    vi.useRealTimers();
+  });
 });
 
 describe("apiCache TTL for listIssuesByLabel", () => {
