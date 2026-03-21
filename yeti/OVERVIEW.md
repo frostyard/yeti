@@ -51,8 +51,8 @@ deploy/
 ├── yeti.service           systemd service unit
 ├── yeti-updater.service   systemd updater service
 ├── yeti-updater.timer     systemd timer (every 60s)
-├── install.sh              One-shot bootstrap installer
-├── deploy.sh               Auto-update with health check + rollback
+├── install.sh              One-shot bootstrap installer (repo-aware)
+├── deploy.sh               Auto-update with health check + rollback (repo-aware)
 └── uninstall.sh            Service removal
 ```
 
@@ -552,8 +552,26 @@ The Discord integration requires creating a Discord application, bot token, and 
 - **Testing**: Vitest — co-located test files, heavy mocking of external boundaries
 - **CI**: GitHub Actions on self-hosted runner — build + test on every push
 - **History cleanup**: Workflow-dispatch action for branch cleanup and `git-filter-repo` to audit/scrub git secrets
-- **Releases**: Date-based version tags (`v<YYYY-MM-DD>.<N>`), tarball attached to GitHub Release
+- **Releases**: Date-based version tags (`v<YYYY-MM-DD>.<N>`), self-describing tarball attached to GitHub Release (includes `.repo` file identifying the source repository)
 - **Auto-updates**: systemd timer checks for new releases every 60s, downloads + swaps + health checks with automatic rollback
+- **Multi-instance deploy**: Release tarballs embed a `.repo` file so multiple instances (from different forks) can run independently on the same host
+
+## Deployment & Multi-Instance Support
+
+Release tarballs are **self-describing**: the CI workflow writes the source
+repository (`owner/repo`) into a `.repo` file embedded in the tarball. Both
+`deploy.sh` and `install.sh` use a three-level fallback to determine which
+GitHub repository to monitor for updates:
+
+1. `$INSTALL_DIR/.repo` — from the release tarball (highest priority)
+2. `selfRepo` from `~/.yeti/config.json` — manual override
+3. Default `frostyard/yeti` — backwards compatibility
+
+This enables **multi-instance deployments**: different forks of Yeti can each
+release their own tarball, and multiple instances can coexist on the same host
+(using different `INSTALL_DIR` or systemd units), each self-updating from its
+own fork's releases. The `install.sh` bootstrap script pre-populates
+`selfRepo` and `githubOwners` in the initial config from the detected repo.
 
 ## Filesystem Layout (Runtime)
 
@@ -569,4 +587,11 @@ The Discord integration requires creating a Discord application, bot token, and 
     └── <owner>/<repo>/
         └── <job>/
             └── <branch>/   Isolated worktree per task
+
+/opt/yeti/               (INSTALL_DIR — deployment artifacts)
+├── .repo                Source repository (e.g. "frostyard/yeti")
+├── .current-version     Currently deployed version tag
+├── dist/                Compiled TypeScript output
+├── deploy/              Deployment scripts
+└── node_modules/        Runtime dependencies
 ```
