@@ -287,7 +287,12 @@ For each canonical (non-duplicate) issue:
 **Trigger**: Dependabot PRs + LGTM'd Yeti PRs + doc PRs
 **Interval**: 10 minutes
 
-Scans all open PRs per repo. For each PR:
+Scans all open PRs per repo. Before merging any PR, checks the PR's
+mergeable state via `getPRMergeableState()`. PRs with merge conflicts
+(`CONFLICTING`) are skipped with a warning; PRs in `UNKNOWN` state (GitHub
+still computing) are silently skipped and re-evaluated on the next cycle.
+
+For each PR:
 
 - **Dependabot PRs** (`dependabot[bot]` author): merges if all CI checks pass
 - **Yeti PRs** (`yeti/issue-` or `yeti/improve-` branch prefix): merges if
