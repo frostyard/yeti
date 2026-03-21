@@ -34,6 +34,7 @@ const { mockFs, mockGh, mockClaude, mockDb, mockPlanParser } = vi.hoisted(() => 
     enqueue: vi.fn(),
     runClaude: vi.fn(),
     hasNewCommits: vi.fn(),
+    hasTreeDiff: vi.fn(),
     pushBranch: vi.fn(),
     getHeadSha: vi.fn(),
     getLastDocMaintainerSha: vi.fn(),
@@ -77,6 +78,7 @@ describe("doc-maintainer", () => {
     mockClaude.enqueue.mockImplementation((fn: () => Promise<string>) => fn());
     mockClaude.runClaude.mockResolvedValue("docs generated");
     mockClaude.hasNewCommits.mockResolvedValue(true);
+    mockClaude.hasTreeDiff.mockResolvedValue(true);
     mockClaude.pushBranch.mockResolvedValue(undefined);
     mockClaude.removeWorktree.mockResolvedValue(undefined);
     mockClaude.getHeadSha.mockResolvedValue("abc123");

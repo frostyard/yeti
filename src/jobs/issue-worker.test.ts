@@ -46,6 +46,7 @@ const { mockGh, mockClaude, mockDb } = vi.hoisted(() => ({
     enqueue: vi.fn(),
     runClaude: vi.fn(),
     hasNewCommits: vi.fn(),
+    hasTreeDiff: vi.fn(),
     pushBranch: vi.fn(),
     generatePRDescription: vi.fn(),
     randomSuffix: vi.fn().mockReturnValue("ab12"),
@@ -84,6 +85,7 @@ describe("issue-worker", () => {
     mockClaude.enqueue.mockImplementation((fn: () => Promise<string>) => fn());
     mockClaude.runClaude.mockResolvedValue("implemented");
     mockClaude.hasNewCommits.mockResolvedValue(true);
+    mockClaude.hasTreeDiff.mockResolvedValue(true);
     mockClaude.pushBranch.mockResolvedValue(undefined);
     mockClaude.generatePRDescription.mockResolvedValue("## Summary\nFixed it");
     mockClaude.removeWorktree.mockResolvedValue(undefined);
@@ -125,6 +127,20 @@ describe("issue-worker", () => {
       const issue = mockIssue({ labels: [{ name: "Refined" }] });
       mockGh.listIssuesByLabel.mockResolvedValueOnce([issue]);
       mockClaude.hasNewCommits.mockResolvedValue(false);
+
+      await run([repo]);
+
+      expect(mockClaude.pushBranch).not.toHaveBeenCalled();
+      expect(mockGh.createPR).not.toHaveBeenCalled();
+      expect(mockGh.addLabel).not.toHaveBeenCalledWith(repo.fullName, 1, "In Review");
+      expect(mockDb.recordTaskComplete).toHaveBeenCalledWith(1);
+    });
+
+    it("commits but no tree diff — skips PR creation", async () => {
+      const issue = mockIssue({ labels: [{ name: "Refined" }] });
+      mockGh.listIssuesByLabel.mockResolvedValueOnce([issue]);
+      mockClaude.hasNewCommits.mockResolvedValue(true);
+      mockClaude.hasTreeDiff.mockResolvedValue(false);
 
       await run([repo]);
 

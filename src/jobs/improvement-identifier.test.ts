@@ -32,6 +32,7 @@ const { mockFs, mockGh, mockClaude, mockDb } = vi.hoisted(() => ({
     enqueue: vi.fn(),
     runClaude: vi.fn(),
     hasNewCommits: vi.fn(),
+    hasTreeDiff: vi.fn(),
     pushBranch: vi.fn(),
     randomSuffix: vi.fn().mockReturnValue("ab12"),
   },
@@ -76,6 +77,7 @@ describe("improvement-identifier", () => {
     mockClaude.runClaude.mockResolvedValue(`\`\`\`json\n${validResponse}\n\`\`\``);
     mockClaude.removeWorktree.mockResolvedValue(undefined);
     mockClaude.hasNewCommits.mockResolvedValue(true);
+    mockClaude.hasTreeDiff.mockResolvedValue(true);
     mockClaude.pushBranch.mockResolvedValue(undefined);
   });
 

@@ -36,7 +36,7 @@ vi.mock("node:fs", () => ({
   },
 }));
 
-import { enqueue, queueStatus, randomSuffix, datestamp, hasNewCommits, generatePRDescription, generateDocsPRDescription, regeneratePRDescription, runClaude, cancelCurrentTask, cancelQueuedTasks, createWorktree, createWorktreeFromBranch, ensureClone, ClaudeTimeoutError } from "./claude.js";
+import { enqueue, queueStatus, randomSuffix, datestamp, hasNewCommits, hasTreeDiff, generatePRDescription, generateDocsPRDescription, regeneratePRDescription, runClaude, cancelCurrentTask, cancelQueuedTasks, createWorktree, createWorktreeFromBranch, ensureClone, ClaudeTimeoutError } from "./claude.js";
 import { ShutdownError } from "./shutdown.js";
 import * as shutdown from "./shutdown.js";
 import fs from "node:fs";
@@ -195,6 +195,33 @@ describe("hasNewCommits", () => {
     });
 
     const result = await hasNewCommits("/tmp/wt", "main");
+    expect(result).toBe(false);
+  });
+});
+
+describe("hasTreeDiff", () => {
+  it("returns true when git diff --quiet exits with code 1 (tree differs)", async () => {
+    mockExecFile.mockImplementation((_cmd, args: any, _opts: any, cb: any) => {
+      if (args?.includes("diff") && args?.includes("--quiet")) {
+        const err = Object.assign(new Error("diff"), { code: 1 });
+        cb(err, "", "");
+      }
+      return undefined as any;
+    });
+
+    const result = await hasTreeDiff("/tmp/wt", "main");
+    expect(result).toBe(true);
+  });
+
+  it("returns false when git diff --quiet exits with code 0 (identical trees)", async () => {
+    mockExecFile.mockImplementation((_cmd, args: any, _opts: any, cb: any) => {
+      if (args?.includes("diff") && args?.includes("--quiet")) {
+        cb(null, "", "");
+      }
+      return undefined as any;
+    });
+
+    const result = await hasTreeDiff("/tmp/wt", "main");
     expect(result).toBe(false);
   });
 });

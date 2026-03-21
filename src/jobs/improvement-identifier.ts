@@ -198,7 +198,7 @@ async function processRepo(repo: Repo): Promise<void> {
       const implPrompt = buildImplementationPrompt(fullName, improvement);
       await claude.enqueue(() => claude.runClaude(implPrompt, implWt!));
 
-      if (await claude.hasNewCommits(implWt, repo.defaultBranch)) {
+      if (await claude.hasNewCommits(implWt, repo.defaultBranch) && await claude.hasTreeDiff(implWt, repo.defaultBranch)) {
         await claude.pushBranch(implWt, implBranch);
         const prBody = improvement.body + FOOTER;
         await gh.createPR(fullName, implBranch, `refactor: ${improvement.title}`, prBody);

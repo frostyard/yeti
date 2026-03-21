@@ -263,6 +263,12 @@ export async function hasNewCommits(wtPath: string, baseBranch: string): Promise
   return parseInt(count, 10) > 0;
 }
 
+/** Check if the worktree tree actually differs from the base branch (guards against no-op commits). */
+export async function hasTreeDiff(wtPath: string, baseBranch: string): Promise<boolean> {
+  const result = await gitRaw(["diff", "--quiet", `origin/${baseBranch}`, "HEAD"], wtPath);
+  return result.code !== 0;
+}
+
 /** Generate a PR description by asking Claude to summarize the diff and issue. */
 export async function generatePRDescription(
   wtPath: string,
