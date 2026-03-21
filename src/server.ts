@@ -218,83 +218,32 @@ async function handleRequest(req: http.IncomingMessage, res: http.ServerResponse
     return;
   }
 
-  if (req.method === "POST" && req.url === "/queue/skip") {
-    if (!requireAuth(req, res)) return;
-    try {
-      const body = await readBody(req);
-      const { repo, number } = JSON.parse(body) as { repo: string; number: number };
-      if (!repo || !number) throw new Error("Missing repo or number");
-      const items = [...(config.SKIPPED_ITEMS as Array<{ repo: string; number: number }>)];
-      if (!items.some((i) => i.repo === repo && i.number === number)) {
-        items.push({ repo, number });
+  for (const { url, configKey, sourceList, operation, afterWrite } of [
+    { url: "/queue/skip", configKey: "skippedItems" as const, sourceList: () => config.SKIPPED_ITEMS, operation: "add" as const, afterWrite: (repo: string, number: number) => removeQueueItem(repo, number) },
+    { url: "/queue/unskip", configKey: "skippedItems" as const, sourceList: () => config.SKIPPED_ITEMS, operation: "remove" as const },
+    { url: "/queue/prioritize", configKey: "prioritizedItems" as const, sourceList: () => config.PRIORITIZED_ITEMS, operation: "add" as const },
+    { url: "/queue/deprioritize", configKey: "prioritizedItems" as const, sourceList: () => config.PRIORITIZED_ITEMS, operation: "remove" as const },
+  ] as const) {
+    if (req.method === "POST" && req.url === url) {
+      if (!requireAuth(req, res)) return;
+      try {
+        const body = await readBody(req);
+        const { repo, number } = JSON.parse(body) as { repo: string; number: number };
+        if (!repo || !number) throw new Error("Missing repo or number");
+        const current = sourceList() as Array<{ repo: string; number: number }>;
+        const items = operation === "add"
+          ? current.some((i) => i.repo === repo && i.number === number) ? [...current] : [...current, { repo, number }]
+          : current.filter((i) => !(i.repo === repo && i.number === number));
+        writeConfig({ [configKey]: items });
+        afterWrite?.(repo, number);
+        res.writeHead(200, { "Content-Type": "application/json" });
+        res.end(JSON.stringify({ result: "ok" }));
+      } catch (err) {
+        res.writeHead(500, { "Content-Type": "application/json" });
+        res.end(JSON.stringify({ error: String(err) }));
       }
-      writeConfig({ skippedItems: items });
-      removeQueueItem(repo, number);
-      res.writeHead(200, { "Content-Type": "application/json" });
-      res.end(JSON.stringify({ result: "ok" }));
-    } catch (err) {
-      res.writeHead(500, { "Content-Type": "application/json" });
-      res.end(JSON.stringify({ error: String(err) }));
+      return;
     }
-    return;
-  }
-
-  if (req.method === "POST" && req.url === "/queue/unskip") {
-    if (!requireAuth(req, res)) return;
-    try {
-      const body = await readBody(req);
-      const { repo, number } = JSON.parse(body) as { repo: string; number: number };
-      if (!repo || !number) throw new Error("Missing repo or number");
-      const items = (config.SKIPPED_ITEMS as Array<{ repo: string; number: number }>).filter(
-        (i) => !(i.repo === repo && i.number === number),
-      );
-      writeConfig({ skippedItems: items });
-      res.writeHead(200, { "Content-Type": "application/json" });
-      res.end(JSON.stringify({ result: "ok" }));
-    } catch (err) {
-      res.writeHead(500, { "Content-Type": "application/json" });
-      res.end(JSON.stringify({ error: String(err) }));
-    }
-    return;
-  }
-
-  if (req.method === "POST" && req.url === "/queue/prioritize") {
-    if (!requireAuth(req, res)) return;
-    try {
-      const body = await readBody(req);
-      const { repo, number } = JSON.parse(body) as { repo: string; number: number };
-      if (!repo || !number) throw new Error("Missing repo or number");
-      const items = [...(config.PRIORITIZED_ITEMS as Array<{ repo: string; number: number }>)];
-      if (!items.some((i) => i.repo === repo && i.number === number)) {
-        items.push({ repo, number });
-      }
-      writeConfig({ prioritizedItems: items });
-      res.writeHead(200, { "Content-Type": "application/json" });
-      res.end(JSON.stringify({ result: "ok" }));
-    } catch (err) {
-      res.writeHead(500, { "Content-Type": "application/json" });
-      res.end(JSON.stringify({ error: String(err) }));
-    }
-    return;
-  }
-
-  if (req.method === "POST" && req.url === "/queue/deprioritize") {
-    if (!requireAuth(req, res)) return;
-    try {
-      const body = await readBody(req);
-      const { repo, number } = JSON.parse(body) as { repo: string; number: number };
-      if (!repo || !number) throw new Error("Missing repo or number");
-      const items = (config.PRIORITIZED_ITEMS as Array<{ repo: string; number: number }>).filter(
-        (i) => !(i.repo === repo && i.number === number),
-      );
-      writeConfig({ prioritizedItems: items });
-      res.writeHead(200, { "Content-Type": "application/json" });
-      res.end(JSON.stringify({ result: "ok" }));
-    } catch (err) {
-      res.writeHead(500, { "Content-Type": "application/json" });
-      res.end(JSON.stringify({ error: String(err) }));
-    }
-    return;
   }
 
   if (req.method === "POST" && req.url === "/config") {
