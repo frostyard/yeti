@@ -24,6 +24,7 @@ import {
   getTasksByRunId,
   getWorkItemsForRuns,
   getRecentWorkItems,
+  getRecentActions,
   searchRunsByItem,
   insertJobRun,
   completeJobRun,
@@ -601,5 +602,125 @@ describe("getRecentWorkItems", () => {
   it("returns empty array when no tasks exist", () => {
     const items = getRecentWorkItems();
     expect(items).toHaveLength(0);
+  });
+});
+
+describe("getRecentActions", () => {
+  beforeEach(() => {
+    initDb();
+  });
+
+  afterEach(() => {
+    setRunIdProvider(() => undefined);
+    closeDb();
+  });
+
+  it("returns empty array when no tasks exist", () => {
+    const actions = getRecentActions();
+    expect(actions).toHaveLength(0);
+  });
+
+  it("returns tasks ordered by most recent first", () => {
+    const db = _rawDb();
+    db.prepare(
+      `INSERT INTO tasks (job_name, repo, item_number, status, started_at, completed_at) VALUES (?, ?, ?, 'completed', datetime('now', '-3 hours'), datetime('now', '-2 hours'))`,
+    ).run("auto-merger", "org/repo", 10);
+    db.prepare(
+      `INSERT INTO tasks (job_name, repo, item_number, status, started_at, completed_at) VALUES (?, ?, ?, 'completed', datetime('now', '-1 hour'), datetime('now'))`,
+    ).run("auto-merger", "org/repo", 20);
+
+    const actions = getRecentActions();
+    expect(actions).toHaveLength(2);
+    expect(actions[0].item_number).toBe(20);
+    expect(actions[1].item_number).toBe(10);
+  });
+
+  it("respects limit parameter", () => {
+    const db = _rawDb();
+    for (let i = 1; i <= 5; i++) {
+      db.prepare(
+        `INSERT INTO tasks (job_name, repo, item_number, status, started_at, completed_at) VALUES (?, ?, ?, 'completed', datetime('now', '-' || ? || ' hours'), datetime('now'))`,
+      ).run("auto-merger", "org/repo", i, i);
+    }
+
+    const actions = getRecentActions(undefined, 3);
+    expect(actions).toHaveLength(3);
+  });
+
+  it("filters by job name when provided", () => {
+    const db = _rawDb();
+    db.prepare(
+      `INSERT INTO tasks (job_name, repo, item_number, status, started_at, completed_at) VALUES (?, ?, ?, 'completed', datetime('now'), datetime('now'))`,
+    ).run("auto-merger", "org/repo", 10);
+    db.prepare(
+      `INSERT INTO tasks (job_name, repo, item_number, status, started_at, completed_at) VALUES (?, ?, ?, 'completed', datetime('now'), datetime('now'))`,
+    ).run("issue-worker", "org/repo", 20);
+
+    const actions = getRecentActions("auto-merger");
+    expect(actions).toHaveLength(1);
+    expect(actions[0].job_name).toBe("auto-merger");
+  });
+
+  it("includes summary from matching log line", () => {
+    const db = _rawDb();
+    insertJobRun("run-1", "auto-merger");
+    db.prepare(
+      `INSERT INTO tasks (job_name, repo, item_number, run_id, status, started_at, completed_at) VALUES (?, ?, ?, ?, 'completed', datetime('now'), datetime('now'))`,
+    ).run("auto-merger", "org/repo", 51, "run-1");
+    insertJobLog("run-1", "info", "[auto-merger] Merging org/repo#51: Fix auth middleware");
+
+    const actions = getRecentActions();
+    expect(actions).toHaveLength(1);
+    expect(actions[0].summary).toBe("[auto-merger] Merging org/repo#51: Fix auth middleware");
+  });
+
+  it("returns null summary when no matching log exists", () => {
+    const db = _rawDb();
+    db.prepare(
+      `INSERT INTO tasks (job_name, repo, item_number, status, started_at, completed_at) VALUES (?, ?, ?, 'completed', datetime('now'), datetime('now'))`,
+    ).run("auto-merger", "org/repo", 10);
+
+    const actions = getRecentActions();
+    expect(actions).toHaveLength(1);
+    expect(actions[0].summary).toBeNull();
+  });
+
+  it("excludes running tasks", () => {
+    const db = _rawDb();
+    db.prepare(
+      `INSERT INTO tasks (job_name, repo, item_number, status, started_at) VALUES (?, ?, ?, 'running', datetime('now'))`,
+    ).run("auto-merger", "org/repo", 10);
+    db.prepare(
+      `INSERT INTO tasks (job_name, repo, item_number, status, started_at, completed_at) VALUES (?, ?, ?, 'completed', datetime('now'), datetime('now'))`,
+    ).run("auto-merger", "org/repo", 20);
+
+    const actions = getRecentActions();
+    expect(actions).toHaveLength(1);
+    expect(actions[0].item_number).toBe(20);
+  });
+
+  it("excludes tasks with item_number = 0", () => {
+    const db = _rawDb();
+    db.prepare(
+      `INSERT INTO tasks (job_name, repo, item_number, status, started_at, completed_at) VALUES (?, ?, ?, 'completed', datetime('now'), datetime('now'))`,
+    ).run("doc-maintainer", "org/repo", 0);
+    db.prepare(
+      `INSERT INTO tasks (job_name, repo, item_number, status, started_at, completed_at) VALUES (?, ?, ?, 'completed', datetime('now'), datetime('now'))`,
+    ).run("auto-merger", "org/repo", 5);
+
+    const actions = getRecentActions();
+    expect(actions).toHaveLength(1);
+    expect(actions[0].item_number).toBe(5);
+  });
+
+  it("includes failed tasks", () => {
+    const db = _rawDb();
+    db.prepare(
+      `INSERT INTO tasks (job_name, repo, item_number, status, error, started_at, completed_at) VALUES (?, ?, ?, 'failed', 'timeout', datetime('now'), datetime('now'))`,
+    ).run("issue-worker", "org/repo", 15);
+
+    const actions = getRecentActions();
+    expect(actions).toHaveLength(1);
+    expect(actions[0].status).toBe("failed");
   });
 });

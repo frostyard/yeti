@@ -54,6 +54,10 @@ vi.mock("./log.js", () => ({
   error: vi.fn(),
 }));
 
+vi.mock("./db.js", () => ({
+  getRecentActions: vi.fn().mockReturnValue([]),
+}));
+
 vi.mock("./claude.js", () => ({
   queueStatus: vi.fn().mockReturnValue({ pending: 2, active: 1 }),
   enqueue: vi.fn((fn: () => Promise<string>) => fn()),
@@ -74,6 +78,7 @@ vi.mock("./github.js", () => ({
 
 import { isDiscordConfigured, discordStatus, notify, start, stop, ready } from "./discord.js";
 import * as gh from "./github.js";
+import * as db from "./db.js";
 import { runClaude } from "./claude.js";
 import type { Scheduler } from "./scheduler.js";
 
@@ -485,6 +490,86 @@ describe("start and commands", () => {
       expect(msg.reply).toHaveBeenCalled();
     });
     expect(msg.reply).toHaveBeenCalledWith("Unknown repo: **badrepo**");
+  });
+
+  // ── recent command ──
+
+  it("!yeti recent with no actions shows 'No recent actions'", async () => {
+    vi.mocked(db.getRecentActions).mockReturnValue([]);
+    const scheduler = makeScheduler();
+    await start(scheduler);
+    const msg = makeMessage({ content: "!yeti recent" });
+    mockEventHandlers["messageCreate"](msg);
+    await vi.waitFor(() => {
+      expect(msg.reply).toHaveBeenCalled();
+    });
+    expect(msg.reply).toHaveBeenCalledWith("No recent actions");
+  });
+
+  it("!yeti recent returns formatted output grouped by job", async () => {
+    vi.mocked(db.getRecentActions).mockReturnValue([
+      { job_name: "auto-merger", repo: "org/repo", item_number: 51, status: "completed", started_at: "2026-03-21", completed_at: "2026-03-21", summary: "[auto-merger] Merging org/repo#51: Fix auth" },
+      { job_name: "issue-worker", repo: "org/repo", item_number: 42, status: "completed", started_at: "2026-03-21", completed_at: "2026-03-21", summary: null },
+    ]);
+    const scheduler = makeScheduler();
+    await start(scheduler);
+    const msg = makeMessage({ content: "!yeti recent" });
+    mockEventHandlers["messageCreate"](msg);
+    await vi.waitFor(() => {
+      expect(msg.reply).toHaveBeenCalled();
+    });
+    const reply = msg.reply.mock.calls[0][0] as string;
+    expect(reply).toContain("**auto-merger**");
+    expect(reply).toContain("Merging org/repo#51: Fix auth");
+    expect(reply).not.toContain("[auto-merger]"); // prefix stripped
+    expect(reply).toContain("**issue-worker**");
+    expect(reply).toContain("org/repo#42 (completed)"); // fallback format
+  });
+
+  it("!yeti recent auto-merger passes job filter", async () => {
+    vi.mocked(db.getRecentActions).mockReturnValue([]);
+    const scheduler = makeScheduler();
+    await start(scheduler);
+    const msg = makeMessage({ content: "!yeti recent auto-merger" });
+    mockEventHandlers["messageCreate"](msg);
+    await vi.waitFor(() => {
+      expect(msg.reply).toHaveBeenCalled();
+    });
+    expect(db.getRecentActions).toHaveBeenCalledWith("auto-merger", 10);
+    expect(msg.reply).toHaveBeenCalledWith("No recent actions for **auto-merger**");
+  });
+
+  it("!yeti recent truncates output at 1900 chars", async () => {
+    const longActions = Array.from({ length: 20 }, (_, i) => ({
+      job_name: "auto-merger",
+      repo: "org/repo",
+      item_number: i + 1,
+      status: "completed" as const,
+      started_at: "2026-03-21",
+      completed_at: "2026-03-21",
+      summary: `[auto-merger] Merging org/repo#${i + 1}: ${"A".repeat(100)}`,
+    }));
+    vi.mocked(db.getRecentActions).mockReturnValue(longActions);
+    const scheduler = makeScheduler();
+    await start(scheduler);
+    const msg = makeMessage({ content: "!yeti recent auto-merger" });
+    mockEventHandlers["messageCreate"](msg);
+    await vi.waitFor(() => {
+      expect(msg.reply).toHaveBeenCalled();
+    });
+    const reply = msg.reply.mock.calls[0][0] as string;
+    expect(reply.length).toBeLessThanOrEqual(1903); // 1900 + "..."
+  });
+
+  it("help text includes the recent command", async () => {
+    const scheduler = makeScheduler();
+    await start(scheduler);
+    const msg = makeMessage({ content: "!yeti help" });
+    mockEventHandlers["messageCreate"](msg);
+    await vi.waitFor(() => {
+      expect(msg.reply).toHaveBeenCalled();
+    });
+    expect(msg.reply).toHaveBeenCalledWith(expect.stringContaining("!yeti recent"));
   });
 
   it("sets lastResult to ok after successful ready event", async () => {

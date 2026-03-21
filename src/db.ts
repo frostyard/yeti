@@ -324,6 +324,40 @@ export function searchRunsByItem(search: string, limit = 50): JobRun[] {
     .all(`%${search}%`, search, limit) as JobRun[];
 }
 
+export interface RecentAction {
+  job_name: string;
+  repo: string;
+  item_number: number;
+  status: string;
+  started_at: string;
+  completed_at: string | null;
+  summary: string | null;
+}
+
+export function getRecentActions(jobFilter?: string, limit = 10): RecentAction[] {
+  const filterClause = jobFilter ? "AND t.job_name = ?" : "";
+  const params: (string | number)[] = [];
+  if (jobFilter) params.push(jobFilter);
+  params.push(limit);
+
+  return getDb()
+    .prepare(`
+      SELECT t.job_name, t.repo, t.item_number, t.status, t.started_at, t.completed_at,
+        (SELECT jl.message FROM job_logs jl
+         WHERE jl.run_id = t.run_id
+         AND jl.level = 'info'
+         AND jl.message LIKE '%#' || t.item_number || '%'
+         ORDER BY jl.id DESC LIMIT 1) as summary
+      FROM tasks t
+      WHERE t.item_number > 0
+        AND t.status IN ('completed', 'failed')
+        ${filterClause}
+      ORDER BY t.started_at DESC
+      LIMIT ?
+    `)
+    .all(...params) as RecentAction[];
+}
+
 export function hasPreviousCiFixerTasks(repo: string, prNumber: number): boolean {
   const row = getDb()
     .prepare(
