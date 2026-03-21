@@ -290,8 +290,8 @@ For each canonical (non-duplicate) issue:
 Scans all open PRs per repo. For each PR:
 
 - **Dependabot PRs** (`dependabot[bot]` author): merges if all CI checks pass
-- **Yeti PRs** (`yeti/issue-` branch prefix): merges if the PR has a valid
-  LGTM comment AND all CI checks pass. LGTM validation uses
+- **Yeti PRs** (`yeti/issue-` or `yeti/improve-` branch prefix): merges if
+  the PR has a valid LGTM comment AND all CI checks pass. LGTM validation uses
   `isYetiComment()` (marker-based) rather than self-login to identify
   Yeti-authored comments, so LGTM from a shared GitHub account is accepted.
   Merge-from-base commits (e.g. from ci-fixer resolving conflicts) do not
