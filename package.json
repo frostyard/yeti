@@ -12,8 +12,7 @@
   },
   "dependencies": {
     "better-sqlite3": "^12",
-    "discord.js": "^14.25.1",
-    "yaml": "^2.8.2"
+    "discord.js": "^14.25.1"
   },
   "devDependencies": {
     "@types/better-sqlite3": "^7",
