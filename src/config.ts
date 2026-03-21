@@ -13,6 +13,7 @@ export const LABELS = {
   ready: "Ready",
   priority: "Priority",
   inReview: "In Review",
+  needsRefinement: "Needs Refinement",
 } as const;
 
 export const LABEL_SPECS: Record<string, { color: string; description: string }> = {
@@ -20,11 +21,11 @@ export const LABEL_SPECS: Record<string, { color: string; description: string }>
   "Ready":                { color: "0e8a16", description: "Yeti has finished — needs human attention" },
   "Priority":             { color: "d93f0b", description: "High-priority — processed first in all Yeti queues" },
   "In Review":            { color: "fbca04", description: "Issue has an open PR being reviewed" },
+  "Needs Refinement":     { color: "d876e3", description: "Issue needs an AI-generated implementation plan" },
 };
 
 /** Labels that were previously managed by Yeti and can be cleaned up as stale. */
 export const LEGACY_LABELS = new Set([
-  "Needs Refinement",
   "Plan Produced",
   "Reviewed",
   "prod-report",

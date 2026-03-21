@@ -72,9 +72,9 @@ Claude processes, and close the database.
 
 **`config.ts`** — Loads configuration in priority order: environment variables >
 `~/.yeti/config.json` > hardcoded defaults. Exports `LABELS` (`refined`,
-`ready`, `priority`, `inReview`), `LABEL_SPECS` (synced to all repos by
-repo-standards — includes colors and descriptions for all four labels),
-`LEGACY_LABELS` (set of old labels cleaned up as stale, including
+`ready`, `priority`, `inReview`, `needsRefinement`), `LABEL_SPECS` (synced to
+all repos by repo-standards — includes colors and descriptions for all five
+labels), `LEGACY_LABELS` (set of old labels cleaned up as stale, including
 `yeti-mergeable` and `yeti-error`), `INTERVALS`, `SCHEDULES`, `ENABLED_JOBS`,
 and connection strings. `WORK_DIR` is always `~/.yeti`. Jobs must be listed in
 `ENABLED_JOBS` (the `enabledJobs` config field) to be registered with the
@@ -243,7 +243,7 @@ See [Jobs](jobs.md) for detailed behavior of each.
 
 | Job | Trigger | Interval | Summary |
 |-----|---------|----------|---------|
-| `issue-refiner` | Open issues without plan comment | 5 min | Discovers issues via comment analysis, posts implementation plans, refines plans based on unreacted human feedback, responds to follow-up questions on issues with open PRs |
+| `issue-refiner` | Issues labelled `Needs Refinement` | 5 min | Posts implementation plans for issues with `Needs Refinement` label (exempt: `[ci-unrelated]` and `[yeti-error]` issues), refines plans based on unreacted human feedback, responds to follow-up questions on issues with open PRs |
 | `issue-worker` | Label `Refined` | 5 min | Implements the issue, creates a PR |
 | `ci-fixer` | Any open PR with failing checks | 10 min | Resolves merge conflicts, fixes CI failures |
 | `review-addresser` | Yeti PRs with unreacted review comments | 5 min | Fetches unresolved review comments, pushes fix commits, reacts with thumbsup to track addressed comments |
@@ -259,16 +259,17 @@ See [Jobs](jobs.md) for detailed behavior of each.
 ### Content-Based State Machine
 
 Issues and PRs are discovered by analysing comments, reactions, and PR state —
-not labels. Four labels are used:
+not labels. Five labels are used:
 
-- `Refined` — trigger for issue-worker (only label that drives a state transition)
+- `Needs Refinement` — trigger for issue-refiner (requests an AI-generated implementation plan)
+- `Refined` — trigger for issue-worker (requests implementation of the plan)
 - `Ready` — informational, signals "Yeti is done, your turn"
 - `In Review` — informational, signals an issue has an open PR under review
 - `Priority` — high-priority items processed first in all Yeti queues
 
 ```
 Issues:
-  No plan comment        →  (refiner posts plan)         →  Ready label added
+  Needs Refinement label →  (refiner posts plan)         →  Needs Refinement removed, Ready added
   Unreacted feedback     →  (refiner refines plan)       →  Ready label re-added
   Open PR + follow-up Q  →  (refiner posts response)     →  👍 reactions added (no label changes)
   Refined label          →  (worker creates PR)          →  Refined removed, Ready removed, In Review added

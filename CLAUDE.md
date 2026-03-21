@@ -50,14 +50,14 @@ Yeti is a self-hosted GitHub automation daemon that polls repositories on timers
 
 ### Jobs (`src/jobs/`)
 
-Each job exports a `run()` function. Jobs discover work via comment analysis, reactions, labels, and PR state — not solely labels. Four labels exist: `Refined` (trigger), `Ready` (informational), `In Review` (informational), `Priority` (queue ordering). Processed items are tracked via thumbsup reactions on comments.
+Each job exports a `run()` function. Jobs discover work via comment analysis, reactions, labels, and PR state — not solely labels. Five labels exist: `Needs Refinement` (trigger for issue-refiner), `Refined` (trigger for issue-worker), `Ready` (informational), `In Review` (informational), `Priority` (queue ordering). Processed items are tracked via thumbsup reactions on comments.
 
 Jobs must be listed in the `enabledJobs` config array to run. An empty or missing `enabledJobs` means no jobs start.
 
 ### Key patterns
 
 - **Worktree isolation**: Each task gets `~/.yeti/worktrees/<owner>/<repo>/<job>/<branch>`, cleaned up in `finally` blocks.
-- **Content-based state machine**: Issue/PR state is inferred from comments and reactions, not label-driven workflows.
+- **Content-based state machine**: Issue/PR state is inferred from comments and reactions, not label-driven workflows. Exception: the issue-refiner requires the `Needs Refinement` label to produce a new plan (machine-generated `[ci-unrelated]` and `[yeti-error]` issues are exempt).
 - **Two-phase identify/process**: Used by ci-fixer, improvement-identifier, issue-refiner — scan all items first, then process (prevents race conditions with concurrent GitHub API calls).
 - **Crash recovery**: On startup, tasks still marked `running` in DB get their worktrees cleaned and are marked `failed`.
 - **Tree-diff guard**: All PR-creating jobs gate on both `hasNewCommits` (commit count) and `hasTreeDiff` (actual tree difference via `git diff --quiet`) before pushing/creating PRs. This prevents failures when commits produce no effective changes.
