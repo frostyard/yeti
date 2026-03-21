@@ -35,7 +35,7 @@ vi.mock("./github.js", () => {
   };
 });
 
-import { reportError } from "./error-reporter.js";
+import { reportError, _lastReported } from "./error-reporter.js";
 import { ClaudeTimeoutError } from "./claude.js";
 import { ShutdownError } from "./shutdown.js";
 import * as gh from "./github.js";
@@ -44,6 +44,7 @@ import * as log from "./log.js";
 describe("reportError", () => {
   afterEach(() => {
     mockShuttingDown = false;
+    _lastReported.clear();
     vi.clearAllMocks();
   });
 
@@ -111,6 +112,25 @@ describe("reportError", () => {
     expect(body).toContain("was actively producing output");
     expect(body).toContain("last output here");
     expect(body).toContain("stderr here");
+  });
+
+  it("evicts expired entries from lastReported on each insertion", async () => {
+    const thirtyOneMinutesAgo = Date.now() - 31 * 60 * 1000;
+    const fiveMinutesAgo = Date.now() - 5 * 60 * 1000;
+
+    // Seed with one expired and one still-active entry
+    _lastReported.set("old-fp", thirtyOneMinutesAgo);
+    _lastReported.set("recent-fp", fiveMinutesAgo);
+
+    // Report a new error, which triggers cleanup + insertion
+    await reportError("new-fp", "ctx", new Error("boom"));
+
+    // The expired entry should have been evicted
+    expect(_lastReported.has("old-fp")).toBe(false);
+    // The still-active entry should remain
+    expect(_lastReported.has("recent-fp")).toBe(true);
+    // The new entry should be present
+    expect(_lastReported.has("new-fp")).toBe(true);
   });
 
   it("includes diagnostics in recurrence comment for ClaudeTimeoutError", async () => {

@@ -6,7 +6,7 @@ import * as log from "./log.js";
 import { isShuttingDown, ShutdownError } from "./shutdown.js";
 
 const COOLDOWN_MS = 30 * 60 * 1000; // 30 minutes
-const lastReported = new Map<string, number>();
+export const _lastReported = new Map<string, number>();
 
 export async function reportError(
   fingerprint: string,
@@ -36,12 +36,18 @@ export async function reportError(
   }
 
   const now = Date.now();
-  const lastTime = lastReported.get(fingerprint);
+  const lastTime = _lastReported.get(fingerprint);
   if (lastTime && now - lastTime < COOLDOWN_MS) {
     log.warn(`[error-reporter] Skipping duplicate report for "${fingerprint}" (cooldown)`);
     return;
   }
-  lastReported.set(fingerprint, now);
+
+  // Evict expired entries to prevent unbounded memory growth
+  for (const [key, timestamp] of _lastReported) {
+    if (now - timestamp >= COOLDOWN_MS) _lastReported.delete(key);
+  }
+
+  _lastReported.set(fingerprint, now);
 
   try {
     const title = `[yeti-error] ${fingerprint}`;
