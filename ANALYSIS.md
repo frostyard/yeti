@@ -8,7 +8,6 @@
 
 - **TypeScript** (strict, ES2022) on **Node.js 22**
 - **SQLite** (better-sqlite3, WAL mode) for task tracking
-- **Baileys** for WhatsApp Web integration
 - External CLIs: `gh`, `claude`, `git`
 - ~11,800 lines of TypeScript across ~47 source files
 
@@ -36,7 +35,6 @@ GitHub Issues → [issue-refiner] plans → Human adds "Refined" label →
 | repo-standards | Daily 2AM | Sync labels |
 | improvement-identifier | Daily 3AM | Find & implement improvements |
 | issue-auditor | Daily 5AM | Audit label state |
-| whatsapp-handler | Event-driven | WhatsApp → GH issues |
 
 ### Key Patterns
 
@@ -49,7 +47,7 @@ GitHub Issues → [issue-refiner] plans → Human adds "Refined" label →
 
 ### HTTP Dashboard (port 3000)
 
-Dashboard, job triggers, log viewer, config editor, WhatsApp pairing, health check endpoint, queue management (merge/skip/prioritize).
+Dashboard, job triggers, log viewer, config editor, health check endpoint, queue management (merge/skip/prioritize).
 
 ### Database (SQLite)
 
@@ -88,9 +86,6 @@ Priority: environment variables > `~/.yeti/config.json` > hardcoded defaults. Li
 | GET | `/logs/issue` | Issue-specific logs |
 | GET/POST | `/config` | Config viewer/editor |
 | GET | `/config/api` | JSON config (sensitive fields masked) |
-| GET | `/whatsapp` | WhatsApp status/pairing page |
-| GET | `/whatsapp/pair` | SSE endpoint for QR codes |
-| POST | `/whatsapp/unpair` | Clear WhatsApp auth |
 
 ### External Services
 
@@ -99,8 +94,6 @@ Priority: environment variables > `~/.yeti/config.json` > hardcoded defaults. Li
 | GitHub API | Issue/PR management | `gh` CLI with retry/circuit-breaker |
 | GitHub Actions | CI/CD | Check runs API, workflow logs |
 | Slack | Notifications | Incoming webhooks + bot API |
-| WhatsApp | Real-time issue creation | Baileys (XMPP-based client) |
-| OpenAI API | Voice transcription | Whisper for WhatsApp voice notes |
 | Claude CLI | AI execution | Spawned subprocess, streamed I/O |
 
 ### Error Handling
