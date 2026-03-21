@@ -11,9 +11,22 @@ let connected = false;
 let lastResult: "ok" | "error" | null = null;
 let schedulerRef: Scheduler | null = null;
 let startedAt: Date | null = null;
+let readyResolve: (() => void) | null = null;
+let readyPromise: Promise<void> | null = null;
 
 export function isDiscordConfigured(): boolean {
   return !!DISCORD_BOT_TOKEN && !!DISCORD_CHANNEL_ID;
+}
+
+export function ready(): Promise<void> {
+  if (!isDiscordConfigured()) return Promise.resolve();
+  if (!readyPromise) return Promise.reject(new Error("Discord not started"));
+  return Promise.race([
+    readyPromise,
+    new Promise<void>((_, reject) =>
+      setTimeout(() => reject(new Error("Discord connection timeout")), 10_000)
+    ),
+  ]);
 }
 
 export function discordStatus(): {
@@ -43,6 +56,7 @@ export async function start(scheduler: Scheduler): Promise<void> {
 
   schedulerRef = scheduler;
   startedAt = new Date();
+  readyPromise = new Promise<void>((resolve) => { readyResolve = resolve; });
 
   client = new Client({
     intents: [
@@ -59,6 +73,7 @@ export async function start(scheduler: Scheduler): Promise<void> {
         channel = ch as TextChannel;
         connected = true;
         lastResult = "ok";
+        readyResolve?.();
         log.info(`[discord] Connected as ${client!.user?.tag}`);
       } else {
         log.error(`[discord] Channel ${DISCORD_CHANNEL_ID} not found or not a text channel`);
@@ -120,6 +135,8 @@ export async function stop(): Promise<void> {
     await client.destroy();
     client = null;
     schedulerRef = null;
+    readyPromise = null;
+    readyResolve = null;
   }
 }
 

@@ -72,7 +72,7 @@ vi.mock("./github.js", () => ({
   ])),
 }));
 
-import { isDiscordConfigured, discordStatus, notify, start, stop } from "./discord.js";
+import { isDiscordConfigured, discordStatus, notify, start, stop, ready } from "./discord.js";
 import * as gh from "./github.js";
 import { runClaude } from "./claude.js";
 import type { Scheduler } from "./scheduler.js";
@@ -507,5 +507,48 @@ describe("start and commands", () => {
     await start(makeScheduler());
     await stop();
     expect(mockClient.destroy).toHaveBeenCalled();
+  });
+});
+
+describe("ready", () => {
+  beforeEach(async () => {
+    vi.clearAllMocks();
+    Object.keys(mockEventHandlers).forEach((k) => delete mockEventHandlers[k]);
+  });
+
+  it("resolves immediately when Discord is not configured", async () => {
+    mockConfig.DISCORD_BOT_TOKEN = "";
+    mockConfig.DISCORD_CHANNEL_ID = "";
+    await expect(ready()).resolves.toBeUndefined();
+  });
+
+  it("resolves after the ready event fires", async () => {
+    mockConfig.DISCORD_BOT_TOKEN = "test-token";
+    mockConfig.DISCORD_CHANNEL_ID = "test-channel";
+    await start(makeScheduler());
+
+    const readyP = ready();
+    await mockEventHandlers["ready"]();
+    await expect(readyP).resolves.toBeUndefined();
+  });
+
+  it("rejects on timeout when ready event never fires", async () => {
+    vi.useFakeTimers();
+    mockConfig.DISCORD_BOT_TOKEN = "test-token";
+    mockConfig.DISCORD_CHANNEL_ID = "test-channel";
+    await start(makeScheduler());
+
+    const readyP = ready();
+    vi.advanceTimersByTime(10_000);
+    await expect(readyP).rejects.toThrow("Discord connection timeout");
+    vi.useRealTimers();
+  });
+
+  it("rejects when start was not called", async () => {
+    mockConfig.DISCORD_BOT_TOKEN = "test-token";
+    mockConfig.DISCORD_CHANNEL_ID = "test-channel";
+    // stop to clear readyPromise from any prior start
+    await stop();
+    await expect(ready()).rejects.toThrow("Discord not started");
   });
 });
