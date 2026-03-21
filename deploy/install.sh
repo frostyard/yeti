@@ -1,8 +1,13 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-REPO="frostyard/yeti"
 INSTALL_DIR="/opt/yeti"
+# Resolve repo: .repo file (from extracted tarball) → argument → default
+if [[ -f "$INSTALL_DIR/.repo" ]]; then
+  REPO=$(cat "$INSTALL_DIR/.repo")
+else
+  REPO="${1:-frostyard/yeti}"
+fi
 USER_NAME="$(whoami)"
 
 log() { echo "==> $*"; }
@@ -37,15 +42,17 @@ sudo cp "$INSTALL_DIR/deploy/yeti-updater.service" /etc/systemd/system/
 sudo cp "$INSTALL_DIR/deploy/yeti-updater.timer" /etc/systemd/system/
 chmod +x "$INSTALL_DIR/deploy/deploy.sh"
 
+REPO_OWNER="${REPO%%/*}"
+
 # Bootstrap config file if it doesn't exist
 CONFIG_DIR="$HOME/.yeti"
 CONFIG_FILE="$CONFIG_DIR/config.json"
 if [[ ! -f "$CONFIG_FILE" ]]; then
   mkdir -p "$CONFIG_DIR"
-  cat > "$CONFIG_FILE" << 'CONF'
+  cat > "$CONFIG_FILE" << CONF
 {
-  "githubOwners": ["frostyard"],
-  "selfRepo": "frostyard/yeti",
+  "githubOwners": ["${REPO_OWNER}"],
+  "selfRepo": "${REPO}",
   "port": 9384,
   "discordBotToken": "",
   "discordChannelId": "",

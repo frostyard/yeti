@@ -41,8 +41,11 @@ jobs:
       - run: npm run build
       - run: npm prune --omit=dev
 
+      - name: Stamp source repository
+        run: echo "${{ github.repository }}" > .repo
+
       - name: Create release tarball
-        run: tar -czf yeti.tar.gz dist/ deploy/ node_modules/
+        run: tar -czf yeti.tar.gz .repo dist/ deploy/ node_modules/
 
       - name: Push tag
         run: |
