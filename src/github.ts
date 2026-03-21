@@ -313,14 +313,13 @@ export async function listRepos(): Promise<Repo[]> {
     return repoCache.repos;
   }
 
-  // Deduplicate concurrent calls: if a fetch is already in flight, reuse it
+  // Deduplicate concurrent calls: if a fetch-and-filter is already in flight, reuse it
   if (repoCachePromise) {
     return repoCachePromise;
   }
 
-  repoCachePromise = fetchRepos();
-  try {
-    const fetched = await repoCachePromise;
+  repoCachePromise = (async () => {
+    const fetched = await fetchRepos();
 
     // If the fetch returned empty but we had repos before, a transient error
     // (e.g. rate limit) likely caused all owners to fail. Return stale cache.
@@ -332,6 +331,10 @@ export async function listRepos(): Promise<Repo[]> {
     const repos = filterRepos(fetched);
     repoCache = { repos, fetchedAt: Date.now() };
     return repos;
+  })();
+
+  try {
+    return await repoCachePromise;
   } finally {
     repoCachePromise = null;
   }
