@@ -48,6 +48,14 @@ export async function run(repos: Repo[]): Promise<void> {
             continue;
           }
 
+          const mergeState = await gh.getPRMergeableState(repo.fullName, pr.number);
+          if (mergeState !== "MERGEABLE") {
+            if (mergeState === "CONFLICTING") {
+              log.warn(`[auto-merger] ${repo.fullName}#${pr.number} has merge conflicts, skipping`);
+            }
+            continue;
+          }
+
           gh.populateQueueCache("auto-mergeable", repo.fullName, { number: pr.number, title: pr.title, type: "pr", updatedAt: pr.updatedAt, priority: gh.hasPriorityLabel(pr.labels) });
           log.info(`[auto-merger] Merging ${repo.fullName}#${pr.number}: ${pr.title}`);
           await gh.mergePR(repo.fullName, pr.number);

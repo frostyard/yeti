@@ -27,6 +27,7 @@ const { mockGh } = vi.hoisted(() => ({
     mergePR: vi.fn(),
     removeLabel: vi.fn(),
     getPRChangedFiles: vi.fn(),
+    getPRMergeableState: vi.fn(),
     isRateLimited: vi.fn().mockReturnValue(false),
     isItemSkipped: vi.fn().mockReturnValue(false),
     hasPriorityLabel: vi.fn().mockReturnValue(false),
@@ -51,6 +52,7 @@ describe("auto-merger", () => {
     mockGh.mergePR.mockResolvedValue(undefined);
     mockGh.removeLabel.mockResolvedValue(undefined);
     mockGh.getPRChangedFiles.mockResolvedValue([]);
+    mockGh.getPRMergeableState.mockResolvedValue("MERGEABLE");
   });
 
   it("merges dependabot PR when checks pass", async () => {
@@ -263,5 +265,43 @@ describe("auto-merger", () => {
     await run([repo]);
 
     expect(mockGh.mergePR).not.toHaveBeenCalled();
+  });
+
+  it("skips PR with merge conflicts", async () => {
+    const pr = mockPR({ author: { login: "dependabot[bot]" } });
+    mockGh.listPRs.mockResolvedValue([pr]);
+    mockGh.getPRCheckStatus.mockResolvedValue("passing");
+    mockGh.getPRMergeableState.mockResolvedValue("CONFLICTING");
+
+    await run([repo]);
+
+    expect(mockGh.mergePR).not.toHaveBeenCalled();
+    expect(log.warn).toHaveBeenCalledWith(
+      `[auto-merger] ${repo.fullName}#${pr.number} has merge conflicts, skipping`,
+    );
+  });
+
+  it("skips PR in UNKNOWN mergeable state", async () => {
+    const pr = mockPR({ author: { login: "dependabot[bot]" } });
+    mockGh.listPRs.mockResolvedValue([pr]);
+    mockGh.getPRCheckStatus.mockResolvedValue("passing");
+    mockGh.getPRMergeableState.mockResolvedValue("UNKNOWN");
+
+    await run([repo]);
+
+    expect(mockGh.mergePR).not.toHaveBeenCalled();
+    expect(log.warn).not.toHaveBeenCalled();
+  });
+
+  it("checks mergeable state before merging", async () => {
+    const pr = mockPR({ author: { login: "dependabot[bot]" } });
+    mockGh.listPRs.mockResolvedValue([pr]);
+    mockGh.getPRCheckStatus.mockResolvedValue("passing");
+    mockGh.getPRMergeableState.mockResolvedValue("MERGEABLE");
+
+    await run([repo]);
+
+    expect(mockGh.getPRMergeableState).toHaveBeenCalledWith(repo.fullName, pr.number);
+    expect(mockGh.mergePR).toHaveBeenCalledWith(repo.fullName, pr.number);
   });
 });
