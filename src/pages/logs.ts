@@ -2,6 +2,13 @@ import type { Theme } from "./layout.js";
 import { PAGE_CSS, escapeHtml, formatDuration, htmlOpenTag, buildNav, THEME_SCRIPT } from "./layout.js";
 import type { JobRun, JobLog, Task } from "../db.js";
 
+function logLevelClass(level: string): string {
+  if (level === "error") return "log-error";
+  if (level === "warn") return "log-warn";
+  if (level === "debug") return "log-debug";
+  return "log-info";
+}
+
 export function buildLogsListPage(runs: JobRun[], jobNames: string[], jobFilter: string | null, theme: Theme, workItemsByRun?: Map<string, Task[]>, search?: string, recentItems?: Array<{ repo: string; item_number: number }>): string {
   const filterLinks = [
     `<a href="/logs"${!jobFilter ? ' class="active"' : ""}>All</a>`,
@@ -85,13 +92,6 @@ export function buildIssueLogsPage(
   workItemsByRun: Map<string, Task[]>,
   theme: Theme,
 ): string {
-  function logLevelClass(level: string): string {
-    if (level === "error") return "log-error";
-    if (level === "warn") return "log-warn";
-    if (level === "debug") return "log-debug";
-    return "log-info";
-  }
-
   const shortRepo = repo.includes("/") ? repo.split("/").pop()! : repo;
 
   const runSections = runs.map((run, i) => {
@@ -201,13 +201,6 @@ ${htmlOpenTag(theme)}
 }
 
 export function buildLogDetailPage(run: JobRun, logs: JobLog[], theme: Theme, tasks?: Task[]): string {
-  function logLevelClass(level: string): string {
-    if (level === "error") return "log-error";
-    if (level === "warn") return "log-warn";
-    if (level === "debug") return "log-debug";
-    return "log-info";
-  }
-
   const lastLogId = logs.length > 0 ? logs[logs.length - 1].id : 0;
 
   const logLines = logs
