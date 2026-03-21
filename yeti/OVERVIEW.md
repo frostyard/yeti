@@ -438,8 +438,9 @@ defaults.
 | Config key | Env variable | Default |
 |---|---|---|
 | `slackWebhook` | `YETI_SLACK_WEBHOOK` | *(empty — must be set)* |
+| `slackIdeasChannel` | `YETI_SLACK_IDEAS_CHANNEL` | *(empty — optional for idea notifications)* |
 | `slackBotToken` | `YETI_SLACK_BOT_TOKEN` | *(empty — optional for Slack notifications)* |
-| `githubOwners` | `YETI_GITHUB_OWNERS` | `["frostyard","frostyard"]` |
+| `githubOwners` | `YETI_GITHUB_OWNERS` | `["frostyard"]` |
 | `selfRepo` | `YETI_SELF_REPO` | `frostyard/yeti` |
 | `port` | `PORT` | `9384` |
 | `intervals.issueWorkerMs` | — | `300000` (5 min) |
@@ -463,6 +464,7 @@ defaults.
 | `pausedJobs` | — | `[]` (job names to pause on startup) |
 | `enabledJobs` | — | `[]` (job names to register with the scheduler; empty = no jobs run) |
 | `skippedItems` | — | `[]` (array of `{repo, number}` excluded from processing) |
+| `allowedRepos` | `YETI_ALLOWED_REPOS` | `null` (all repos) |
 | `prioritizedItems` | — | `[]` (array of `{repo, number}` processed first) |
 
 ### enabledJobs
@@ -475,6 +477,20 @@ Controls which jobs are registered with the scheduler at startup.
 - **Available values**: `issue-worker`, `issue-refiner`, `ci-fixer`, `review-addresser`, `doc-maintainer`, `auto-merger`, `repo-standards`, `improvement-identifier`, `issue-auditor`, `triage-yeti-errors`
 
 **Migration note**: existing configs without `enabledJobs` will have no jobs start after upgrading. Add the desired job names to `enabledJobs` in `~/.yeti/config.json` before upgrading.
+
+### allowedRepos
+
+Restricts which repositories Yeti processes. Applied as a filter on `listRepos()`.
+
+- **Field**: `allowedRepos` (string array or `null`)
+- **Env var**: `YETI_ALLOWED_REPOS` (comma-separated)
+- **Default**: `null` — no filtering, all discovered repos are processed
+- **Live-reloadable**: yes
+- `null` = all repos; `[]` = selfRepo only; `["repo-a", "repo-b"]` = those repos + selfRepo
+- `selfRepo` is always included regardless of the list (ensures Yeti can always process its own error issues)
+- Matching is case-insensitive; uses short repo names (not `owner/repo`)
+- Warns at runtime if a configured name doesn't match any discovered repository
+- Editable via the dashboard config UI; empty input maps to `[]` (no repos except selfRepo), not `null` (all repos). To restore `null` (all repos), remove the `allowedRepos` key from `config.json` directly.
 
 Config changes made via the web UI (`POST /config`) take effect immediately
 at runtime — no restart required. The config module uses ESM live bindings

@@ -264,7 +264,7 @@ For each canonical (non-duplicate) issue:
 - Skips if an open `yeti/docs-*` PR already exists for the repo
 - Skips if HEAD matches the last `[doc-maintainer]` commit (no new code
   changes to document)
-- Creates a worktree on branch `yeti/docs-<hex4>`
+- Creates a worktree on branch `yeti/docs-<YYYYMMDD>-<hex4>`
 - Before running Claude, fetches recently-closed issues that had
   implementation plans and writes them to a temporary `.plans/` directory
   in the worktree (capped at 10 plans, each truncated to 5,000 characters)
