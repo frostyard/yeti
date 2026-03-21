@@ -417,6 +417,14 @@ export async function run(repos: Repo[]): Promise<void> {
               reportError("issue-refiner:process-issue", `${repo.fullName}#${issue.number}`, err),
             ),
           );
+        } else if (issue.labels.some((l) => l.name === LABELS.needsRefinement)) {
+          // Plan exists but Needs Refinement label was re-added — produce a fresh plan
+          gh.populateQueueCache("needs-refinement", repo.fullName, { number: issue.number, title: issue.title, type: "issue", updatedAt: issue.updatedAt, priority: gh.hasPriorityLabel(issue.labels) });
+          tasks.push(
+            processIssue(repo, issue).catch((err) =>
+              reportError("issue-refiner:process-issue", `${repo.fullName}#${issue.number}`, err),
+            ),
+          );
         } else {
           // Plan exists — check for unreacted human comments after the plan
           const commentsAfterPlan = comments.slice(lastPlanIdx + 1);
