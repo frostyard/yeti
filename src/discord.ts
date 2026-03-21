@@ -2,6 +2,7 @@ import { Client, GatewayIntentBits, type Message, type TextChannel } from "disco
 import { DISCORD_BOT_TOKEN, DISCORD_CHANNEL_ID, DISCORD_ALLOWED_USERS, GITHUB_OWNERS } from "./config.js";
 import * as log from "./log.js";
 import * as gh from "./github.js";
+import * as db from "./db.js";
 import { queueStatus, enqueue, runClaude } from "./claude.js";
 import type { Scheduler } from "./scheduler.js";
 
@@ -287,6 +288,45 @@ async function handleCommand(command: string, args: string[], message: Message):
       break;
     }
 
+    case "recent": {
+      const jobFilter = args[0] || undefined;
+      const perJobLimit = jobFilter ? 10 : 3;
+      const totalLimit = jobFilter ? 10 : 30;
+      const actions = db.getRecentActions(jobFilter, totalLimit);
+
+      if (actions.length === 0) {
+        await message.reply(jobFilter ? `No recent actions for **${jobFilter}**` : "No recent actions");
+        break;
+      }
+
+      const grouped = new Map<string, typeof actions>();
+      for (const action of actions) {
+        const list = grouped.get(action.job_name) ?? [];
+        if (list.length < perJobLimit) list.push(action);
+        grouped.set(action.job_name, list);
+      }
+
+      const sections: string[] = [];
+      for (const [jobName, items] of grouped) {
+        const lines = items.map((a) => {
+          if (a.summary) {
+            const cleaned = a.summary.replace(/^\[.*?\]\s*/, "");
+            return `• ${cleaned}`;
+          }
+          return `• ${a.repo}#${a.item_number} (${a.status})`;
+        });
+        sections.push(`**${jobName}** (${items.length} recent)\n${lines.join("\n")}`);
+      }
+
+      let output = sections.join("\n\n");
+      if (!jobFilter && actions.length > [...grouped.values()].reduce((s, v) => s + v.length, 0)) {
+        output += "\n\n_Use `!yeti recent <job>` for more_";
+      }
+      if (output.length > 1900) output = output.slice(0, 1900) + "...";
+      await message.reply(output);
+      break;
+    }
+
     case "help": {
       await message.reply(
         "**Yeti Commands:**\n" +
@@ -295,6 +335,7 @@ async function handleCommand(command: string, args: string[], message: Message):
         "`!yeti trigger <job>` — trigger a job\n" +
         "`!yeti pause <job>` — pause a job\n" +
         "`!yeti resume <job>` — resume a job\n" +
+        "`!yeti recent [job]` — show recent actions\n" +
         "`!yeti issue <repo> <title>` — create a GitHub issue\n" +
         "`!yeti look <repo>#<number>` — summarize an issue/PR\n" +
         "`!yeti assign <repo>#<number>` — label issue as Refined\n" +
