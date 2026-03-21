@@ -22,6 +22,8 @@ vi.mock("./config.js", () => ({
     schedules: { docMaintainerHour: 1, repoStandardsHour: 2, improvementIdentifierHour: 3 },
     logRetentionDays: 14,
     logRetentionPerJob: 20,
+    enabledJobs: ["issue-worker", "ci-fixer"],
+    allowedRepos: ["repo1", "repo2"],
   }),
   writeConfig: vi.fn(),
   SKIPPED_ITEMS: [],
@@ -323,6 +325,77 @@ describe("HTTP server", () => {
     expect(res.status).toBe(303);
     expect(res.headers.location).toBe("/config?saved=1");
     expect(wc).toHaveBeenCalled();
+  });
+
+  it("POST /config parses comma-separated enabledJobs", async () => {
+    const { writeConfig: wc } = await import("./config.js");
+    await request(server, "POST", "/config", {
+      body: "enabledJobs=ci-fixer%2C%20auto-merger",
+    });
+    expect(wc).toHaveBeenCalledWith(
+      expect.objectContaining({ enabledJobs: ["ci-fixer", "auto-merger"] }),
+    );
+  });
+
+  it("POST /config parses empty enabledJobs as empty array", async () => {
+    const { writeConfig: wc } = await import("./config.js");
+    await request(server, "POST", "/config", {
+      body: "enabledJobs=",
+    });
+    expect(wc).toHaveBeenCalledWith(
+      expect.objectContaining({ enabledJobs: [] }),
+    );
+  });
+
+  it("POST /config parses comma-separated allowedRepos", async () => {
+    const { writeConfig: wc } = await import("./config.js");
+    await request(server, "POST", "/config", {
+      body: "allowedRepos=repo1%2C%20repo2",
+    });
+    expect(wc).toHaveBeenCalledWith(
+      expect.objectContaining({ allowedRepos: ["repo1", "repo2"] }),
+    );
+  });
+
+  it("POST /config parses empty allowedRepos as empty array", async () => {
+    const { writeConfig: wc } = await import("./config.js");
+    await request(server, "POST", "/config", {
+      body: "allowedRepos=",
+    });
+    expect(wc).toHaveBeenCalledWith(
+      expect.objectContaining({ allowedRepos: [] }),
+    );
+  });
+
+  it("GET /config renders enabledJobs and allowedRepos fields", async () => {
+    const res = await request(server, "GET", "/config");
+    expect(res.status).toBe(200);
+    expect(res.body).toContain('name="enabledJobs"');
+    expect(res.body).toContain('name="allowedRepos"');
+    expect(res.body).toContain("issue-worker, ci-fixer");
+    expect(res.body).toContain("repo1, repo2");
+  });
+
+  it("GET /config renders allowedRepos as empty when null", async () => {
+    const { getConfigForDisplay } = await import("./config.js");
+    (getConfigForDisplay as ReturnType<typeof vi.fn>).mockReturnValueOnce({
+      slackWebhook: "****cdef",
+      githubOwners: ["owner1"],
+      selfRepo: "owner1/repo1",
+      authToken: "Not configured",
+      port: 9384,
+      intervals: { issueWorkerMs: 300000 },
+      schedules: { docMaintainerHour: 1 },
+      logRetentionDays: 14,
+      logRetentionPerJob: 20,
+      enabledJobs: [],
+      allowedRepos: null,
+    });
+    const res = await request(server, "GET", "/config");
+    expect(res.status).toBe(200);
+    expect(res.body).toContain('name="allowedRepos"');
+    // null allowedRepos should render as empty value
+    expect(res.body).toMatch(/name="allowedRepos"[^>]*value=""/);
   });
 
   it("GET /login redirects to / when auth disabled", async () => {
