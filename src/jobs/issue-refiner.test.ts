@@ -426,4 +426,28 @@ describe("issue-refiner", () => {
     expect(mockClaude.createWorktree).not.toHaveBeenCalled();
     expect(mockGh.commentOnIssue).not.toHaveBeenCalled();
   });
+
+  it("re-plans when Needs Refinement label is present even if a plan already exists", async () => {
+    const issue = mockIssue({
+      body: "Add dark mode",
+      labels: [{ name: "Needs Refinement" }],
+    });
+    mockGh.listOpenIssues.mockResolvedValueOnce([issue]);
+    mockGh.getOpenPRForIssue.mockResolvedValue(null);
+    mockGh.getIssueComments.mockResolvedValue([
+      { id: 100, body: "<!-- yeti-automated -->\n## Implementation Plan\n\nOld plan here", login: "yeti-bot" },
+      { id: 101, body: "<!-- yeti-automated -->\n## Plan Review\n\nSome critique", login: "yeti-bot" },
+    ]);
+    mockClaude.runClaude.mockResolvedValue("New fresh plan");
+
+    await run([repo]);
+
+    // Should create a worktree and produce a new plan
+    expect(mockClaude.createWorktree).toHaveBeenCalled();
+    expect(mockGh.commentOnIssue).toHaveBeenCalledWith(
+      repo.fullName,
+      issue.number,
+      expect.stringContaining("## Implementation Plan"),
+    );
+  });
 });
