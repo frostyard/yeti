@@ -58,6 +58,7 @@ export async function start(scheduler: Scheduler): Promise<void> {
       if (ch?.isTextBased()) {
         channel = ch as TextChannel;
         connected = true;
+        lastResult = "ok";
         log.info(`[discord] Connected as ${client!.user?.tag}`);
       } else {
         log.error(`[discord] Channel ${DISCORD_CHANNEL_ID} not found or not a text channel`);
@@ -79,6 +80,7 @@ export async function start(scheduler: Scheduler): Promise<void> {
       if (ch?.isTextBased()) {
         channel = ch as TextChannel;
         connected = true;
+        lastResult = "ok";
         log.info("[discord] Reconnected");
       }
     } catch {
