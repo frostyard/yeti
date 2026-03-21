@@ -242,4 +242,26 @@ describe("auto-merger", () => {
     expect(mockGh.hasValidLGTM).not.toHaveBeenCalled();
     expect(mockGh.mergePR).toHaveBeenCalledWith(repo.fullName, pr.number);
   });
+
+  it("merges improve PR when checks pass and LGTM is valid", async () => {
+    const pr = mockPR({ headRefName: "yeti/improve-ab12" });
+    mockGh.listPRs.mockResolvedValue([pr]);
+    mockGh.hasValidLGTM.mockResolvedValue(true);
+    mockGh.getPRCheckStatus.mockResolvedValue("passing");
+
+    await run([repo]);
+
+    expect(mockGh.hasValidLGTM).toHaveBeenCalledWith(repo.fullName, pr.number, "main");
+    expect(mockGh.mergePR).toHaveBeenCalledWith(repo.fullName, pr.number);
+  });
+
+  it("skips improve PR without valid LGTM", async () => {
+    const pr = mockPR({ headRefName: "yeti/improve-ab12" });
+    mockGh.listPRs.mockResolvedValue([pr]);
+    mockGh.hasValidLGTM.mockResolvedValue(false);
+
+    await run([repo]);
+
+    expect(mockGh.mergePR).not.toHaveBeenCalled();
+  });
 });
