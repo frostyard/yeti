@@ -38,7 +38,7 @@ async function processPR(repo: Repo, pr: gh.PR, reviewData: gh.PRReviewData): Pr
 
     const claudeOutput = await claude.enqueue(() => claude.runClaude(prompt, wtPath!), gh.hasPriorityLabel(pr.labels));
 
-    if (await claude.hasNewCommits(wtPath, pr.headRefName)) {
+    if (await claude.hasNewCommits(wtPath, pr.headRefName) && await claude.hasTreeDiff(wtPath, pr.headRefName)) {
       await claude.pushBranch(wtPath, pr.headRefName);
       try {
         const description = await claude.regeneratePRDescription(wtPath, pr.baseRefName, pr);

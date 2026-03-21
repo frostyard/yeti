@@ -665,7 +665,8 @@ export async function createPR(
   }
 }
 
-export async function listPRs(repo: string): Promise<PR[]> {
+export async function listPRs(repo: string, { fresh = false }: { fresh?: boolean } = {}): Promise<PR[]> {
+  if (fresh) apiCache.invalidate(`pr-list:${repo}`);
   return apiCache.dedupedFetch(`pr-list:${repo}`, 60_000, async () => {
     const raw = await gh([
       "pr",
@@ -698,7 +699,7 @@ export async function listMergedPRsForIssue(repo: string, issueNumber: number): 
 }
 
 export async function getOpenPRForIssue(repo: string, issueNumber: number): Promise<PR | null> {
-  const prs = await listPRs(repo);
+  const prs = await listPRs(repo, { fresh: true });
   const branchPrefix = `yeti/issue-${issueNumber}-`;
   return prs.find((pr) => pr.headRefName.startsWith(branchPrefix)) ?? null;
 }

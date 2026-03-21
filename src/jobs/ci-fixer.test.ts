@@ -55,6 +55,7 @@ const { mockGh, mockClaude, mockDb, MockRateLimitError } = vi.hoisted(() => {
     enqueue: vi.fn(),
     runClaude: vi.fn(),
     hasNewCommits: vi.fn(),
+    hasTreeDiff: vi.fn(),
     pushBranch: vi.fn(),
     regeneratePRDescription: vi.fn(),
     attemptMerge: vi.fn(),
@@ -96,6 +97,7 @@ describe("ci-fixer", () => {
     mockClaude.enqueue.mockImplementation((fn: () => Promise<string>) => fn());
     mockClaude.runClaude.mockResolvedValue('{"related": true, "fingerprint": "", "reason": "related to PR"}');
     mockClaude.hasNewCommits.mockResolvedValue(true);
+    mockClaude.hasTreeDiff.mockResolvedValue(true);
     mockClaude.pushBranch.mockResolvedValue(undefined);
     mockClaude.removeWorktree.mockResolvedValue(undefined);
     mockClaude.regeneratePRDescription.mockResolvedValue("## Summary\nUpdated");

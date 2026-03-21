@@ -61,7 +61,7 @@ async function resolveConflicts(repo: Repo, pr: gh.PR): Promise<boolean> {
 
     await claude.enqueue(() => claude.runClaude(prompt, wtPath!), gh.hasPriorityLabel(pr.labels));
 
-    if (await claude.hasNewCommits(wtPath, pr.headRefName)) {
+    if (await claude.hasNewCommits(wtPath, pr.headRefName) && await claude.hasTreeDiff(wtPath, pr.headRefName)) {
       await claude.pushBranch(wtPath, pr.headRefName);
       try {
         const description = await claude.regeneratePRDescription(wtPath, pr.baseRefName, pr);
@@ -255,7 +255,7 @@ async function fixCI(repo: Repo, pr: gh.PR, failLog: string): Promise<void> {
 
     await claude.enqueue(() => claude.runClaude(prompt, wtPath!), gh.hasPriorityLabel(pr.labels));
 
-    if (await claude.hasNewCommits(wtPath, pr.headRefName)) {
+    if (await claude.hasNewCommits(wtPath, pr.headRefName) && await claude.hasTreeDiff(wtPath, pr.headRefName)) {
       await claude.pushBranch(wtPath, pr.headRefName);
       try {
         const description = await claude.regeneratePRDescription(wtPath, pr.baseRefName, pr);
@@ -374,7 +374,7 @@ async function revertPreviousUnrelatedFixes(
 
     await claude.enqueue(() => claude.runClaude(prompt, wtPath!), gh.hasPriorityLabel(pr.labels));
 
-    if (await claude.hasNewCommits(wtPath, pr.headRefName)) {
+    if (await claude.hasNewCommits(wtPath, pr.headRefName) && await claude.hasTreeDiff(wtPath, pr.headRefName)) {
       await claude.pushBranch(wtPath, pr.headRefName);
       log.info(`[ci-fixer] Reverted unrelated fixes for ${fullName}#${pr.number}`);
     }

@@ -40,6 +40,7 @@ const { mockGh, mockClaude, mockDb } = vi.hoisted(() => ({
     enqueue: vi.fn(),
     runClaude: vi.fn(),
     hasNewCommits: vi.fn(),
+    hasTreeDiff: vi.fn(),
     pushBranch: vi.fn(),
     regeneratePRDescription: vi.fn(),
   },
@@ -85,6 +86,7 @@ describe("review-addresser", () => {
     mockClaude.enqueue.mockImplementation((fn: () => Promise<string>) => fn());
     mockClaude.runClaude.mockResolvedValue("addressed");
     mockClaude.hasNewCommits.mockResolvedValue(true);
+    mockClaude.hasTreeDiff.mockResolvedValue(true);
     mockClaude.pushBranch.mockResolvedValue(undefined);
     mockClaude.removeWorktree.mockResolvedValue(undefined);
     mockClaude.regeneratePRDescription.mockResolvedValue("## Summary\nUpdated");

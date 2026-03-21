@@ -720,7 +720,7 @@ describe("getOpenPRForIssue (uses cached listPRs)", () => {
     expect(pr).toBeNull();
   });
 
-  it("reuses cached listPRs result", async () => {
+  it("bypasses cache for fresh duplicate-PR guard", async () => {
     mockExecFile.mockImplementation((_cmd: string, _args: string[], _opts: any, cb: any) => {
       cb(null, JSON.stringify([
         { number: 5, title: "fix: something", headRefName: "yeti/issue-42-abc1", baseRefName: "main", labels: [], author: { login: "bot" } },
@@ -731,8 +731,8 @@ describe("getOpenPRForIssue (uses cached listPRs)", () => {
     const pr = await getOpenPRForIssue("org/repo", 42);
 
     expect(pr!.number).toBe(5);
-    // Only 1 gh call despite two function calls — cache shared
-    expect(mockExecFile).toHaveBeenCalledTimes(1);
+    // getOpenPRForIssue invalidates cache to avoid stale data — 2 calls expected
+    expect(mockExecFile).toHaveBeenCalledTimes(2);
   });
 });
 

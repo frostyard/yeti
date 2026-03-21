@@ -60,6 +60,8 @@ Jobs must be listed in the `enabledJobs` config array to run. An empty or missin
 - **Content-based state machine**: Issue/PR state is inferred from comments and reactions, not label-driven workflows.
 - **Two-phase identify/process**: Used by ci-fixer, improvement-identifier, issue-refiner — scan all items first, then process (prevents race conditions with concurrent GitHub API calls).
 - **Crash recovery**: On startup, tasks still marked `running` in DB get their worktrees cleaned and are marked `failed`.
+- **Tree-diff guard**: All PR-creating jobs gate on both `hasNewCommits` (commit count) and `hasTreeDiff` (actual tree difference via `git diff --quiet`) before pushing/creating PRs. This prevents failures when commits produce no effective changes.
+- **Fresh duplicate-PR guard**: `getOpenPRForIssue` bypasses the `listPRs` TTL cache (`fresh: true`) to avoid race conditions where a concurrent PR is invisible during the 60-second cache window.
 
 ## Testing
 
