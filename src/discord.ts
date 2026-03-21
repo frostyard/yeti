@@ -122,6 +122,9 @@ export async function stop(): Promise<void> {
 }
 
 function resolveRepo(shortName: string): string {
+  if (GITHUB_OWNERS.length === 0) {
+    throw new Error("GITHUB_OWNERS is not configured");
+  }
   return `${GITHUB_OWNERS[0]}/${shortName}`;
 }
 

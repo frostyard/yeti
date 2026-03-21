@@ -353,6 +353,20 @@ describe("start and commands", () => {
 
   // ── issue command ──
 
+  it("!yeti issue replies with error when GITHUB_OWNERS is empty", async () => {
+    mockConfig.GITHUB_OWNERS = [];
+    const scheduler = makeScheduler();
+    await start(scheduler);
+    const msg = makeMessage({ content: "!yeti issue snosi Fix bug" });
+    mockEventHandlers["messageCreate"](msg);
+    await vi.waitFor(() => {
+      expect(msg.reply).toHaveBeenCalled();
+    });
+    expect(gh.createIssue).not.toHaveBeenCalled();
+    expect(msg.reply).toHaveBeenCalledWith(expect.stringContaining("GITHUB_OWNERS is not configured"));
+    mockConfig.GITHUB_OWNERS = ["frostyard"];
+  });
+
   it("!yeti issue creates issue with valid repo and title", async () => {
     const scheduler = makeScheduler();
     await start(scheduler);
