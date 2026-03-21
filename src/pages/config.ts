@@ -14,6 +14,7 @@ export function buildConfigPage(saved: boolean, theme: Theme): string {
     slackWebhook: "YETI_SLACK_WEBHOOK",
     slackBotToken: "YETI_SLACK_BOT_TOKEN",
     slackIdeasChannel: "YETI_SLACK_IDEAS_CHANNEL",
+    allowedRepos: "YETI_ALLOWED_REPOS",
     githubOwners: "YETI_GITHUB_OWNERS",
     selfRepo: "YETI_SELF_REPO",
     port: "PORT",
@@ -69,6 +70,17 @@ ${htmlOpenTag(theme)}
 
     <label for="logRetentionPerJob">Min Logs Kept Per Job</label>
     <input type="number" name="logRetentionPerJob" id="logRetentionPerJob" value="${Number(cfg.logRetentionPerJob)}" min="0">
+
+    <h2>Jobs &amp; Repos</h2>
+    <label for="enabledJobs">Enabled Jobs (comma-separated)</label>
+    <input type="text" name="enabledJobs" id="enabledJobs" value="${escapeHtml(Array.isArray(cfg.enabledJobs) ? (cfg.enabledJobs as string[]).join(", ") : "")}">
+    <div class="field-note">Valid jobs: issue-refiner, issue-worker, ci-fixer, review-addresser, doc-maintainer, auto-merger, repo-standards, improvement-identifier, issue-auditor, triage-yeti-errors</div>
+    <div class="field-note">Empty means no jobs will run.</div>
+
+    <label for="allowedRepos">Allowed Repos (comma-separated short names)</label>
+    <input type="text" name="allowedRepos" id="allowedRepos" value="${escapeHtml(Array.isArray(cfg.allowedRepos) ? (cfg.allowedRepos as string[]).join(", ") : "")}"${isDisabled("allowedRepos") ? " disabled" : ""}>
+    ${envNote("allowedRepos")}
+    <div class="field-note">Restricts which repos Yeti processes. Empty means no repos (use with caution). To allow all repos, remove the allowedRepos key from config.json.</div>
 
     <h2>Server</h2>
     <label for="port">Port</label>

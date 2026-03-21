@@ -327,6 +327,13 @@ async function handleRequest(req: http.IncomingMessage, res: http.ServerResponse
     if (params["discordAllowedUsers"] !== undefined) {
       updates.discordAllowedUsers = params["discordAllowedUsers"].split(",").map(s => s.trim()).filter(Boolean);
     }
+    // Jobs & Repos
+    if (params["enabledJobs"] !== undefined) {
+      updates.enabledJobs = params["enabledJobs"].split(",").map(s => s.trim()).filter(Boolean);
+    }
+    if (params["allowedRepos"] !== undefined) {
+      updates.allowedRepos = params["allowedRepos"].split(",").map(s => s.trim()).filter(Boolean);
+    }
     // Intervals
     const intervalUpdates: Record<string, number> = {};
     for (const [key, value] of Object.entries(params)) {
