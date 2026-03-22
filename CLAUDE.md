@@ -18,10 +18,11 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ```sh
 npm ci                  # install dependencies
 npm run build           # compile TypeScript (tsc → dist/)
+npm run typecheck       # type-check only, no emit (tsc --noEmit)
 npm run dev             # run with tsx (development)
 npm start               # run compiled output (node dist/main.ts)
-npm test                # run all tests (vitest run)
-npm run test:watch      # run tests in watch mode
+npm test                # typecheck + run all tests (mirrors CI)
+npm run test:watch      # run tests in watch mode (no typecheck, fast TDD)
 npx vitest run src/scheduler.test.ts          # run a single test file
 npx vitest run -t "returns ms until"          # run tests matching a name pattern
 ```

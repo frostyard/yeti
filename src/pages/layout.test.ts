@@ -9,7 +9,7 @@ import * as config from "../config.js";
 
 describe("siteTitle", () => {
   beforeEach(() => {
-    (config as { GITHUB_OWNERS: string[] }).GITHUB_OWNERS = ["frostyard"];
+    (config as { GITHUB_OWNERS: readonly string[] }).GITHUB_OWNERS = ["frostyard"];
   });
 
   it("includes org name", () => {
@@ -21,17 +21,17 @@ describe("siteTitle", () => {
   });
 
   it("returns plain yeti when no orgs configured", () => {
-    (config as { GITHUB_OWNERS: string[] }).GITHUB_OWNERS = [];
+    (config as { GITHUB_OWNERS: readonly string[] }).GITHUB_OWNERS = [];
     expect(siteTitle()).toBe("yeti");
   });
 
   it("joins multiple orgs with comma", () => {
-    (config as { GITHUB_OWNERS: string[] }).GITHUB_OWNERS = ["a", "b"];
+    (config as { GITHUB_OWNERS: readonly string[] }).GITHUB_OWNERS = ["a", "b"];
     expect(siteTitle()).toBe("yeti — a, b");
   });
 
   it("escapes HTML in org names", () => {
-    (config as { GITHUB_OWNERS: string[] }).GITHUB_OWNERS = ["<script>"];
+    (config as { GITHUB_OWNERS: readonly string[] }).GITHUB_OWNERS = ["<script>"];
     expect(siteTitle()).toBe("yeti — &lt;script&gt;");
   });
 });
