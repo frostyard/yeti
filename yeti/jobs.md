@@ -300,8 +300,6 @@ For each canonical (non-duplicate) issue:
 **Schedule**: Runs at hour configured by `schedules.docMaintainerHour`
 (default: 1 AM local time)
 
-- Only processes repos that Yeti has previously cloned (checks for
-  `~/.yeti/repos/<owner>/<repo>`)
 - Skips if an open `yeti/docs-*` PR already exists for the repo
 - Skips if HEAD matches the last `[doc-maintainer]` commit (no new code
   changes to document)
@@ -362,7 +360,7 @@ For each PR:
 **Schedule**: Runs at hour configured by `schedules.repoStandardsHour`
 (default: 2 AM local time)
 
-Only processes repos that Yeti has previously cloned. For each repo:
+For each repo:
 
 - **Syncs label definitions** — calls `ensureAllLabels()` to create/update
   all labels defined in `LABEL_SPECS` (from `config.ts`) with correct colors
@@ -382,7 +380,7 @@ via the `gh` CLI.
 **Schedule**: Runs at hour configured by `schedules.improvementIdentifierHour`
 (default: 3 AM local time)
 
-Only processes repos that Yeti has previously cloned. Skips repos that
+Skips repos that
 already have open `yeti/improve-*` PRs (prevents pile-up when previous
 improvements haven't been merged). Repos are processed concurrently.
 Two-phase approach per repo:
