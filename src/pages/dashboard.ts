@@ -1,5 +1,5 @@
 import type { Theme } from "./layout.js";
-import { PAGE_CSS, escapeHtml, repoShortName, itemLogsUrl, formatUptime, formatRelativeTime, formatCountdown, htmlOpenTag, buildNav, THEME_SCRIPT, discordLabel } from "./layout.js";
+import { PAGE_CSS, escapeHtml, repoShortName, itemLogsUrl, formatUptime, formatRelativeTime, formatCountdown, htmlOpenTag, buildNav, THEME_SCRIPT, discordLabel, siteTitle } from "./layout.js";
 import { msUntilHour } from "../scheduler.js";
 
 interface RunningTaskInfo {
@@ -107,7 +107,7 @@ ${htmlOpenTag(theme)}
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>yeti</title>
+  <title>${siteTitle()}</title>
   <style>${PAGE_CSS}</style>
 </head>
 <body>
