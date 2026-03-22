@@ -5,9 +5,10 @@
   "private": true,
   "scripts": {
     "build": "tsc",
+    "typecheck": "tsc --noEmit",
     "dev": "tsx src/main.ts",
     "start": "node dist/main.js",
-    "test": "vitest run",
+    "test": "tsc --noEmit && vitest run",
     "test:watch": "vitest"
   },
   "dependencies": {
