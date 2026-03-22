@@ -20,6 +20,7 @@ import * as improvementIdentifier from "./jobs/improvement-identifier.js";
 import * as triageYetiErrors from "./jobs/triage-yeti-errors.js";
 import * as issueAuditor from "./jobs/issue-auditor.js";
 import * as planReviewer from "./jobs/plan-reviewer.js";
+import * as mkdocsUpdate from "./jobs/mkdocs-update.js";
 import * as discord from "./discord.js";
 import { isDiscordConfigured } from "./discord.js";
 import { setShuttingDown } from "./shutdown.js";
@@ -166,6 +167,15 @@ const jobs: Job[] = [
     async run() {
       const repos = await gh.listRepos();
       await improvementIdentifier.run(repos);
+    },
+  },
+  {
+    name: "mkdocs-update",
+    intervalMs: 0,
+    scheduledHour: SCHEDULES.mkdocsUpdateHour,
+    async run() {
+      const repos = await gh.listRepos();
+      await mkdocsUpdate.run(repos);
     },
   },
   {

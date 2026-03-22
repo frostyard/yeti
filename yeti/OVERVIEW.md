@@ -45,6 +45,7 @@ src/
     ├── auto-merger.ts          Auto-merges Dependabot and approved Yeti PRs
     ├── repo-standards.ts       Syncs labels and cleans legacy labels
     ├── improvement-identifier.ts  Identifies codebase improvements via Claude, implements as PRs
+    ├── mkdocs-update.ts        Daily MkDocs documentation update from recent git changes
     └── issue-auditor.ts        Daily audit ensuring no issues fall between the cracks
 
 deploy/
@@ -266,6 +267,7 @@ See [Jobs](jobs.md) for detailed behavior of each.
 | `auto-merger` | Dependabot PRs + LGTM'd Yeti PRs + doc PRs | 10 min | Squash-merges PRs when conditions are met |
 | `repo-standards` | Daily at 2 AM (+ on startup) | Scheduled | Syncs labels and cleans legacy labels |
 | `improvement-identifier` | Daily at 3 AM | Scheduled | Analyzes codebase via Claude, implements improvements as PRs |
+| `mkdocs-update` | Daily at 4 AM | Scheduled | Updates MkDocs documentation from recent source code changes |
 | `issue-auditor` | Daily at 5 AM | Scheduled | Reconciles issue states, manages Ready and In Review labels |
 
 ## Key Patterns
@@ -425,6 +427,7 @@ repository.
 | triage-yeti-errors | `yeti/investigate-error-<N>-<hex4>` |
 | doc-maintainer | `yeti/docs-<YYYYMMDD>-<hex4>` |
 | improvement-identifier | `yeti/improve-<hex4>` |
+| mkdocs-update | `yeti/mkdocs-update-<YYYYMMDD>-<hex4>` |
 | ci-fixer / review-addresser | Uses existing PR branch |
 
 ### PR Title Conventions
@@ -433,6 +436,7 @@ repository.
 - `fix(#N): <phase title> (X/Y)` — multi-PR issue phases
 - `refactor: <title>` — automated improvements
 - `docs: update documentation for <repo>` — doc maintenance
+- `docs: update mkdocs content for <repo>` — mkdocs updates
 
 ### Tree-Diff Guard
 
@@ -450,6 +454,7 @@ prevent pile-up when previous PRs haven't been merged:
 
 - **doc-maintainer**: Skips if an open `yeti/docs-*` PR exists
 - **improvement-identifier**: Skips if any open `yeti/improve-*` PR exists
+- **mkdocs-update**: Skips if an open `yeti/mkdocs-update-*` PR exists
 - **ci-fixer**: Uses consolidated per-repo `[ci-unrelated]` issues rather
   than per-fingerprint issues, so all unrelated CI failures for a repo
   are tracked in a single issue
@@ -524,7 +529,7 @@ Controls which jobs are registered with the scheduler at startup.
 - **Field**: `enabledJobs` (string array)
 - **Default**: `[]` — no jobs run if the field is absent or empty
 - **Live-reloadable**: yes (changes take effect without restart)
-- **Available values**: `issue-worker`, `issue-refiner`, `plan-reviewer`, `ci-fixer`, `review-addresser`, `doc-maintainer`, `auto-merger`, `repo-standards`, `improvement-identifier`, `issue-auditor`, `triage-yeti-errors`
+- **Available values**: `issue-worker`, `issue-refiner`, `plan-reviewer`, `ci-fixer`, `review-addresser`, `doc-maintainer`, `auto-merger`, `repo-standards`, `improvement-identifier`, `issue-auditor`, `triage-yeti-errors`, `mkdocs-update`
 
 **Migration note**: existing configs without `enabledJobs` will have no jobs start after upgrading. Add the desired job names to `enabledJobs` in `~/.yeti/config.json` before upgrading.
 
