@@ -1,5 +1,5 @@
 import type { Theme } from "./layout.js";
-import { PAGE_CSS, escapeHtml, repoShortName, itemLogsUrl, formatRelativeTime, htmlOpenTag, buildNav, THEME_SCRIPT } from "./layout.js";
+import { PAGE_CSS, escapeHtml, repoShortName, itemLogsUrl, formatRelativeTime, htmlOpenTag, buildNav, THEME_SCRIPT, siteTitle } from "./layout.js";
 import type { QueueItem, QueueCategory } from "../github.js";
 
 const CATEGORY_DISPLAY: Record<QueueCategory, { label: string; color: string }> = {
@@ -137,7 +137,7 @@ ${htmlOpenTag(theme)}
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta http-equiv="refresh" content="60">
-  <title>yeti — Queue</title>
+  <title>${siteTitle("Queue")}</title>
   <style>${PAGE_CSS}
   .priority-star { color: #f0ad4e; margin-right: 4px; font-size: 1.1em; }
   .prio-btn, .skip-btn, .restore-btn { padding: 2px 8px; margin-left: 4px; border: 1px solid var(--border); border-radius: 4px; cursor: pointer; font-size: 0.85em; background: var(--bg-secondary); color: var(--text); }

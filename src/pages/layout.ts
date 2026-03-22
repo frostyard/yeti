@@ -1,3 +1,5 @@
+import { GITHUB_OWNERS } from "../config.js";
+
 export type Theme = "dark" | "light" | "system";
 
 const LIGHT_THEME_VARS = `
@@ -387,6 +389,12 @@ export const PAGE_CSS = `
 
 export function escapeHtml(s: string): string {
   return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+}
+
+export function siteTitle(suffix?: string): string {
+  const org = GITHUB_OWNERS.map(o => escapeHtml(o)).join(", ");
+  const base = org ? `yeti — ${org}` : "yeti";
+  return suffix ? `${base} — ${suffix}` : base;
 }
 
 export function repoShortName(fullName: string): string {

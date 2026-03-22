@@ -1,5 +1,5 @@
 import type { Theme } from "./layout.js";
-import { PAGE_CSS, htmlOpenTag, THEME_SCRIPT } from "./layout.js";
+import { PAGE_CSS, htmlOpenTag, THEME_SCRIPT, siteTitle } from "./layout.js";
 
 export function buildLoginPage(error: boolean, theme: Theme): string {
   return `<!DOCTYPE html>
@@ -7,7 +7,7 @@ ${htmlOpenTag(theme)}
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>yeti — login</title>
+  <title>${siteTitle("login")}</title>
   <style>${PAGE_CSS}</style>
 </head>
 <body>

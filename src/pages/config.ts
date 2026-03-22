@@ -1,5 +1,5 @@
 import type { Theme } from "./layout.js";
-import { PAGE_CSS, escapeHtml, htmlOpenTag, buildNav, THEME_SCRIPT } from "./layout.js";
+import { PAGE_CSS, escapeHtml, htmlOpenTag, buildNav, THEME_SCRIPT, siteTitle } from "./layout.js";
 import { getConfigForDisplay } from "../config.js";
 import * as config from "../config.js";
 
@@ -44,7 +44,7 @@ ${htmlOpenTag(theme)}
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>yeti — config</title>
+  <title>${siteTitle("config")}</title>
   <style>${PAGE_CSS}</style>
 </head>
 <body>

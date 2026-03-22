@@ -1,5 +1,5 @@
 import type { Theme } from "./layout.js";
-import { PAGE_CSS, escapeHtml, formatDuration, htmlOpenTag, buildNav, THEME_SCRIPT } from "./layout.js";
+import { PAGE_CSS, escapeHtml, formatDuration, htmlOpenTag, buildNav, THEME_SCRIPT, siteTitle } from "./layout.js";
 import type { JobRun, JobLog, Task } from "../db.js";
 
 function logLevelClass(level: string): string {
@@ -42,7 +42,7 @@ ${htmlOpenTag(theme)}
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>yeti — logs</title>
+  <title>${siteTitle("logs")}</title>
   <style>${PAGE_CSS}</style>
 </head>
 <body>
@@ -147,7 +147,7 @@ ${htmlOpenTag(theme)}
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>yeti — ${escapeHtml(shortRepo)}#${itemNumber} logs</title>
+  <title>${siteTitle(`${escapeHtml(shortRepo)}#${itemNumber} logs`)}</title>
   <style>${PAGE_CSS}</style>
 </head>
 <body>
@@ -217,7 +217,7 @@ ${htmlOpenTag(theme)}
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>yeti — ${escapeHtml(run.job_name)} run</title>
+  <title>${siteTitle(`${escapeHtml(run.job_name)} run`)}</title>
   <style>${PAGE_CSS}</style>
 </head>
 <body>

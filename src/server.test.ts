@@ -4,6 +4,7 @@ import http from "node:http";
 vi.mock("./config.js", () => ({
   SERVER_PORT: 0,
   AUTH_TOKEN: "",
+  GITHUB_OWNERS: ["owner1"],
   LABELS: {
     refined: "Refined",
     ready: "Ready",
