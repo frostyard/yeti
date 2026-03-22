@@ -412,6 +412,31 @@ documentation suggestions. "No improvements found" is acceptable.
 
 PRs created include a footer: *"Automated improvement by yeti improvement-identifier"*
 
+## mkdocs-update
+
+**Source**: `src/jobs/mkdocs-update.ts`
+**Trigger**: Daily schedule
+**Schedule**: Runs at hour configured by `schedules.mkdocsUpdateHour`
+(default: 4 AM local time)
+
+Scans repos for `mkdocs.yml` or `mkdocs.yaml` files and updates MkDocs
+documentation to reflect recent source code changes. Follows the same
+structure as doc-maintainer (single-phase, one PR per repo).
+
+- Skips if an open `yeti/mkdocs-update-*` PR already exists for the repo
+- Creates a worktree on branch `yeti/mkdocs-update-<YYYYMMDD>-<hex4>`
+- Checks for `mkdocs.yml` or `mkdocs.yaml` in the worktree root; skips
+  repos without either file (recorded as completed, not failed)
+- Instructs Claude to read the MkDocs config, scan recent git history,
+  and update only Markdown files under the docs directory (and
+  `mkdocs.yml` itself if the nav structure needs it)
+- Uses `JOB_AI` backend dispatch (supports both Claude and Copilot
+  backends via `JOB_AI["mkdocs-update"]`)
+- If commits were produced with a tree diff: pushes and creates a PR
+  titled `docs: update mkdocs content for <repo>`
+- Repos are processed concurrently with `Promise.allSettled`; errors in
+  one repo do not block others
+
 ## issue-auditor
 
 **Source**: `src/jobs/issue-auditor.ts`
