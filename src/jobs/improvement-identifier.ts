@@ -4,6 +4,7 @@ import * as claude from "../claude.js";
 import * as log from "../log.js";
 import * as db from "../db.js";
 import { reportError } from "../error-reporter.js";
+import { notify } from "../notify.js";
 
 const MAX_IMPROVEMENTS_PER_RUN = 10;
 
@@ -195,8 +196,9 @@ async function processRepo(repo: Repo): Promise<void> {
       if (await claude.hasNewCommits(implWt, repo.defaultBranch) && await claude.hasTreeDiff(implWt, repo.defaultBranch)) {
         await claude.pushBranch(implWt, implBranch);
         const prBody = improvement.body + FOOTER;
-        await gh.createPR(fullName, implBranch, `refactor: ${improvement.title}`, prBody);
+        const prNumber = await gh.createPR(fullName, implBranch, `refactor: ${improvement.title}`, prBody);
         log.info(`[improvement-identifier] Created PR for "${improvement.title}" in ${fullName}`);
+        notify(`[improvement-identifier] Created PR #${prNumber} for ${fullName}`);
       } else {
         log.warn(`[improvement-identifier] No commits produced for "${improvement.title}" in ${fullName}`);
       }

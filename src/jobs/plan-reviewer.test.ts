@@ -23,6 +23,11 @@ vi.mock("../error-reporter.js", () => ({
   reportError: vi.fn(),
 }));
 
+const mockNotify = vi.hoisted(() => vi.fn());
+vi.mock("../notify.js", () => ({
+  notify: mockNotify,
+}));
+
 const { mockGh, mockClaude, mockDb } = vi.hoisted(() => ({
   mockGh: {
     listOpenIssues: vi.fn(),
@@ -122,6 +127,9 @@ describe("plan-reviewer", () => {
 
     // Adds Ready label
     expect(mockGh.addLabel).toHaveBeenCalledWith(repo.fullName, issue.number, "Ready");
+
+    // Notifies Discord
+    expect(mockNotify).toHaveBeenCalledWith(expect.stringContaining("[plan-reviewer] Review posted"));
 
     // Records task completion
     expect(mockDb.recordTaskStart).toHaveBeenCalledWith("plan-reviewer", repo.fullName, issue.number, null);

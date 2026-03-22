@@ -6,6 +6,7 @@ import * as claude from "../claude.js";
 import * as log from "../log.js";
 import * as db from "../db.js";
 import { reportError } from "../error-reporter.js";
+import { notify } from "../notify.js";
 
 function buildMkdocsPrompt(fullName: string): string {
   return [
@@ -83,6 +84,7 @@ async function processRepo(repo: Repo): Promise<void> {
         description,
       );
       log.info(`[mkdocs-update] Created PR #${prNumber} for ${fullName}`);
+      notify(`[mkdocs-update] Created PR #${prNumber} for ${fullName}`);
     } else {
       log.warn(`[mkdocs-update] No commits produced for ${fullName}`);
     }

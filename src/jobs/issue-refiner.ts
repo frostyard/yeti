@@ -5,6 +5,7 @@ import * as claude from "../claude.js";
 import * as log from "../log.js";
 import * as db from "../db.js";
 import { reportError } from "../error-reporter.js";
+import { notify } from "../notify.js";
 import { processTextForImages } from "../images.js";
 import { extractFingerprint, REPORT_HEADER as YETI_ERROR_REPORT_HEADER } from "./triage-yeti-errors.js";
 
@@ -167,6 +168,7 @@ async function processIssue(repo: Repo, issue: gh.Issue): Promise<void> {
     if (planOutput.trim()) {
       await gh.commentOnIssue(fullName, issue.number, `${PLAN_HEADER}\n\n${planOutput}`);
       log.info(`[issue-refiner] Posted plan for ${fullName}#${issue.number}`);
+      notify(`[issue-refiner] Plan produced for ${fullName}#${issue.number}`);
     } else {
       log.warn(`[issue-refiner] Empty plan output for ${fullName}#${issue.number}`);
     }
@@ -222,6 +224,7 @@ async function processRefinement(
       if (planOutput.trim()) {
         await gh.commentOnIssue(fullName, issue.number, `${PLAN_HEADER}\n\n${planOutput}`);
         log.info(`[issue-refiner] Posted fresh plan for ${fullName}#${issue.number}`);
+        notify(`[issue-refiner] Plan produced for ${fullName}#${issue.number}`);
       } else {
         log.warn(`[issue-refiner] Empty plan output for ${fullName}#${issue.number}`);
       }
@@ -242,6 +245,7 @@ async function processRefinement(
 
         await gh.editIssueComment(fullName, planComment.id, `${PLAN_HEADER}\n\n${planBody}`);
         log.info(`[issue-refiner] Updated plan comment for ${fullName}#${issue.number}`);
+        notify(`[issue-refiner] Plan updated for ${fullName}#${issue.number}`);
 
         if (noteMatch) {
           await gh.commentOnIssue(fullName, issue.number, `### Note\n${noteMatch[1].trim()}`);

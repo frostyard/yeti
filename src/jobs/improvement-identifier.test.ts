@@ -15,6 +15,11 @@ vi.mock("../error-reporter.js", () => ({
   reportError: vi.fn(),
 }));
 
+const mockNotify = vi.hoisted(() => vi.fn());
+vi.mock("../notify.js", () => ({
+  notify: mockNotify,
+}));
+
 const { mockFs, mockGh, mockClaude, mockDb } = vi.hoisted(() => ({
   mockFs: {
     existsSync: vi.fn(),
@@ -120,6 +125,7 @@ describe("improvement-identifier", () => {
       "refactor: Remove unused helper function",
       expect.stringContaining("`src/utils.ts:42`"),
     );
+    expect(mockNotify).toHaveBeenCalledWith(expect.stringContaining("[improvement-identifier] Created PR #42"));
   });
 
   it("no PRs created when Claude finds nothing", async () => {

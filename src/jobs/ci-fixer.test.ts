@@ -18,6 +18,11 @@ vi.mock("../error-reporter.js", () => ({
   reportError: mockReportError,
 }));
 
+const mockNotify = vi.hoisted(() => vi.fn());
+vi.mock("../notify.js", () => ({
+  notify: mockNotify,
+}));
+
 const { mockGh, mockClaude, mockDb, MockRateLimitError } = vi.hoisted(() => {
   class MockRateLimitError extends Error {
     constructor(message: string) {
@@ -162,6 +167,7 @@ describe("ci-fixer", () => {
     expect(mockClaude.pushBranch).toHaveBeenCalled();
     expect(mockClaude.regeneratePRDescription).toHaveBeenCalledWith("/tmp/worktree", pr.baseRefName, pr);
     expect(mockGh.updatePRBody).toHaveBeenCalledWith(repo.fullName, pr.number, "## Summary\nUpdated");
+    expect(mockNotify).toHaveBeenCalledWith(expect.stringContaining("[ci-fixer] Pushed fix"));
     expect(mockDb.recordTaskComplete).toHaveBeenCalledWith(1);
   });
 
