@@ -225,6 +225,62 @@ export function clearQueueCache(): void {
   queueCache.clear();
 }
 
+const SCANNER_CATEGORIES: QueueCategory[] = ["needs-refinement", "needs-plan-review", "refined", "ready"];
+
+export function clearQueueCacheByCategories(categories: QueueCategory[]): void {
+  const catSet = new Set(categories);
+  for (const key of queueCache.keys()) {
+    const category = key.split(":")[0] as QueueCategory;
+    if (catSet.has(category)) queueCache.delete(key);
+  }
+}
+
+let scanning = false;
+
+const LABEL_TO_CATEGORY: Record<string, QueueCategory> = {
+  [LABELS.needsRefinement]: "needs-refinement",
+  [LABELS.needsPlanReview]: "needs-plan-review",
+  [LABELS.refined]: "refined",
+  [LABELS.ready]: "ready",
+};
+
+export async function scanQueueLabels(): Promise<void> {
+  if (scanning) return;
+  scanning = true;
+  try {
+    const repos = await listRepos();
+    clearQueueCacheByCategories(SCANNER_CATEGORIES);
+    let count = 0;
+    for (const repo of repos) {
+      try {
+        const issues = await listOpenIssues(repo.fullName);
+        for (const issue of issues) {
+          for (const label of issue.labels) {
+            const category = LABEL_TO_CATEGORY[label.name];
+            if (category) {
+              populateQueueCache(category, repo.fullName, {
+                number: issue.number,
+                title: issue.title,
+                type: "issue",
+                updatedAt: issue.updatedAt,
+                priority: hasPriorityLabel(issue.labels),
+              });
+              count++;
+            }
+          }
+        }
+      } catch (err) {
+        log.warn(`[queue-scan] Error scanning ${repo.fullName}: ${err}`);
+      }
+    }
+    log.info(`[queue-scan] Scanned ${repos.length} repo(s), found ${count} item(s)`);
+  } catch (err) {
+    log.warn(`[queue-scan] Error: ${err}`);
+  } finally {
+    scanning = false;
+  }
+}
+
 let _selfLogin: string | null = null;
 
 export async function getSelfLogin(): Promise<string> {
