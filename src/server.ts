@@ -265,6 +265,10 @@ async function handleRequest(req: http.IncomingMessage, res: http.ServerResponse
       const v = parseInt(params["logRetentionPerJob"], 10);
       if (v >= 0) updates.logRetentionPerJob = v;
     }
+    if (params["queueScanIntervalMs"] !== undefined) {
+      const v = parseInt(params["queueScanIntervalMs"], 10);
+      if (v > 0) updates.queueScanIntervalMs = v * 60 * 1000; // minutes → ms
+    }
 
     // Integrations
     if (params["discordBotToken"] !== undefined) updates.discordBotToken = params["discordBotToken"];

@@ -37,6 +37,7 @@ export function buildConfigPage(saved: boolean, theme: Theme): string {
   const intervals = cfg.intervals as Record<string, number>;
   const schedules = cfg.schedules as Record<string, number>;
   const authDisabled = !config.AUTH_TOKEN;
+  const queueScanMinutes = Math.round(Number(cfg.queueScanIntervalMs ?? 300000) / 60000);
 
   return `<!DOCTYPE html>
 ${htmlOpenTag(theme)}
@@ -67,6 +68,10 @@ ${htmlOpenTag(theme)}
 
     <label for="logRetentionPerJob">Min Logs Kept Per Job</label>
     <input type="number" name="logRetentionPerJob" id="logRetentionPerJob" value="${Number(cfg.logRetentionPerJob)}" min="0">
+
+    <label for="queueScanIntervalMs">Queue Scan Interval (minutes)</label>
+    <input type="number" name="queueScanIntervalMs" id="queueScanIntervalMs" value="${queueScanMinutes}" min="1">
+    <div class="field-note">How often the dashboard queue refreshes from GitHub labels (default: 5 min). Infrastructure — always runs regardless of enabled jobs.</div>
 
     <h2>Jobs &amp; Repos</h2>
     <label for="enabledJobs">Enabled Jobs (comma-separated)</label>
