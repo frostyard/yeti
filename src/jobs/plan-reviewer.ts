@@ -5,6 +5,7 @@ import * as claude from "../claude.js";
 import * as log from "../log.js";
 import * as db from "../db.js";
 import { reportError } from "../error-reporter.js";
+import { notify } from "../notify.js";
 
 const PLAN_HEADER = "## Implementation Plan";
 const REVIEW_HEADER = "## Plan Review";
@@ -66,6 +67,7 @@ async function processIssue(repo: Repo, issue: gh.Issue, planComment: gh.IssueCo
 
     await gh.commentOnIssue(fullName, issue.number, `${REVIEW_HEADER}\n\n${reviewOutput}`);
     log.info(`[plan-reviewer] Posted review for ${fullName}#${issue.number}`);
+    notify(`[plan-reviewer] Review posted for ${fullName}#${issue.number}`);
 
     // Mark plan comment as processed
     await gh.addReaction(fullName, planComment.id, "+1");

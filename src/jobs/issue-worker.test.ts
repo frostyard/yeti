@@ -20,6 +20,11 @@ vi.mock("../error-reporter.js", () => ({
   reportError: vi.fn(),
 }));
 
+const mockNotify = vi.hoisted(() => vi.fn());
+vi.mock("../notify.js", () => ({
+  notify: mockNotify,
+}));
+
 const { mockGh, mockClaude, mockDb } = vi.hoisted(() => ({
   mockGh: {
     listIssuesByLabel: vi.fn(),
@@ -120,6 +125,7 @@ describe("issue-worker", () => {
       expect(mockGh.addLabel).toHaveBeenCalledWith(repo.fullName, 1, "In Review");
       expect(mockGh.removeLabel).toHaveBeenCalledWith(repo.fullName, 1, "Ready");
       expect(mockGh.removeLabel).toHaveBeenCalledWith(repo.fullName, 1, "Refined");
+      expect(mockNotify).toHaveBeenCalledWith(expect.stringContaining("[issue-worker] Created PR #100"));
       expect(mockDb.recordTaskComplete).toHaveBeenCalledWith(1);
     });
 

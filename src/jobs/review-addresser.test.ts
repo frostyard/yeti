@@ -19,6 +19,11 @@ vi.mock("../error-reporter.js", () => ({
   reportError: vi.fn(),
 }));
 
+const mockNotify = vi.hoisted(() => vi.fn());
+vi.mock("../notify.js", () => ({
+  notify: mockNotify,
+}));
+
 const { mockGh, mockClaude, mockDb } = vi.hoisted(() => ({
   mockGh: {
     listPRs: vi.fn(),
@@ -108,6 +113,7 @@ describe("review-addresser", () => {
     expect(mockGh.addReaction).toHaveBeenCalledWith(repo.fullName, 100, "+1");
     expect(mockGh.addReviewCommentReaction).toHaveBeenCalledWith(repo.fullName, 200, "+1");
     expect(mockGh.addLabel).toHaveBeenCalledWith(repo.fullName, pr.number, "Ready");
+    expect(mockNotify).toHaveBeenCalledWith(expect.stringContaining("[review-addresser] Addressed review"));
     expect(mockDb.recordTaskComplete).toHaveBeenCalledWith(1);
   });
 

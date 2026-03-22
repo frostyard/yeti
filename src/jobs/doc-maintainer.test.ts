@@ -15,6 +15,11 @@ vi.mock("../error-reporter.js", () => ({
   reportError: vi.fn(),
 }));
 
+const mockNotify = vi.hoisted(() => vi.fn());
+vi.mock("../notify.js", () => ({
+  notify: mockNotify,
+}));
+
 const { mockFs, mockGh, mockClaude, mockDb, mockPlanParser } = vi.hoisted(() => ({
   mockFs: {
     existsSync: vi.fn(),
@@ -136,6 +141,7 @@ describe("doc-maintainer", () => {
       expect.stringContaining("update documentation"),
       "## Summary\nUpdated docs",
     );
+    expect(mockNotify).toHaveBeenCalledWith(expect.stringContaining("[doc-maintainer] Created PR #100"));
     expect(mockDb.recordTaskComplete).toHaveBeenCalledWith(1);
   });
 

@@ -19,6 +19,11 @@ vi.mock("../error-reporter.js", () => ({
   reportError: vi.fn(),
 }));
 
+const mockNotify = vi.hoisted(() => vi.fn());
+vi.mock("../notify.js", () => ({
+  notify: mockNotify,
+}));
+
 const { mockGh } = vi.hoisted(() => ({
   mockGh: {
     listPRs: vi.fn(),
@@ -64,6 +69,7 @@ describe("auto-merger", () => {
 
     expect(mockGh.mergePR).toHaveBeenCalledWith(repo.fullName, pr.number);
     expect(mockGh.hasValidLGTM).not.toHaveBeenCalled();
+    expect(mockNotify).toHaveBeenCalledWith(expect.stringContaining("[auto-merger] Merged"));
   });
 
   it("merges Yeti PR when checks pass and LGTM is valid", async () => {

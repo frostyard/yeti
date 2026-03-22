@@ -6,6 +6,7 @@ import * as claude from "../claude.js";
 import * as log from "../log.js";
 import * as db from "../db.js";
 import { reportError } from "../error-reporter.js";
+import { notify } from "../notify.js";
 import { findPlanComment } from "../plan-parser.js";
 
 function buildDocPrompt(fullName: string, planCount = 0): string {
@@ -148,6 +149,7 @@ async function processRepo(repo: Repo): Promise<void> {
         description,
       );
       log.info(`[doc-maintainer] Created docs PR #${prNumber} for ${fullName}`);
+      notify(`[doc-maintainer] Created PR #${prNumber} for ${fullName}`);
     } else {
       log.warn(`[doc-maintainer] No commits produced for ${fullName}`);
     }
