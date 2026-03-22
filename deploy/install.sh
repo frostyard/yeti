@@ -84,7 +84,8 @@ if [[ ! -f "$CONFIG_FILE" ]]; then
   "skippedItems": [],
   "prioritizedItems": [],
   "allowedRepos": [],
-  "enabledJobs": []
+  "enabledJobs": [],
+  "queueScanIntervalMs": 300000
 }
 CONF
   chmod 600 "$CONFIG_FILE"
