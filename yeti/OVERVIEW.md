@@ -62,14 +62,17 @@ deploy/
 recovers orphaned tasks from a previous crash (cleans up dangling worktrees,
 marks tasks failed), prunes old logs, registers all 11 jobs with the scheduler
 (interval jobs staggered by 2 seconds to prevent thundering herd), starts the
-HTTP server, sets up live config reloading (interval and schedule changes
-propagated to the scheduler without restart), awaits `discord.ready()` before
-announcing new deployments via `startup-announce.ts` (sends a notification when
-the version changes, skipping `"dev"` and same-version restarts; if Discord
-readiness times out, logs a warning and continues), and installs
-SIGINT/SIGTERM handlers that
-cancel queued tasks, drain running jobs (5 min timeout), terminate active
-Claude processes, and close the database.
+HTTP server, launches the **queue label scanner** (an infrastructure timer that
+runs `scanQueueLabels()` on a configurable interval to keep the dashboard queue
+populated independently of worker jobs — always runs regardless of
+`enabledJobs`), sets up live config reloading (interval, schedule, and queue
+scan interval changes propagated to the scheduler without restart), awaits
+`discord.ready()` before announcing new deployments via `startup-announce.ts`
+(sends a notification when the version changes, skipping `"dev"` and
+same-version restarts; if Discord readiness times out, logs a warning and
+continues), and installs SIGINT/SIGTERM handlers that cancel queued tasks,
+drain running jobs (5 min timeout), terminate active Claude processes, clear
+the queue scan interval, and close the database.
 
 **`config.ts`** — Loads configuration in priority order: environment variables >
 `~/.yeti/config.json` > hardcoded defaults. Exports `LABELS` (`refined`,
@@ -106,8 +109,17 @@ caching and in-flight request deduplication (PR lists, check status, issue
 comments). Jobs populate a category-based queue cache via
 `populateQueueCache()`, and the dashboard reads it via `getQueueSnapshot()`.
 Categories: `ready`, `needs-refinement`, `refined`, `needs-review-addressing`,
-`auto-mergeable`, `needs-triage`, `needs-plan-review`. The `listRepos()` function falls back to a
-stale cache when the fresh fetch returns empty (transient failure protection).
+`auto-mergeable`, `needs-triage`, `needs-plan-review`. The queue cache is fed
+from two sources: (1) worker jobs populate it during their normal processing,
+and (2) the `scanQueueLabels()` scanner populates a subset of categories
+(`needs-refinement`, `needs-plan-review`, `refined`, `ready`) by directly
+querying GitHub labels — this lightweight scanner runs on its own timer
+(`QUEUE_SCAN_INTERVAL_MS`, default 5 min) as infrastructure independent of
+`enabledJobs`, ensuring the dashboard stays populated even when no worker jobs
+are enabled. `clearQueueCacheByCategories()` selectively clears scanner
+categories before each scan to prevent stale entries. The `listRepos()` function
+falls back to a stale cache when the fresh fetch returns empty (transient
+failure protection).
 Provides `isItemSkipped()` and `isItemPrioritized()` helpers that check
 items against the `skippedItems` and `prioritizedItems` config lists,
 used by jobs to exclude or fast-track specific issues/PRs. Provides
