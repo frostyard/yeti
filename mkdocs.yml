@@ -1,11 +1,13 @@
 site_name: Yeti
 site_description: Self-hosted GitHub automation that plans, implements, and maintains your repos — so you can stay in the cold zone.
-site_url: ""
+site_url: https://frostyard.github.io/yeti/
+repo_url: https://github.com/frostyard/yeti
+repo_name: frostyard/yeti
 docs_dir: site
 site_dir: _site
 
 theme:
-  name: material
+  name: materialx
   palette:
     - media: "(prefers-color-scheme: light)"
       scheme: default
