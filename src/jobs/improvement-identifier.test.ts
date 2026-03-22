@@ -81,13 +81,13 @@ describe("improvement-identifier", () => {
     mockClaude.pushBranch.mockResolvedValue(undefined);
   });
 
-  it("skips repo without local clone", async () => {
+  it("processes repo even without local clone", async () => {
     mockFs.existsSync.mockReturnValue(false);
 
     await run([repo]);
 
-    expect(mockGh.listOpenIssues).not.toHaveBeenCalled();
-    expect(mockClaude.createWorktree).not.toHaveBeenCalled();
+    expect(mockGh.listOpenIssues).toHaveBeenCalled();
+    expect(mockClaude.createWorktree).toHaveBeenCalled();
   });
 
   it("skips repo when open improvement PRs exist", async () => {
