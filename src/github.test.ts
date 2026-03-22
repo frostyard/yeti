@@ -1881,19 +1881,6 @@ describe("scanQueueLabels", () => {
     (config as Record<string, unknown>).ALLOWED_REPOS = null;
   });
 
-  function mockGhResponse(args: string[], response: unknown) {
-    mockExecFile.mockImplementation(
-      (_cmd: string, cmdArgs: string[], _opts: unknown, cb: (err: Error | null, stdout: string) => void) => {
-        // Match on key args
-        if (cmdArgs.includes(args[0]) && cmdArgs.includes(args[1])) {
-          cb(null, JSON.stringify(response));
-        } else {
-          cb(null, "[]");
-        }
-      },
-    );
-  }
-
   it("populates queue cache from issue labels", async () => {
     let callCount = 0;
     mockExecFile.mockImplementation(
