@@ -78,6 +78,7 @@ export interface ConfigFile {
   prioritizedItems?: Array<{ repo: string; number: number }>;
   allowedRepos?: string[];
   enabledJobs?: string[];
+  queueScanIntervalMs?: number;
 }
 
 function loadConfig() {
@@ -167,8 +168,9 @@ function loadConfig() {
     : file.allowedRepos ?? null;
   const enabledJobs = file.enabledJobs ?? [];
   const jobAi = file.jobAi ?? {};
+  const queueScanIntervalMs = file.queueScanIntervalMs ?? 5 * 60 * 1000;
 
-  return { githubOwners, selfRepo, port, intervals, schedules, logRetentionDays, logRetentionPerJob, discordBotToken, discordChannelId, discordAllowedUsers, authToken, maxClaudeWorkers, claudeTimeoutMs, maxCopilotWorkers, copilotTimeoutMs, pausedJobs, skippedItems, prioritizedItems, allowedRepos, enabledJobs, jobAi };
+  return { githubOwners, selfRepo, port, intervals, schedules, logRetentionDays, logRetentionPerJob, discordBotToken, discordChannelId, discordAllowedUsers, authToken, maxClaudeWorkers, claudeTimeoutMs, maxCopilotWorkers, copilotTimeoutMs, pausedJobs, skippedItems, prioritizedItems, allowedRepos, enabledJobs, jobAi, queueScanIntervalMs };
 }
 
 const config = loadConfig();
@@ -191,6 +193,7 @@ export let ENABLED_JOBS: readonly string[] = config.enabledJobs;
 export let MAX_COPILOT_WORKERS = config.maxCopilotWorkers;
 export let COPILOT_TIMEOUT_MS = config.copilotTimeoutMs;
 export let JOB_AI: Readonly<Record<string, { backend?: "claude" | "copilot"; model?: string }>> = config.jobAi;
+export let QUEUE_SCAN_INTERVAL_MS = config.queueScanIntervalMs;
 // Immutable — requires restart (bot connection)
 export const DISCORD_BOT_TOKEN = config.discordBotToken;
 export const DISCORD_CHANNEL_ID = config.discordChannelId;
@@ -241,6 +244,7 @@ export function reloadConfig(): void {
   MAX_COPILOT_WORKERS = fresh.maxCopilotWorkers;
   COPILOT_TIMEOUT_MS = fresh.copilotTimeoutMs;
   JOB_AI = fresh.jobAi;
+  QUEUE_SCAN_INTERVAL_MS = fresh.queueScanIntervalMs;
   DISCORD_ALLOWED_USERS = fresh.discordAllowedUsers;
   notifyListeners();
 }
