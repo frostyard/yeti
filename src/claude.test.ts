@@ -38,7 +38,7 @@ vi.mock("node:fs", () => ({
   },
 }));
 
-import { enqueue, queueStatus, randomSuffix, datestamp, hasNewCommits, hasTreeDiff, generatePRDescription, generateDocsPRDescription, regeneratePRDescription, runClaude, cancelCurrentTask, cancelQueuedTasks, createWorktree, createWorktreeFromBranch, ensureClone, ClaudeTimeoutError, runAI, copilotQueueStatus, enqueueCopilot, AiTimeoutError } from "./claude.js";
+import { enqueue, queueStatus, randomSuffix, datestamp, hasNewCommits, hasTreeDiff, generatePRDescription, generateDocsPRDescription, regeneratePRDescription, runClaude, cancelCurrentTask, cancelQueuedTasks, createWorktree, createWorktreeFromBranch, pushBranch, ensureClone, ClaudeTimeoutError, runAI, copilotQueueStatus, enqueueCopilot, AiTimeoutError } from "./claude.js";
 import { ShutdownError } from "./shutdown.js";
 import * as shutdown from "./shutdown.js";
 import fs from "node:fs";
@@ -856,7 +856,7 @@ describe("createWorktreeFromBranch", () => {
     vi.clearAllMocks();
   });
 
-  it("force-resets local branch to match remote before creating worktree", async () => {
+  it("creates worktree in detached HEAD mode", async () => {
     const gitCalls: string[][] = [];
 
     mockFs.existsSync.mockImplementation((p: any) => {
@@ -868,36 +868,26 @@ describe("createWorktreeFromBranch", () => {
 
     mockExecFile.mockImplementation((_cmd, args: any, _opts: any, cb: any) => {
       gitCalls.push([...args]);
-      if (args?.[0] === "fetch") {
-        cb(null, "", "");
-      } else if (args?.[0] === "checkout") {
-        cb(null, "", "");
-      } else if (args?.[0] === "branch" && args?.[1] === "-f") {
-        cb(null, "", "");
-      } else if (args?.[0] === "worktree" && args?.[1] === "add") {
-        cb(null, "", "");
-      } else if (args?.[0] === "worktree" && args?.[1] === "prune") {
-        cb(null, "", "");
-      }
+      cb(null, "", "");
       return undefined as any;
     });
 
     await createWorktreeFromBranch(repo, "dependabot/npm/eslint-10", "ci-fixer");
 
-    // Verify branch -f was called before worktree add
-    const branchCall = gitCalls.find((c) => c[0] === "branch" && c[1] === "-f");
+    // Verify --detach is used with origin/ prefix
     const worktreeCall = gitCalls.find((c) => c[0] === "worktree" && c[1] === "add");
-    expect(branchCall).toBeDefined();
-    expect(branchCall).toEqual(["branch", "-f", "dependabot/npm/eslint-10", "origin/dependabot/npm/eslint-10"]);
     expect(worktreeCall).toBeDefined();
+    expect(worktreeCall).toContain("--detach");
+    expect(worktreeCall).toContain("origin/dependabot/npm/eslint-10");
 
-    // branch -f must come before worktree add
-    const branchIdx = gitCalls.indexOf(branchCall!);
-    const worktreeIdx = gitCalls.indexOf(worktreeCall!);
-    expect(branchIdx).toBeLessThan(worktreeIdx);
+    // Verify no branch -f call exists (removed)
+    const branchCall = gitCalls.find((c) => c[0] === "branch" && c[1] === "-f");
+    expect(branchCall).toBeUndefined();
   });
 
-  it("proceeds normally when local branch does not exist yet", async () => {
+  it("two worktrees can use the same branch with different namespaces", async () => {
+    const gitCalls: string[][] = [];
+
     mockFs.existsSync.mockImplementation((p: any) => {
       const s = String(p);
       if (s.endsWith(".git")) return true;
@@ -906,23 +896,42 @@ describe("createWorktreeFromBranch", () => {
     mockFs.mkdirSync.mockReturnValue(undefined as any);
 
     mockExecFile.mockImplementation((_cmd, args: any, _opts: any, cb: any) => {
-      if (args?.[0] === "fetch") {
-        cb(null, "", "");
-      } else if (args?.[0] === "checkout") {
-        cb(null, "", "");
-      } else if (args?.[0] === "branch" && args?.[1] === "-f") {
-        // Branch doesn't exist locally — git branch -f fails
-        cb(new Error("error: not a valid object name"), "", "");
-      } else if (args?.[0] === "worktree" && args?.[1] === "add") {
-        cb(null, "", "");
-      } else if (args?.[0] === "worktree" && args?.[1] === "prune") {
-        cb(null, "", "");
-      }
+      gitCalls.push([...args]);
+      cb(null, "", "");
       return undefined as any;
     });
 
-    const result = await createWorktreeFromBranch(repo, "new-branch", "ci-fixer");
-    expect(result).toContain("new-branch");
+    const wt1 = await createWorktreeFromBranch(repo, "yeti/improve-82cd", "ci-fixer");
+    const wt2 = await createWorktreeFromBranch(repo, "yeti/improve-82cd", "review-addresser");
+
+    // Both worktrees should have different paths
+    expect(wt1).toContain("ci-fixer");
+    expect(wt2).toContain("review-addresser");
+    expect(wt1).not.toEqual(wt2);
+
+    // Both should use --detach with origin/ prefix
+    const worktreeCalls = gitCalls.filter((c) => c[0] === "worktree" && c[1] === "add");
+    expect(worktreeCalls).toHaveLength(2);
+    for (const call of worktreeCalls) {
+      expect(call).toContain("--detach");
+      expect(call).toContain("origin/yeti/improve-82cd");
+    }
+  });
+});
+
+describe("pushBranch", () => {
+  it("pushes HEAD to the named remote branch using refspec", async () => {
+    const gitCalls: string[][] = [];
+
+    mockExecFile.mockImplementation((_cmd, args: any, _opts: any, cb: any) => {
+      gitCalls.push([...args]);
+      cb(null, "", "");
+      return undefined as any;
+    });
+
+    await pushBranch("/some/worktree", "yeti/improve-82cd");
+
+    expect(gitCalls).toEqual([["push", "origin", "HEAD:refs/heads/yeti/improve-82cd"]]);
   });
 });
 
