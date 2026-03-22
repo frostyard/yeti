@@ -73,6 +73,7 @@ All schedule fields live inside the `schedules` object, are specified as hour of
 | `docMaintainerHour` | `1` (1 AM) | doc-maintainer run hour |
 | `repoStandardsHour` | `2` (2 AM) | repo-standards run hour |
 | `improvementIdentifierHour` | `3` (3 AM) | improvement-identifier run hour |
+| `mkdocsUpdateHour` | `4` (4 AM) | mkdocs-update run hour |
 | `issueAuditorHour` | `5` (5 AM) | issue-auditor run hour |
 
 ---
@@ -139,7 +140,8 @@ A more complete configuration with intervals, schedules, and integrations:
     "doc-maintainer",
     "repo-standards",
     "improvement-identifier",
-    "issue-auditor"
+    "issue-auditor",
+    "mkdocs-update"
   ],
   "intervals": {
     "issueWorkerMs": 300000,
@@ -150,6 +152,7 @@ A more complete configuration with intervals, schedules, and integrations:
     "docMaintainerHour": 1,
     "repoStandardsHour": 2,
     "improvementIdentifierHour": 3,
+    "mkdocsUpdateHour": 4,
     "issueAuditorHour": 5
   },
   "jobAi": {
