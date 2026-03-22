@@ -70,6 +70,7 @@ export interface ConfigFile {
     repoStandardsHour?: number;
     improvementIdentifierHour?: number;
     issueAuditorHour?: number;
+    mkdocsUpdateHour?: number;
   };
   logRetentionDays?: number;
   logRetentionPerJob?: number;
@@ -117,6 +118,7 @@ function loadConfig() {
     repoStandardsHour: file.schedules?.repoStandardsHour ?? 2, // 2 AM local time
     improvementIdentifierHour: file.schedules?.improvementIdentifierHour ?? 3, // 3 AM local time
     issueAuditorHour: file.schedules?.issueAuditorHour ?? 5, // 5 AM local time
+    mkdocsUpdateHour: file.schedules?.mkdocsUpdateHour ?? 4, // 4 AM local time
   };
 
   const discordBotToken =

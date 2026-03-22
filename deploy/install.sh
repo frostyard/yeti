@@ -76,7 +76,8 @@ if [[ ! -f "$CONFIG_FILE" ]]; then
     "docMaintainerHour": 1,
     "repoStandardsHour": 2,
     "improvementIdentifierHour": 3,
-    "issueAuditorHour": 5
+    "issueAuditorHour": 5,
+    "mkdocsUpdateHour": 4
   },
   "logRetentionDays": 14,
   "logRetentionPerJob": 20,
@@ -90,7 +91,7 @@ if [[ ! -f "$CONFIG_FILE" ]]; then
 CONF
   chmod 600 "$CONFIG_FILE"
   log "Created $CONFIG_FILE — edit it to configure your instance"
-  log "Available jobs for enabledJobs: issue-worker, issue-refiner, ci-fixer, review-addresser, doc-maintainer, auto-merger, repo-standards, improvement-identifier, issue-auditor, triage-yeti-errors, plan-reviewer"
+  log "Available jobs for enabledJobs: issue-worker, issue-refiner, ci-fixer, review-addresser, doc-maintainer, auto-merger, repo-standards, improvement-identifier, issue-auditor, triage-yeti-errors, plan-reviewer, mkdocs-update"
 fi
 
 # Bootstrap env file if it doesn't exist (never overwrite user values)
