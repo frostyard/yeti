@@ -236,3 +236,7 @@ src/
     └── triage-yeti-errors.ts      Investigates yeti error issues
 ```
 
+## Attribution
+
+Based on [claws-snapshot](https://github.com/stjohnb/claws-snapshot) from the blog post [Building an AI-powered GitHub automation tool](https://www.bstjohn.net/blog/claws/).
+
