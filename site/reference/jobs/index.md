@@ -27,6 +27,7 @@ These jobs run once daily at a configured hour (local timezone). They also run o
 | [doc-maintainer](doc-maintainer.md) | 1 AM | Yes | Update repository documentation |
 | [repo-standards](repo-standards.md) | 2 AM | No | Sync labels to all repositories |
 | [improvement-identifier](improvement-identifier.md) | 3 AM | Yes | Find codebase improvements and implement them as PRs |
+| [mkdocs-update](mkdocs-update.md) | 4 AM | Yes | Update MkDocs documentation sites |
 | [issue-auditor](issue-auditor.md) | 5 AM | No | Audit and fix issue label state |
 
 ---
@@ -59,7 +60,7 @@ Add more jobs as you grow comfortable with the workflow:
 - **`repo-standards`** -- Keeps labels in sync
 - **`review-addresser`** -- Handles PR review comments
 
-The full set including nightly jobs (`doc-maintainer`, `improvement-identifier`, `issue-auditor`) rounds out a fully autonomous setup.
+The full set including nightly jobs (`doc-maintainer`, `improvement-identifier`, `issue-auditor`, `mkdocs-update`) rounds out a fully autonomous setup.
 
 ---
 

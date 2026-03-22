@@ -83,6 +83,7 @@ nav:
           - issue-auditor: reference/jobs/issue-auditor.md
           - repo-standards: reference/jobs/repo-standards.md
           - triage-yeti-errors: reference/jobs/triage-yeti-errors.md
+          - mkdocs-update: reference/jobs/mkdocs-update.md
 
 extra_css:
   - stylesheets/extra.css
