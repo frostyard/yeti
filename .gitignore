@@ -3,3 +3,4 @@ dist/
 *.env
 config.json
 .worktrees/
+_site/

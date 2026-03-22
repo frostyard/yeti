@@ -1,0 +1,88 @@
+site_name: Yeti
+site_description: Self-hosted GitHub automation that plans, implements, and maintains your repos — so you can stay in the cold zone.
+site_url: ""
+docs_dir: site
+site_dir: _site
+
+theme:
+  name: material
+  palette:
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: blue grey
+      accent: light blue
+      toggle:
+        icon: material/weather-sunny
+        name: Switch to dark mode
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: blue grey
+      accent: light blue
+      toggle:
+        icon: material/weather-night
+        name: Switch to light mode
+  features:
+    - navigation.tabs
+    - navigation.sections
+    - navigation.expand
+    - navigation.top
+    - search.suggest
+    - search.highlight
+    - content.code.copy
+  icon:
+    repo: fontawesome/brands/github
+
+markdown_extensions:
+  - admonition
+  - pymdownx.details
+  - pymdownx.superfences:
+      custom_fences:
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:pymdownx.superfences.fence_code_format
+  - pymdownx.tabbed:
+      alternate_style: true
+  - pymdownx.emoji:
+      emoji_index: !!python/name:material.extensions.emoji.twemoji
+      emoji_generator: !!python/name:material.extensions.emoji.to_svg
+  - tables
+  - attr_list
+  - md_in_html
+  - toc:
+      permalink: true
+
+nav:
+  - Home: index.md
+  - Getting Started:
+      - Installation: getting-started/installation.md
+      - Configuration: getting-started/configuration.md
+      - Quickstart: getting-started/quickstart.md
+  - Usage:
+      - Daily Workflow: usage/daily-workflow.md
+      - Dashboard: usage/dashboard.md
+      - Discord Bot: usage/discord.md
+      - Queue Management: usage/queue-management.md
+      - Optimization: usage/optimization.md
+      - Troubleshooting: usage/troubleshooting.md
+  - Contributing: contributing.md
+  - Reference:
+      - Configuration: reference/configuration.md
+      - Labels: reference/labels.md
+      - Issue Lifecycle: reference/workflow.md
+      - HTTP API: reference/api.md
+      - Jobs:
+          - Overview: reference/jobs/index.md
+          - issue-refiner: reference/jobs/issue-refiner.md
+          - plan-reviewer: reference/jobs/plan-reviewer.md
+          - issue-worker: reference/jobs/issue-worker.md
+          - ci-fixer: reference/jobs/ci-fixer.md
+          - auto-merger: reference/jobs/auto-merger.md
+          - review-addresser: reference/jobs/review-addresser.md
+          - doc-maintainer: reference/jobs/doc-maintainer.md
+          - improvement-identifier: reference/jobs/improvement-identifier.md
+          - issue-auditor: reference/jobs/issue-auditor.md
+          - repo-standards: reference/jobs/repo-standards.md
+          - triage-yeti-errors: reference/jobs/triage-yeti-errors.md
+
+extra_css:
+  - stylesheets/extra.css
