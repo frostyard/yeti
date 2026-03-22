@@ -56,13 +56,13 @@ describe("repo-standards", () => {
     mockGh.deleteStaleLabels.mockResolvedValue(undefined);
   });
 
-  it("skips repos without local clone", async () => {
+  it("processes repos even without local clone", async () => {
     mockFs.existsSync.mockReturnValue(false);
 
     await run([repo]);
 
-    expect(mockGh.ensureAllLabels).not.toHaveBeenCalled();
-    expect(mockGh.deleteStaleLabels).not.toHaveBeenCalled();
+    expect(mockGh.ensureAllLabels).toHaveBeenCalledWith(repo.fullName);
+    expect(mockGh.deleteStaleLabels).toHaveBeenCalledWith(repo.fullName, LEGACY_LABELS);
   });
 
   it("syncs labels and deletes stale labels for repos with local clone", async () => {

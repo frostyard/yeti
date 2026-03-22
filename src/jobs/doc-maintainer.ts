@@ -1,6 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
-import { WORK_DIR, type Repo } from "../config.js";
+import { type Repo } from "../config.js";
 import * as gh from "../github.js";
 import * as claude from "../claude.js";
 import * as log from "../log.js";
@@ -58,10 +58,6 @@ function buildDocPrompt(fullName: string, planCount = 0): string {
 
 async function processRepo(repo: Repo): Promise<void> {
   const fullName = repo.fullName;
-
-  // Step 0: Skip repos yeti isn't working with
-  const repoDir = path.join(WORK_DIR, "repos", repo.owner, repo.name);
-  if (!fs.existsSync(repoDir)) return;
 
   // Step 1: Check for existing open docs PR
   const prs = await gh.listPRs(fullName);

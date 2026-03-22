@@ -1,6 +1,4 @@
-import fs from "node:fs";
-import path from "node:path";
-import { WORK_DIR, type Repo } from "../config.js";
+import { type Repo } from "../config.js";
 import * as gh from "../github.js";
 import * as claude from "../claude.js";
 import * as log from "../log.js";
@@ -122,10 +120,6 @@ const FOOTER = "\n\n---\n*Automated improvement by yeti improvement-identifier*"
 
 async function processRepo(repo: Repo): Promise<void> {
   const fullName = repo.fullName;
-
-  // Skip repos without local clones
-  const repoDir = path.join(WORK_DIR, "repos", repo.owner, repo.name);
-  if (!fs.existsSync(repoDir)) return;
 
   // Fetch open issue titles and PR titles for dedup context
   const openIssues = await gh.listOpenIssues(fullName);

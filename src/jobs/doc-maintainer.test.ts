@@ -89,13 +89,13 @@ describe("doc-maintainer", () => {
     mockPlanParser.findPlanComment.mockReturnValue(null);
   });
 
-  it("skips repo without local clone", async () => {
+  it("processes repo even without local clone", async () => {
     mockFs.existsSync.mockReturnValue(false);
 
     await run([repo]);
 
-    expect(mockGh.listPRs).not.toHaveBeenCalled();
-    expect(mockClaude.createWorktree).not.toHaveBeenCalled();
+    expect(mockGh.listPRs).toHaveBeenCalledWith(repo.fullName);
+    expect(mockClaude.createWorktree).toHaveBeenCalled();
   });
 
   it("skips repo when open docs PR already exists", async () => {
