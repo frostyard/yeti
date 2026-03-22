@@ -503,6 +503,7 @@ defaults.
 | `skippedItems` | — | `[]` (array of `{repo, number}` excluded from processing) |
 | `allowedRepos` | `YETI_ALLOWED_REPOS` | `null` (all repos) |
 | `prioritizedItems` | — | `[]` (array of `{repo, number}` processed first) |
+| `queueScanIntervalMs` | — | `300000` (5 min — how often the dashboard queue refreshes from GitHub labels; infrastructure, always runs) |
 
 ### enabledJobs
 

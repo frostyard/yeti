@@ -1,6 +1,21 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
-vi.mock("./config.js", () => ({ GITHUB_OWNERS: [], LABEL_SPECS: {} }));
+vi.mock("./config.js", () => ({
+  GITHUB_OWNERS: [],
+  LABELS: {
+    refined: "Refined",
+    ready: "Ready",
+    priority: "Priority",
+    inReview: "In Review",
+    needsRefinement: "Needs Refinement",
+    needsPlanReview: "Needs Plan Review",
+  },
+  LABEL_SPECS: {},
+  SKIPPED_ITEMS: [],
+  PRIORITIZED_ITEMS: [],
+  ALLOWED_REPOS: null,
+  SELF_REPO: "",
+}));
 vi.mock("./log.js", () => ({ info: vi.fn(), warn: vi.fn(), error: vi.fn() }));
 vi.mock("./notify.js", () => ({ notify: vi.fn() }));
 vi.mock("./error-reporter.js", () => ({ reportError: vi.fn() }));

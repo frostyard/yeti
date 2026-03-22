@@ -14,6 +14,9 @@ vi.mock("./config.js", () => ({
     refined: "Refined",
     ready: "Ready",
     priority: "Priority",
+    inReview: "In Review",
+    needsRefinement: "Needs Refinement",
+    needsPlanReview: "Needs Plan Review",
   },
   LABEL_SPECS: {
     "Refined": { color: "0075ca", description: "Issue is ready for yeti to implement" },
@@ -86,6 +89,8 @@ import {
   addReviewCommentReaction,
   getCommentReactions,
   getPRReviewDecision,
+  scanQueueLabels,
+  clearQueueCacheByCategories,
 } from "./github.js";
 
 describe("gh retry logic", () => {
@@ -1863,5 +1868,213 @@ describe("populateQueueCache label-based priority", () => {
     expect(snap.items[0].number).toBe(2);
     expect(snap.items[0].prioritized).toBe(true);
     expect(snap.items[1].number).toBe(1);
+  });
+});
+
+describe("scanQueueLabels", () => {
+  beforeEach(() => {
+    mockExecFile.mockReset();
+    clearRepoCache();
+    clearApiCache();
+    clearQueueCache();
+    clearRateLimitState();
+    (config as Record<string, unknown>).ALLOWED_REPOS = null;
+  });
+
+  it("populates queue cache from issue labels", async () => {
+    let callCount = 0;
+    mockExecFile.mockImplementation(
+      (_cmd: string, cmdArgs: string[], _opts: unknown, cb: (err: Error | null, stdout: string) => void) => {
+        callCount++;
+        if (cmdArgs.includes("repo") && cmdArgs.includes("list")) {
+          // listRepos
+          cb(null, JSON.stringify([
+            { nameWithOwner: "test-owner/repo1", name: "repo1", owner: { login: "test-owner" }, defaultBranchRef: { name: "main" }, isArchived: false },
+          ]));
+        } else if (cmdArgs.includes("issue") && cmdArgs.includes("list")) {
+          // listOpenIssues
+          cb(null, JSON.stringify([
+            { number: 1, title: "Issue 1", body: "", labels: [{ name: "Needs Refinement" }], updatedAt: "2026-01-01T00:00:00Z" },
+            { number: 2, title: "Issue 2", body: "", labels: [{ name: "Refined" }], updatedAt: "2026-01-02T00:00:00Z" },
+            { number: 3, title: "Issue 3", body: "", labels: [{ name: "Ready" }], updatedAt: "2026-01-03T00:00:00Z" },
+            { number: 4, title: "Issue 4", body: "", labels: [{ name: "Needs Plan Review" }], updatedAt: "2026-01-04T00:00:00Z" },
+            { number: 5, title: "No label", body: "", labels: [], updatedAt: "2026-01-05T00:00:00Z" },
+          ]));
+        } else {
+          cb(null, "[]");
+        }
+      },
+    );
+
+    await scanQueueLabels();
+
+    const refinement = getQueueSnapshot(["needs-refinement"]);
+    expect(refinement.items).toHaveLength(1);
+    expect(refinement.items[0].number).toBe(1);
+
+    const refined = getQueueSnapshot(["refined"]);
+    expect(refined.items).toHaveLength(1);
+    expect(refined.items[0].number).toBe(2);
+
+    const ready = getQueueSnapshot(["ready"]);
+    expect(ready.items).toHaveLength(1);
+    expect(ready.items[0].number).toBe(3);
+
+    const planReview = getQueueSnapshot(["needs-plan-review"]);
+    expect(planReview.items).toHaveLength(1);
+    expect(planReview.items[0].number).toBe(4);
+  });
+
+  it("clears stale entries on rescan", async () => {
+    // Seed the cache with an item that will not be present on second scan
+    populateQueueCache("needs-refinement", "test-owner/repo1", {
+      number: 99, title: "Stale", type: "issue", updatedAt: "2026-01-01T00:00:00Z",
+    });
+
+    mockExecFile.mockImplementation(
+      (_cmd: string, cmdArgs: string[], _opts: unknown, cb: (err: Error | null, stdout: string) => void) => {
+        if (cmdArgs.includes("repo") && cmdArgs.includes("list")) {
+          cb(null, JSON.stringify([
+            { nameWithOwner: "test-owner/repo1", name: "repo1", owner: { login: "test-owner" }, defaultBranchRef: { name: "main" }, isArchived: false },
+          ]));
+        } else if (cmdArgs.includes("issue") && cmdArgs.includes("list")) {
+          // No issues with labels this time
+          cb(null, JSON.stringify([]));
+        } else {
+          cb(null, "[]");
+        }
+      },
+    );
+
+    await scanQueueLabels();
+
+    const snap = getQueueSnapshot(["needs-refinement"]);
+    expect(snap.items).toHaveLength(0);
+  });
+
+  it("does not clear non-scanner categories", async () => {
+    // Seed with a category the scanner doesn't own
+    populateQueueCache("auto-mergeable", "test-owner/repo1", {
+      number: 10, title: "PR ready", type: "pr", updatedAt: "2026-01-01T00:00:00Z",
+    });
+
+    mockExecFile.mockImplementation(
+      (_cmd: string, cmdArgs: string[], _opts: unknown, cb: (err: Error | null, stdout: string) => void) => {
+        if (cmdArgs.includes("repo") && cmdArgs.includes("list")) {
+          cb(null, JSON.stringify([
+            { nameWithOwner: "test-owner/repo1", name: "repo1", owner: { login: "test-owner" }, defaultBranchRef: { name: "main" }, isArchived: false },
+          ]));
+        } else if (cmdArgs.includes("issue") && cmdArgs.includes("list")) {
+          cb(null, JSON.stringify([]));
+        } else {
+          cb(null, "[]");
+        }
+      },
+    );
+
+    await scanQueueLabels();
+
+    const snap = getQueueSnapshot(["auto-mergeable"]);
+    expect(snap.items).toHaveLength(1);
+    expect(snap.items[0].number).toBe(10);
+  });
+
+  it("skips when already scanning (guard flag)", async () => {
+    // We test this by making the first scan block, starting a second, and verifying
+    // only one gh call is made for repos
+    let repoCallCount = 0;
+    let resolveFirst: (() => void) | null = null;
+
+    mockExecFile.mockImplementation(
+      (_cmd: string, cmdArgs: string[], _opts: unknown, cb: (err: Error | null, stdout: string) => void) => {
+        if (cmdArgs.includes("repo") && cmdArgs.includes("list")) {
+          repoCallCount++;
+          if (repoCallCount === 1) {
+            // Block the first call
+            new Promise<void>((resolve) => { resolveFirst = resolve; }).then(() => {
+              cb(null, JSON.stringify([{ nameWithOwner: "test-owner/repo1", name: "repo1", owner: { login: "test-owner" }, defaultBranchRef: { name: "main" }, isArchived: false }]));
+            });
+          } else {
+            cb(null, JSON.stringify([{ nameWithOwner: "test-owner/repo1", name: "repo1", owner: { login: "test-owner" }, defaultBranchRef: { name: "main" }, isArchived: false }]));
+          }
+        } else if (cmdArgs.includes("issue") && cmdArgs.includes("list")) {
+          cb(null, JSON.stringify([]));
+        } else {
+          cb(null, "[]");
+        }
+      },
+    );
+
+    const first = scanQueueLabels();
+    const second = scanQueueLabels(); // Should bail immediately
+
+    // Let second complete (it should be a no-op)
+    await second;
+
+    // Unblock first
+    resolveFirst!();
+    await first;
+
+    // listRepos was called only once (the dedup cache doesn't apply here
+    // because the guard flag skips before even calling listRepos)
+    expect(repoCallCount).toBe(1);
+  });
+
+  it("handles errors gracefully", async () => {
+    mockExecFile.mockImplementation(
+      (_cmd: string, cmdArgs: string[], _opts: unknown, cb: (err: Error | null, stdout: string, stderr: string) => void) => {
+        if (cmdArgs.includes("repo") && cmdArgs.includes("list")) {
+          cb(null, JSON.stringify([
+            { nameWithOwner: "test-owner/repo1", name: "repo1", owner: { login: "test-owner" }, defaultBranchRef: { name: "main" }, isArchived: false },
+          ]), "");
+        } else if (cmdArgs.includes("issue") && cmdArgs.includes("list")) {
+          cb(new Error("network error"), "", "network error");
+        } else {
+          cb(null, "[]", "");
+        }
+      },
+    );
+
+    // Should not throw
+    await expect(scanQueueLabels()).resolves.toBeUndefined();
+
+    // Should log the error
+    expect(log.warn).toHaveBeenCalled();
+  });
+
+  it("excludes skipped items and flags prioritized items", async () => {
+    // Override SKIPPED_ITEMS and PRIORITIZED_ITEMS on the config mock
+    (config as Record<string, unknown>).SKIPPED_ITEMS = [{ repo: "test-owner/repo1", number: 1 }];
+    (config as Record<string, unknown>).PRIORITIZED_ITEMS = [{ repo: "test-owner/repo1", number: 2 }];
+
+    mockExecFile.mockImplementation(
+      (_cmd: string, cmdArgs: string[], _opts: unknown, cb: (err: Error | null, stdout: string) => void) => {
+        if (cmdArgs.includes("repo") && cmdArgs.includes("list")) {
+          cb(null, JSON.stringify([
+            { nameWithOwner: "test-owner/repo1", name: "repo1", owner: { login: "test-owner" }, defaultBranchRef: { name: "main" }, isArchived: false },
+          ]));
+        } else if (cmdArgs.includes("issue") && cmdArgs.includes("list")) {
+          cb(null, JSON.stringify([
+            { number: 1, title: "Skipped", body: "", labels: [{ name: "Refined" }], updatedAt: "2026-01-01T00:00:00Z" },
+            { number: 2, title: "Prioritized", body: "", labels: [{ name: "Refined" }], updatedAt: "2026-01-02T00:00:00Z" },
+          ]));
+        } else {
+          cb(null, "[]");
+        }
+      },
+    );
+
+    await scanQueueLabels();
+
+    const snap = getQueueSnapshot(["refined"]);
+    // Issue #1 should be excluded (skipped)
+    expect(snap.items).toHaveLength(1);
+    expect(snap.items[0].number).toBe(2);
+    // Issue #2 should be prioritized
+    expect(snap.items[0].prioritized).toBe(true);
+
+    // Restore defaults
+    (config as Record<string, unknown>).SKIPPED_ITEMS = [];
+    (config as Record<string, unknown>).PRIORITIZED_ITEMS = [];
   });
 });

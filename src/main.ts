@@ -218,11 +218,19 @@ if (enabledJobs.length === 0) {
 const scheduler = startJobs(enabledJobs, config.PAUSED_JOBS);
 const server = createServer(scheduler);
 
+// ── Queue label scanner (infrastructure — always runs) ──
+
+gh.scanQueueLabels().catch((err) => log.warn(`[queue-scan] Initial scan failed: ${err}`));
+let queueScanInterval = setInterval(() => {
+  gh.scanQueueLabels().catch((err) => log.warn(`[queue-scan] Scan failed: ${err}`));
+}, config.QUEUE_SCAN_INTERVAL_MS);
+
 // ── Live config reload ──
 
 let prevIntervals = { ...INTERVALS };
 let prevSchedules = { ...SCHEDULES };
 let prevEnabledJobs = new Set(ENABLED_JOBS);
+let prevQueueScanIntervalMs = config.QUEUE_SCAN_INTERVAL_MS;
 
 onConfigChange(() => {
   gh.clearRepoCache();
@@ -280,6 +288,16 @@ onConfigChange(() => {
   }
 
   prevEnabledJobs = newEnabled;
+
+  // Sync queue scan interval
+  if (config.QUEUE_SCAN_INTERVAL_MS !== prevQueueScanIntervalMs) {
+    clearInterval(queueScanInterval);
+    queueScanInterval = setInterval(() => {
+      gh.scanQueueLabels().catch((err) => log.warn(`[queue-scan] Scan failed: ${err}`));
+    }, config.QUEUE_SCAN_INTERVAL_MS);
+    log.info(`Config change: queueScanIntervalMs updated to ${config.QUEUE_SCAN_INTERVAL_MS}ms`);
+    prevQueueScanIntervalMs = config.QUEUE_SCAN_INTERVAL_MS;
+  }
 });
 
 // ── Discord bot ──
@@ -307,6 +325,7 @@ async function shutdown() {
 
   log.info("Shutting down...");
   clearInterval(pruneInterval);
+  clearInterval(queueScanInterval);
 
   if (isDiscordConfigured()) {
     await discord.stop();
