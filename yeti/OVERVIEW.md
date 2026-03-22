@@ -61,7 +61,7 @@ deploy/
 
 **`main.ts`** — Wires everything together. Initializes the SQLite database,
 recovers orphaned tasks from a previous crash (cleans up dangling worktrees,
-marks tasks failed), prunes old logs, registers all 11 jobs with the scheduler
+marks tasks failed), prunes old logs, registers all 12 jobs with the scheduler
 (interval jobs staggered by 2 seconds to prevent thundering herd), starts the
 HTTP server, launches the **queue label scanner** (an infrastructure timer that
 runs `scanQueueLabels()` on a configurable interval to keep the dashboard queue
@@ -252,7 +252,7 @@ The web dashboard is a first-class consumer of job, config, and queue data. Page
 
 ## Jobs
 
-Eleven scheduled jobs run on timers or schedules.
+Twelve scheduled jobs run on timers or schedules.
 See [Jobs](jobs.md) for detailed behavior of each.
 
 | Job | Trigger | Interval | Summary |
@@ -503,6 +503,7 @@ defaults.
 | `schedules.docMaintainerHour` | — | `1` (1 AM local time) |
 | `schedules.repoStandardsHour` | — | `2` (2 AM local time) |
 | `schedules.improvementIdentifierHour` | — | `3` (3 AM local time) |
+| `schedules.mkdocsUpdateHour` | — | `4` (4 AM local time) |
 | `schedules.issueAuditorHour` | — | `5` (5 AM local time) |
 | `logRetentionDays` | — | `14` |
 | `logRetentionPerJob` | — | `20` |
