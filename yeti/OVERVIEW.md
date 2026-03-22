@@ -311,9 +311,11 @@ no queue pile-up. This is distinct from the Claude task queue; a job can be
 
 Each task gets its own git worktree at
 `~/.yeti/worktrees/<owner>/<repo>/<job>/<branch>`. The job namespace prevents
-different jobs from colliding when they process the same branch concurrently.
-The main clone lives at `~/.yeti/repos/<owner>/<repo>`. Worktrees are always
-cleaned up in a `finally` block after each task.
+filesystem path collisions. Worktrees for existing branches use detached HEAD
+mode, allowing multiple jobs to work on the same branch concurrently without
+git's branch-lock conflict. The main clone lives at
+`~/.yeti/repos/<owner>/<repo>`. Worktrees are always cleaned up in a `finally`
+block after each task.
 
 ### Graceful Shutdown
 

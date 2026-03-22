@@ -257,18 +257,14 @@ export async function createWorktreeFromBranch(repo: Repo, branchName: string, n
     }
   }
 
-  // Reset local branch to match remote (handles force-pushes like Dependabot rebases)
-  try {
-    await git(["branch", "-f", branchName, `origin/${branchName}`], mainDir);
-  } catch {
-    // Branch may not exist locally yet, that's fine
-  }
-
   // Prune stale worktree metadata (e.g. from other jobs whose directories were removed)
   await git(["worktree", "prune"], mainDir);
 
   fs.mkdirSync(path.dirname(wtPath), { recursive: true });
-  await git(["worktree", "add", wtPath, branchName], mainDir);
+  // Use --detach to avoid git's branch-lock constraint: git forbids the same
+  // branch being checked out in multiple worktrees simultaneously. Detached HEAD
+  // allows multiple jobs to work on the same branch concurrently.
+  await git(["worktree", "add", "--detach", wtPath, `origin/${branchName}`], mainDir);
   return wtPath;
 }
 
@@ -541,7 +537,9 @@ export function runAI(prompt: string, cwd: string, options?: AiOptions): Promise
 }
 
 export async function pushBranch(wtPath: string, branchName: string): Promise<void> {
-  await git(["push", "-u", "origin", branchName], wtPath);
+  // Use HEAD refspec to support both detached HEAD (createWorktreeFromBranch)
+  // and named branch (createWorktree) worktrees.
+  await git(["push", "origin", `HEAD:refs/heads/${branchName}`], wtPath);
 }
 
 // ── Claude invocation ──
