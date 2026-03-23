@@ -1115,7 +1115,7 @@ describe("runAI with codex backend", () => {
     // Verify spawn was called with codex binary and correct args
     expect(mockSpawn).toHaveBeenCalledWith(
       "codex",
-      ["--approval-mode", "full-auto", "do the thing"],
+      ["exec", "--full-auto", "do the thing"],
       expect.objectContaining({ cwd: "/tmp/codex-test" }),
     );
 
@@ -1149,7 +1149,7 @@ describe("runAI with codex backend", () => {
     // Model flag should come before the positional prompt
     expect(mockSpawn).toHaveBeenCalledWith(
       "codex",
-      ["--approval-mode", "full-auto", "--model", "o3", "do the thing"],
+      ["exec", "--full-auto", "--model", "o3", "do the thing"],
       expect.objectContaining({ cwd: "/tmp/codex-test" }),
     );
 
