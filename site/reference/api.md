@@ -32,6 +32,13 @@ The `/health`, `/status`, `/login`, and `POST /login` routes are accessible with
 |--------|------|-------------|
 | `GET` | `/` | Main dashboard -- job status, worker queues, running tasks, schedule info |
 | `GET` | `/jobs` | Jobs page -- all registered jobs with backend, model, schedule, status, and controls |
+| `GET` | `/repos` | Repos page -- configured repositories with active queue items and recent completed tasks |
+
+### Repo Management (Auth Required)
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `POST` | `/repos/add` | Add a repo to `allowedRepos`. Body: `{"repo": "repo-name"}`. Returns `{"result": "added"}` |
 
 ### Job Control (Auth Required)
 
