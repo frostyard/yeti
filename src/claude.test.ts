@@ -6,6 +6,8 @@ vi.mock("./config.js", () => ({
   CLAUDE_TIMEOUT_MS: 20 * 60 * 1000,
   MAX_COPILOT_WORKERS: 1,
   COPILOT_TIMEOUT_MS: 20 * 60 * 1000,
+  MAX_CODEX_WORKERS: 1,
+  CODEX_TIMEOUT_MS: 20 * 60 * 1000,
 }));
 
 vi.mock("./log.js", () => ({
@@ -38,7 +40,7 @@ vi.mock("node:fs", () => ({
   },
 }));
 
-import { enqueue, queueStatus, randomSuffix, datestamp, hasNewCommits, hasTreeDiff, generatePRDescription, generateDocsPRDescription, regeneratePRDescription, runClaude, cancelCurrentTask, cancelQueuedTasks, createWorktree, createWorktreeFromBranch, pushBranch, ensureClone, ClaudeTimeoutError, runAI, copilotQueueStatus, enqueueCopilot, AiTimeoutError } from "./claude.js";
+import { enqueue, queueStatus, randomSuffix, datestamp, hasNewCommits, hasTreeDiff, generatePRDescription, generateDocsPRDescription, regeneratePRDescription, runClaude, cancelCurrentTask, cancelQueuedTasks, createWorktree, createWorktreeFromBranch, pushBranch, ensureClone, ClaudeTimeoutError, runAI, copilotQueueStatus, enqueueCopilot, codexQueueStatus, enqueueCodex, AiTimeoutError } from "./claude.js";
 import { ShutdownError } from "./shutdown.js";
 import * as shutdown from "./shutdown.js";
 import fs from "node:fs";
@@ -1065,5 +1067,94 @@ describe("copilot queue", () => {
   it("enqueues and resolves copilot tasks", async () => {
     const result = await enqueueCopilot(() => Promise.resolve("copilot-result"));
     expect(result).toBe("copilot-result");
+  });
+});
+
+describe("codex queue", () => {
+  it("reports codex queue status independently", () => {
+    const status = codexQueueStatus();
+    expect(status).toEqual({ pending: 0, active: 0 });
+  });
+
+  it("enqueues and resolves codex tasks", async () => {
+    const result = await enqueueCodex(() => Promise.resolve("codex-result"));
+    expect(result).toBe("codex-result");
+  });
+
+  it("rejects immediately when maxCodexWorkers is 0", async () => {
+    const configMock = await import("./config.js") as Record<string, unknown>;
+    const original = configMock["MAX_CODEX_WORKERS"];
+    configMock["MAX_CODEX_WORKERS"] = 0;
+    try {
+      await expect(enqueueCodex(() => Promise.resolve("nope"))).rejects.toThrow(
+        "Codex backend is disabled",
+      );
+    } finally {
+      configMock["MAX_CODEX_WORKERS"] = original;
+    }
+  });
+});
+
+describe("runAI with codex backend", () => {
+  it("uses codex binary with positional prompt and correct args", async () => {
+    const child = new EventEmitter() as ChildProcess & EventEmitter;
+    const stdoutEmitter = new EventEmitter();
+    const stderrEmitter = new EventEmitter();
+    const stdinMock = { write: vi.fn(), end: vi.fn() };
+
+    Object.assign(child, {
+      stdout: stdoutEmitter,
+      stderr: stderrEmitter,
+      stdin: stdinMock,
+    });
+
+    mockSpawn.mockReturnValue(child as any);
+
+    const promise = runAI("do the thing", "/tmp/codex-test", { backend: "codex" });
+
+    // Verify spawn was called with codex binary and correct args
+    expect(mockSpawn).toHaveBeenCalledWith(
+      "codex",
+      ["--approval-mode", "full-auto", "do the thing"],
+      expect.objectContaining({ cwd: "/tmp/codex-test" }),
+    );
+
+    // Prompt should NOT be written to stdin for positional mode
+    expect(stdinMock.write).not.toHaveBeenCalled();
+    expect(stdinMock.end).toHaveBeenCalled();
+
+    stdoutEmitter.emit("data", Buffer.from("codex output"));
+    child.emit("close", 0, null);
+
+    const result = await promise;
+    expect(result).toBe("codex output");
+  });
+
+  it("places model flag before positional prompt", async () => {
+    const child = new EventEmitter() as ChildProcess & EventEmitter;
+    const stdoutEmitter = new EventEmitter();
+    const stderrEmitter = new EventEmitter();
+    const stdinMock = { write: vi.fn(), end: vi.fn() };
+
+    Object.assign(child, {
+      stdout: stdoutEmitter,
+      stderr: stderrEmitter,
+      stdin: stdinMock,
+    });
+
+    mockSpawn.mockReturnValue(child as any);
+
+    const promise = runAI("do the thing", "/tmp/codex-test", { backend: "codex", model: "o3" });
+
+    // Model flag should come before the positional prompt
+    expect(mockSpawn).toHaveBeenCalledWith(
+      "codex",
+      ["--approval-mode", "full-auto", "--model", "o3", "do the thing"],
+      expect.objectContaining({ cwd: "/tmp/codex-test" }),
+    );
+
+    stdoutEmitter.emit("data", Buffer.from("ok"));
+    child.emit("close", 0, null);
+    await promise;
   });
 });

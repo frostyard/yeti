@@ -53,9 +53,11 @@ export interface ConfigFile {
   authToken?: string;
   maxClaudeWorkers?: number;
   claudeTimeoutMs?: number;
-  jobAi?: Record<string, { backend?: "claude" | "copilot"; model?: string }>;
+  jobAi?: Record<string, { backend?: "claude" | "copilot" | "codex"; model?: string }>;
   maxCopilotWorkers?: number;
   copilotTimeoutMs?: number;
+  maxCodexWorkers?: number;
+  codexTimeoutMs?: number;
   intervals?: {
     issueWorkerMs?: number;
     issueRefinerMs?: number;
@@ -160,6 +162,23 @@ function loadConfig() {
     ),
   );
 
+  const parsedMaxCodexWorkers = parseInt(
+    process.env["YETI_MAX_CODEX_WORKERS"] ?? String(file.maxCodexWorkers ?? 1),
+    10,
+  );
+  const maxCodexWorkers =
+    Number.isFinite(parsedMaxCodexWorkers) && parsedMaxCodexWorkers >= 0
+      ? parsedMaxCodexWorkers
+      : 1;
+
+  const codexTimeoutMs = Math.max(
+    60_000,
+    parseInt(
+      process.env["YETI_CODEX_TIMEOUT_MS"] ?? String(file.codexTimeoutMs ?? 20 * 60 * 1000),
+      10,
+    ),
+  );
+
   const logRetentionDays = file.logRetentionDays ?? 14;
   const logRetentionPerJob = file.logRetentionPerJob ?? 20;
   const pausedJobs = file.pausedJobs ?? [];
@@ -172,7 +191,7 @@ function loadConfig() {
   const jobAi = file.jobAi ?? {};
   const queueScanIntervalMs = file.queueScanIntervalMs ?? 5 * 60 * 1000;
 
-  return { githubOwners, selfRepo, port, intervals, schedules, logRetentionDays, logRetentionPerJob, discordBotToken, discordChannelId, discordAllowedUsers, authToken, maxClaudeWorkers, claudeTimeoutMs, maxCopilotWorkers, copilotTimeoutMs, pausedJobs, skippedItems, prioritizedItems, allowedRepos, enabledJobs, jobAi, queueScanIntervalMs };
+  return { githubOwners, selfRepo, port, intervals, schedules, logRetentionDays, logRetentionPerJob, discordBotToken, discordChannelId, discordAllowedUsers, authToken, maxClaudeWorkers, claudeTimeoutMs, maxCopilotWorkers, copilotTimeoutMs, maxCodexWorkers, codexTimeoutMs, pausedJobs, skippedItems, prioritizedItems, allowedRepos, enabledJobs, jobAi, queueScanIntervalMs };
 }
 
 const config = loadConfig();
@@ -194,7 +213,9 @@ export let ALLOWED_REPOS: readonly string[] | null = config.allowedRepos;
 export let ENABLED_JOBS: readonly string[] = config.enabledJobs;
 export let MAX_COPILOT_WORKERS = config.maxCopilotWorkers;
 export let COPILOT_TIMEOUT_MS = config.copilotTimeoutMs;
-export let JOB_AI: Readonly<Record<string, { backend?: "claude" | "copilot"; model?: string }>> = config.jobAi;
+export let MAX_CODEX_WORKERS = config.maxCodexWorkers;
+export let CODEX_TIMEOUT_MS = config.codexTimeoutMs;
+export let JOB_AI: Readonly<Record<string, { backend?: "claude" | "copilot" | "codex"; model?: string }>> = config.jobAi;
 export let QUEUE_SCAN_INTERVAL_MS = config.queueScanIntervalMs;
 // Immutable — requires restart (bot connection)
 export const DISCORD_BOT_TOKEN = config.discordBotToken;
@@ -245,6 +266,8 @@ export function reloadConfig(): void {
   ENABLED_JOBS = fresh.enabledJobs;
   MAX_COPILOT_WORKERS = fresh.maxCopilotWorkers;
   COPILOT_TIMEOUT_MS = fresh.copilotTimeoutMs;
+  MAX_CODEX_WORKERS = fresh.maxCodexWorkers;
+  CODEX_TIMEOUT_MS = fresh.codexTimeoutMs;
   JOB_AI = fresh.jobAi;
   QUEUE_SCAN_INTERVAL_MS = fresh.queueScanIntervalMs;
   DISCORD_ALLOWED_USERS = fresh.discordAllowedUsers;

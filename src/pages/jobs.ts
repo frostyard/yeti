@@ -26,7 +26,7 @@ export interface JobInfo {
 export function buildJobsPage(
   allJobs: JobInfo[],
   enabledJobs: ReadonlySet<string>,
-  jobAi: Readonly<Record<string, { backend?: "claude" | "copilot"; model?: string }>>,
+  jobAi: Readonly<Record<string, { backend?: "claude" | "copilot" | "codex"; model?: string }>>,
   runningJobs: Record<string, boolean>,
   latestRuns: Map<string, { runId: string; status: string; startedAt: string; completedAt: string | null }>,
   theme: Theme,

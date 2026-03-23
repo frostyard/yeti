@@ -22,6 +22,7 @@ export function buildStatusPage(
   paused?: Set<string>,
   scheduleInfo?: Map<string, { intervalMs: number; scheduledHour?: number }>,
   copilotQueue?: { pending: number; active: number },
+  codexQueue?: { pending: number; active: number },
 ): string {
   const dc = discordLabel(discord);
 
@@ -138,6 +139,13 @@ ${htmlOpenTag(theme)}
     <dt>Pending</dt>
     <dd id="copilot-queue-pending">${copilotQueue.pending}</dd>
   </dl>` : ""}
+  ${codexQueue ? `<h2>Codex Queue</h2>
+  <dl class="meta">
+    <dt>Status</dt>
+    <dd id="codex-queue-status" class="${codexQueue.active > 0 ? "running" : "idle"}">${codexQueue.active > 0 ? `Active (${codexQueue.active})` : "Idle"}</dd>
+    <dt>Pending</dt>
+    <dd id="codex-queue-pending">${codexQueue.pending}</dd>
+  </dl>` : ""}
   <h2>Integrations</h2>
   <dl class="meta">
     <dt>Discord</dt>
@@ -251,6 +259,12 @@ ${htmlOpenTag(theme)}
             if (cqs) { cqs.textContent = data.copilotQueue.active > 0 ? 'Active (' + data.copilotQueue.active + ')' : 'Idle'; cqs.className = data.copilotQueue.active > 0 ? 'running' : 'idle'; }
             var cqp = document.getElementById('copilot-queue-pending');
             if (cqp) cqp.textContent = data.copilotQueue.pending;
+          }
+          if (data.codexQueue) {
+            var xqs = document.getElementById('codex-queue-status');
+            if (xqs) { xqs.textContent = data.codexQueue.active > 0 ? 'Active (' + data.codexQueue.active + ')' : 'Idle'; xqs.className = data.codexQueue.active > 0 ? 'running' : 'idle'; }
+            var xqp = document.getElementById('codex-queue-pending');
+            if (xqp) xqp.textContent = data.codexQueue.pending;
           }
           var taskByJob = {};
           if (data.runningTasks) {

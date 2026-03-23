@@ -14,7 +14,7 @@ src/
 ├── config.ts            Configuration loading (env > config file > defaults)
 ├── scheduler.ts         Interval/schedule-based job runner with skip-if-busy
 ├── github.ts            gh CLI wrapper with transient-error retry
-├── claude.ts            Multi-backend AI dispatch (Claude + Copilot), bounded concurrent queues, worktree helpers
+├── claude.ts            Multi-backend AI dispatch (Claude + Copilot + Codex), bounded concurrent queues, worktree helpers
 ├── db.ts                SQLite task tracking (better-sqlite3)
 ├── server.ts            HTTP server — dashboard, health, status, manual triggers
 ├── log.ts               Timestamped logging
@@ -521,6 +521,8 @@ defaults.
 | `claudeTimeoutMs` | `YETI_CLAUDE_TIMEOUT_MS` | `1200000` (20 min, minimum 60s) |
 | `maxCopilotWorkers` | `YETI_MAX_COPILOT_WORKERS` | `1` |
 | `copilotTimeoutMs` | `YETI_COPILOT_TIMEOUT_MS` | `1200000` (20 min, minimum 60s) |
+| `maxCodexWorkers` | `YETI_MAX_CODEX_WORKERS` | `1` |
+| `codexTimeoutMs` | `YETI_CODEX_TIMEOUT_MS` | `1200000` (20 min, minimum 60s) |
 | `jobAi` | — | `{}` (per-job AI backend/model overrides) |
 | `authToken` | `YETI_AUTH_TOKEN` | *(empty — auth disabled)* |
 | `pausedJobs` | — | `[]` (job names to pause on startup) |

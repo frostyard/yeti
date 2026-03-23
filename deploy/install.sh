@@ -62,6 +62,8 @@ if [[ ! -f "$CONFIG_FILE" ]]; then
   "claudeTimeoutMs": 1200000,
   "maxCopilotWorkers": 1,
   "copilotTimeoutMs": 1200000,
+  "maxCodexWorkers": 1,
+  "codexTimeoutMs": 1200000,
   "jobAi": {},
   "intervals": {
     "issueWorkerMs": 300000,
@@ -111,6 +113,10 @@ if [[ ! -f "$ENV_FILE" ]]; then
 # Copilot backend
 # YETI_MAX_COPILOT_WORKERS=1
 # YETI_COPILOT_TIMEOUT_MS=1200000
+
+# Codex backend
+# YETI_MAX_CODEX_WORKERS=1
+# YETI_CODEX_TIMEOUT_MS=1200000
 CONF
   chmod 600 "$ENV_FILE"
   log "Created $ENV_FILE — edit it to set environment overrides"

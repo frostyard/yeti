@@ -124,6 +124,13 @@ ${htmlOpenTag(theme)}
     <label for="copilotTimeoutMs">Copilot Timeout (minutes)</label>
     <input type="number" name="copilotTimeoutMs" id="copilotTimeoutMs" value="${Math.round(Number(cfg.copilotTimeoutMs ?? 1200000) / 60000)}" min="1">
 
+    <label for="maxCodexWorkers">Max Codex Workers</label>
+    <input type="number" name="maxCodexWorkers" id="maxCodexWorkers" value="${Number(cfg.maxCodexWorkers ?? 1)}" min="0">
+    <div class="field-note">Number of concurrent Codex CLI processes (0 to disable)</div>
+
+    <label for="codexTimeoutMs">Codex Timeout (minutes)</label>
+    <input type="number" name="codexTimeoutMs" id="codexTimeoutMs" value="${Math.round(Number(cfg.codexTimeoutMs ?? 1200000) / 60000)}" min="1">
+
     <h3>Per-Job AI Config</h3>
     <div class="field-note">Override the AI backend and/or model for specific jobs. Leave model empty for default.</div>
     <table class="config-table">
@@ -134,8 +141,9 @@ ${htmlOpenTag(theme)}
           return `<tr>
             <td>${escapeHtml(job)}</td>
             <td><select name="jobAi_${escapeHtml(job)}_backend">
-              <option value="claude"${jobCfg.backend !== "copilot" ? " selected" : ""}>claude</option>
+              <option value="claude"${!jobCfg.backend || jobCfg.backend === "claude" ? " selected" : ""}>claude</option>
               <option value="copilot"${jobCfg.backend === "copilot" ? " selected" : ""}>copilot</option>
+              <option value="codex"${jobCfg.backend === "codex" ? " selected" : ""}>codex</option>
             </select></td>
             <td><input type="text" name="jobAi_${escapeHtml(job)}_model" value="${escapeHtml(jobCfg.model ?? "")}" placeholder="default"></td>
           </tr>`;

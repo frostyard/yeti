@@ -1,6 +1,6 @@
 import http from "node:http";
 import crypto from "node:crypto";
-import { queueStatus, copilotQueueStatus, cancelCurrentTask } from "./claude.js";
+import { queueStatus, copilotQueueStatus, codexQueueStatus, cancelCurrentTask } from "./claude.js";
 import { SERVER_PORT, getConfigForDisplay, writeConfig, type ConfigFile } from "./config.js";
 import * as config from "./config.js";
 import { getQueueSnapshot, enrichQueueItemsWithPRStatus, mergePR, removeQueueItem, listAllOrgRepos, listRepos, type QueueCategory } from "./github.js";
@@ -347,8 +347,16 @@ async function handleRequest(req: http.IncomingMessage, res: http.ServerResponse
       const v = parseInt(params["copilotTimeoutMs"], 10);
       if (v > 0) updates.copilotTimeoutMs = v * 60 * 1000; // minutes → ms
     }
+    if (params["maxCodexWorkers"] !== undefined) {
+      const v = parseInt(params["maxCodexWorkers"], 10);
+      if (v >= 0) updates.maxCodexWorkers = v;
+    }
+    if (params["codexTimeoutMs"] !== undefined) {
+      const v = parseInt(params["codexTimeoutMs"], 10);
+      if (v > 0) updates.codexTimeoutMs = v * 60 * 1000; // minutes → ms
+    }
     // Parse jobAi_* fields (e.g. jobAi_plan-reviewer_backend, jobAi_plan-reviewer_model)
-    const jobAiUpdates: Record<string, { backend?: "claude" | "copilot"; model?: string }> = {};
+    const jobAiUpdates: Record<string, { backend?: "claude" | "copilot" | "codex"; model?: string }> = {};
     for (const [key, value] of Object.entries(params)) {
       if (!key.startsWith("jobAi_")) continue;
       const rest = key.slice("jobAi_".length);
@@ -357,7 +365,7 @@ async function handleRequest(req: http.IncomingMessage, res: http.ServerResponse
       const jobName = rest.slice(0, lastUnderscore);
       const field = rest.slice(lastUnderscore + 1);
       if (!jobAiUpdates[jobName]) jobAiUpdates[jobName] = {};
-      if (field === "backend" && (value === "claude" || value === "copilot")) {
+      if (field === "backend" && (value === "claude" || value === "copilot" || value === "codex")) {
         jobAiUpdates[jobName].backend = value;
       } else if (field === "model") {
         jobAiUpdates[jobName].model = value || undefined;
@@ -417,6 +425,7 @@ async function handleRequest(req: http.IncomingMessage, res: http.ServerResponse
     }
     const cq = queueStatus();
     const cpq = copilotQueueStatus();
+    const cxq = codexQueueStatus();
     const runningTasks = getRunningTasks().map(t => ({
       jobName: t.job_name,
       repo: t.repo,
@@ -457,6 +466,7 @@ async function handleRequest(req: http.IncomingMessage, res: http.ServerResponse
         pausedJobs: [...pausedSet],
         claudeQueue: { pending: cq.pending, active: cq.active },
         copilotQueue: { pending: cpq.pending, active: cpq.active },
+        codexQueue: { pending: cxq.pending, active: cxq.active },
         runningTasks,
         jobSchedules,
         discord: discordStatus(),
@@ -494,6 +504,7 @@ async function handleRequest(req: http.IncomingMessage, res: http.ServerResponse
       paused,
       schedInfo,
       copilotQueueStatus(),
+      codexQueueStatus(),
     );
     res.writeHead(200, { "Content-Type": "text/html" });
     res.end(html);

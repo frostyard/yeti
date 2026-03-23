@@ -92,7 +92,7 @@ Copilot (or Gemini via Copilot) critiques it.
 - Finds the most recent `## Implementation Plan` comment
 - Skips if the plan comment already has a 👍 reaction from Yeti (already reviewed)
 - Creates a worktree for codebase context
-- Uses the configured backend/model from `JOB_AI["plan-reviewer"]` (uses `enqueueCopilot` for copilot backend, `enqueue` for claude)
+- Uses the configured backend/model from `JOB_AI["plan-reviewer"]` (uses `enqueueCopilot` for copilot, `enqueueCodex` for codex, `enqueue` for claude)
 - Posts review as a comment prefixed with `## Plan Review`
 - Reacts 👍 to the plan comment (marks as processed)
 - Removes `Needs Plan Review` label, adds `Ready` label
@@ -430,7 +430,7 @@ structure as doc-maintainer (single-phase, one PR per repo).
 - Instructs Claude to read the MkDocs config, scan recent git history,
   and update only Markdown files under the docs directory (and
   `mkdocs.yml` itself if the nav structure needs it)
-- Uses `JOB_AI` backend dispatch (supports both Claude and Copilot
+- Uses `JOB_AI` backend dispatch (supports Claude, Copilot, and Codex
   backends via `JOB_AI["mkdocs-update"]`)
 - If commits were produced with a tree diff: pushes and creates a PR
   titled `docs: update mkdocs content for <repo>`

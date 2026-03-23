@@ -50,6 +50,7 @@ const { mockGh, mockClaude, mockDb } = vi.hoisted(() => ({
     removeWorktree: vi.fn(),
     enqueue: vi.fn(),
     enqueueCopilot: vi.fn(),
+    enqueueCodex: vi.fn(),
     runAI: vi.fn(),
     randomSuffix: vi.fn().mockReturnValue("ab12"),
   },
@@ -76,6 +77,7 @@ describe("plan-reviewer", () => {
     vi.clearAllMocks();
     mockClaude.createWorktree.mockResolvedValue("/tmp/worktree");
     mockClaude.enqueueCopilot.mockImplementation((fn: () => Promise<string>) => fn());
+    mockClaude.enqueueCodex.mockImplementation((fn: () => Promise<string>) => fn());
     mockClaude.enqueue.mockImplementation((fn: () => Promise<string>) => fn());
     mockClaude.runAI.mockResolvedValue("The plan looks solid but misses error handling for edge case X.");
     mockClaude.removeWorktree.mockResolvedValue(undefined);
@@ -206,6 +208,37 @@ describe("plan-reviewer", () => {
       "/tmp/worktree",
       { backend: "copilot" },
     );
+  });
+
+  it("uses enqueueCodex when JOB_AI backend is codex", async () => {
+    // Re-mock config with codex backend
+    const configMod = await import("../config.js");
+    Object.defineProperty(configMod, "JOB_AI", {
+      value: { "plan-reviewer": { backend: "codex" } },
+      writable: true,
+    });
+
+    const issue = mockIssue({
+      body: "Test issue body",
+      labels: [{ name: "Needs Plan Review" }],
+    });
+    mockGh.listOpenIssues.mockResolvedValueOnce([issue]);
+    mockGh.getIssueComments.mockResolvedValue([
+      { id: 501, body: planCommentBody, login: "yeti-bot" },
+    ]);
+    mockGh.getCommentReactions.mockResolvedValue([]);
+
+    await run([repo]);
+
+    expect(mockClaude.enqueueCodex).toHaveBeenCalled();
+    expect(mockClaude.enqueue).not.toHaveBeenCalled();
+    expect(mockClaude.enqueueCopilot).not.toHaveBeenCalled();
+
+    // Reset
+    Object.defineProperty(configMod, "JOB_AI", {
+      value: { "plan-reviewer": { backend: "copilot" } },
+      writable: true,
+    });
   });
 
   it("does not mark as processed when review output is empty", async () => {
