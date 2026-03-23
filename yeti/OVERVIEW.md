@@ -29,6 +29,7 @@ src/
 ├── test-helpers.ts      Test factories (mockRepo, mockIssue, mockPR)
 ├── pages/
 │   ├── dashboard.ts     Main status page HTML builder
+│   ├── jobs.ts          Jobs page HTML builder (all jobs with backend/model/schedule)
 │   ├── queue.ts         Work queue page HTML builder
 │   ├── logs.ts          Log list, detail, and issue logs page HTML builders
 │   ├── config.ts        Config editor page HTML builder
@@ -250,7 +251,7 @@ when Discord is not connected at announcement time.
 
 ### Dashboard (`src/pages/`)
 
-The web dashboard is a first-class consumer of job, config, and queue data. Page builders in `src/pages/` render HTML for the dashboard routes in `server.ts`. `layout.ts` exports a `siteTitle()` helper that builds page titles from `GITHUB_OWNERS` (e.g. "yeti — frostyard — Queue"), reading the config at call time for live-reload compatibility. Any changes to config fields, job states, queue categories, or log/task schemas must be reflected in the corresponding page builders — the dashboard is not optional.
+The web dashboard is a first-class consumer of job, config, and queue data. Page builders in `src/pages/` render HTML for the dashboard routes in `server.ts`. `layout.ts` exports a `siteTitle()` helper that builds page titles from `GITHUB_OWNERS` (e.g. "yeti — frostyard — Queue"), reading the config at call time for live-reload compatibility. Navigation: Dashboard → Jobs → Queue → Logs → Config. The Jobs page (`/jobs`) lists all known jobs with descriptions, enabled/disabled state, AI backend, model override, schedule, and Run/Pause controls. `createServer()` accepts a `JobInfo[]` array from `main.ts` so the Jobs page can show schedule info for all jobs (including disabled ones not registered with the scheduler). Any changes to config fields, job states, queue categories, or log/task schemas must be reflected in the corresponding page builders — the dashboard is not optional.
 
 ## Jobs
 

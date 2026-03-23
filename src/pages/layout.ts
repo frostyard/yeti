@@ -465,7 +465,7 @@ export function buildNav(theme: Theme): string {
   const selectHtml = options
     .map(v => `<option value="${v}"${v === theme ? " selected" : ""}>${labels[v]}</option>`)
     .join("");
-  return `<nav><a href="/">Dashboard</a><a href="/queue">Queue</a><a href="/logs">Logs</a><a href="/config">Config</a><select id="theme-select" onchange="setTheme(this.value)">${selectHtml}</select></nav>`;
+  return `<nav><a href="/">Dashboard</a><a href="/jobs">Jobs</a><a href="/queue">Queue</a><a href="/logs">Logs</a><a href="/config">Config</a><select id="theme-select" onchange="setTheme(this.value)">${selectHtml}</select></nav>`;
 }
 
 export const THEME_SCRIPT = `<script>function setTheme(v){document.cookie="yeti_theme="+v+";Path=/;SameSite=Strict;Max-Age=31536000";if(v==="system"){document.documentElement.removeAttribute("data-theme")}else{document.documentElement.setAttribute("data-theme",v)}}</script>`;

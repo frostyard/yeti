@@ -28,6 +28,8 @@ vi.mock("./config.js", () => ({
   writeConfig: vi.fn(),
   SKIPPED_ITEMS: [],
   PRIORITIZED_ITEMS: [],
+  ENABLED_JOBS: ["issue-worker", "ci-fixer"],
+  JOB_AI: {},
 }));
 
 vi.mock("./log.js", () => ({
@@ -254,6 +256,14 @@ describe("HTTP server", () => {
     expect(res.body).toContain("Connected");
     expect(res.body).not.toContain('http-equiv="refresh"');
     expect(res.body).toContain("fetch('/status')");
+  });
+
+  it("GET /jobs returns 200 with Jobs page HTML", async () => {
+    const res = await request(server, "GET", "/jobs");
+    expect(res.status).toBe(200);
+    expect(res.headers["content-type"]).toBe("text/html");
+    expect(res.body).toContain("Jobs");
+    expect(res.body).toContain('href="/jobs"');
   });
 
   it("POST /health returns 405", async () => {
