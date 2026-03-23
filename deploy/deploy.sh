@@ -14,6 +14,7 @@ if [[ -f "$CURRENT_UNIT" ]]; then
   YETI_USER=$(grep '^User=' "$CURRENT_UNIT" | cut -d= -f2)
   YETI_HOME=$(getent passwd "$YETI_USER" | cut -d: -f6)
 else
+  YETI_USER="${SUDO_USER:-$(whoami)}"
   YETI_HOME="$HOME"
 fi
 CONFIG_FILE="$YETI_HOME/.yeti/config.json"
@@ -38,7 +39,7 @@ PORT="${PORT:-$CONFIG_PORT}"
 HEALTH_URL="http://localhost:$PORT/health"
 
 # 1. Get latest release tag
-LATEST_TAG=$(sudo -u yeti gh release list -R "$REPO" --limit 1 --json tagName --jq '.[0].tagName')
+LATEST_TAG=$(sudo -u "$YETI_USER" gh release list -R "$REPO" --limit 1 --json tagName --jq '.[0].tagName')
 if [[ -z "$LATEST_TAG" ]]; then
   log "No releases found"
   exit 0
@@ -64,8 +65,8 @@ fi
 log "Updating from $CURRENT_TAG to $LATEST_TAG"
 
 # 3. Download and extract
-TMPFILE=$(sudo -u yeti mktemp /tmp/yeti-XXXXXX.tar.gz)
-sudo -u yeti gh release download "$LATEST_TAG" -R "$REPO" -p "yeti.tar.gz" -O "$TMPFILE" --clobber
+TMPFILE=$(sudo -u "$YETI_USER" mktemp /tmp/yeti-XXXXXX.tar.gz)
+sudo -u "$YETI_USER" gh release download "$LATEST_TAG" -R "$REPO" -p "yeti.tar.gz" -O "$TMPFILE" --clobber
 rm -rf "$STAGING_DIR"
 mkdir -p "$STAGING_DIR"
 tar -xzf "$TMPFILE" -C "$STAGING_DIR"
