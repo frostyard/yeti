@@ -114,7 +114,7 @@ Most configuration changes take effect without restarting the service. When you 
 - `intervals` (all job polling intervals)
 - `schedules` (daily job hours)
 - `skippedItems`, `prioritizedItems`
-- `allowedRepos`, `githubOwners`
+- `allowedRepos`, `githubOwners`, `selfRepo`
 - `authToken`
 - `maxClaudeWorkers`, `claudeTimeoutMs`
 - `maxCopilotWorkers`, `copilotTimeoutMs`
