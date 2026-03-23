@@ -181,6 +181,9 @@ export function enqueueCodex<T>(fn: () => Promise<T>, priority = false): Promise
   if (isShuttingDown()) {
     return Promise.reject(new ShutdownError("Shutting down — task not started"));
   }
+  if (MAX_CODEX_WORKERS <= 0) {
+    return Promise.reject(new Error("Codex backend is disabled (maxCodexWorkers is 0)"));
+  }
   return new Promise<T>((resolve, reject) => {
     codexQueue.push({ fn, resolve: resolve as (v: unknown) => void, reject, priority });
     drainCodex();

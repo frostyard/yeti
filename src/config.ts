@@ -162,10 +162,14 @@ function loadConfig() {
     ),
   );
 
-  const maxCodexWorkers = parseInt(
+  const parsedMaxCodexWorkers = parseInt(
     process.env["YETI_MAX_CODEX_WORKERS"] ?? String(file.maxCodexWorkers ?? 1),
     10,
   );
+  const maxCodexWorkers =
+    Number.isFinite(parsedMaxCodexWorkers) && parsedMaxCodexWorkers >= 0
+      ? parsedMaxCodexWorkers
+      : 1;
 
   const codexTimeoutMs = Math.max(
     60_000,

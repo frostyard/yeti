@@ -1080,6 +1080,19 @@ describe("codex queue", () => {
     const result = await enqueueCodex(() => Promise.resolve("codex-result"));
     expect(result).toBe("codex-result");
   });
+
+  it("rejects immediately when maxCodexWorkers is 0", async () => {
+    const configMock = await import("./config.js") as Record<string, unknown>;
+    const original = configMock["MAX_CODEX_WORKERS"];
+    configMock["MAX_CODEX_WORKERS"] = 0;
+    try {
+      await expect(enqueueCodex(() => Promise.resolve("nope"))).rejects.toThrow(
+        "Codex backend is disabled",
+      );
+    } finally {
+      configMock["MAX_CODEX_WORKERS"] = original;
+    }
+  });
 });
 
 describe("runAI with codex backend", () => {

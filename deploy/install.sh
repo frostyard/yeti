@@ -62,7 +62,7 @@ if [[ ! -f "$CONFIG_FILE" ]]; then
   "claudeTimeoutMs": 1200000,
   "maxCopilotWorkers": 1,
   "copilotTimeoutMs": 1200000,
-  "maxCodexWorkers": 0,
+  "maxCodexWorkers": 1,
   "codexTimeoutMs": 1200000,
   "jobAi": {},
   "intervals": {
