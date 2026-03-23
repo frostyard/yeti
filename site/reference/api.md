@@ -31,6 +31,7 @@ The `/health`, `/status`, `/login`, and `POST /login` routes are accessible with
 | Method | Path | Description |
 |--------|------|-------------|
 | `GET` | `/` | Main dashboard -- job status, worker queues, running tasks, schedule info |
+| `GET` | `/jobs` | Jobs page -- all registered jobs with backend, model, schedule, status, and controls |
 
 ### Job Control (Auth Required)
 
