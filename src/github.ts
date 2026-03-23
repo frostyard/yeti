@@ -1,5 +1,5 @@
 import { execFile } from "node:child_process";
-import { GITHUB_OWNERS, LABELS, LABEL_SPECS, SKIPPED_ITEMS, PRIORITIZED_ITEMS, ALLOWED_REPOS, SELF_REPO, type Repo } from "./config.js";
+import { GITHUB_OWNERS, LABELS, LABEL_SPECS, SKIPPED_ITEMS, PRIORITIZED_ITEMS, ALLOWED_REPOS, INCLUDE_FORKS, SELF_REPO, type Repo } from "./config.js";
 import * as log from "./log.js";
 import { notify } from "./notify.js";
 import { reportError } from "./error-reporter.js";
@@ -123,6 +123,7 @@ let repoCachePromise: Promise<Repo[]> | null = null;
 export function clearRepoCache(): void {
   repoCache = null;
   repoCachePromise = null;
+  apiCache.invalidate("all-org-repos");
 }
 
 function filterRepos(repos: Repo[]): Repo[] {
@@ -136,7 +137,8 @@ function filterRepos(repos: Repo[]): Repo[] {
   const discoveredNames = new Set(repos.map(r => r.name.toLowerCase()));
   for (const name of ALLOWED_REPOS) {
     if (!discoveredNames.has(name.toLowerCase()) && name.toLowerCase() !== selfRepoShort) {
-      log.warn(`allowedRepos: "${name}" does not match any discovered repository`);
+      const hint = INCLUDE_FORKS ? "" : " (forked repos are excluded — set includeForks to true to include them)";
+      log.warn(`allowedRepos: "${name}" does not match any discovered repository${hint}`);
     }
   }
 
@@ -406,17 +408,18 @@ async function fetchRepos(): Promise<Repo[]> {
 
   for (const owner of GITHUB_OWNERS) {
     try {
-      const raw = await gh([
+      const args = [
         "repo",
         "list",
         owner,
         "--no-archived",
-        "--source",
+        ...(INCLUDE_FORKS ? [] : ["--source"]),
         "--limit",
         "200",
         "--json",
         "nameWithOwner,name,owner,defaultBranchRef,isArchived",
-      ]);
+      ];
+      const raw = await gh(args);
       const entries: GhRepoEntry[] = safeJsonParse(raw, "repo list");
       for (const e of entries) {
         repos.push({

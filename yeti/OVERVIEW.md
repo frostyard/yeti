@@ -122,7 +122,8 @@ querying GitHub labels — this lightweight scanner runs on its own timer
 are enabled. `clearQueueCacheByCategories()` selectively clears scanner
 categories before each scan to prevent stale entries. The `listRepos()` function
 falls back to a stale cache when the fresh fetch returns empty (transient
-failure protection).
+failure protection). By default, only source (non-fork) repos are discovered;
+set `includeForks` to `true` to include forked repos.
 Provides `issueUrl()` and `pullUrl()` URL builder helpers used by job
 notifications to include clickable GitHub links in Discord messages.
 Provides `isItemSkipped()` and `isItemPrioritized()` helpers that check
@@ -554,8 +555,20 @@ Restricts which repositories Yeti processes. Applied as a filter on `listRepos()
 - `null` = all repos; `[]` = selfRepo only; `["repo-a", "repo-b"]` = those repos + selfRepo
 - `selfRepo` is always included regardless of the list (ensures Yeti can always process its own error issues)
 - Matching is case-insensitive; uses short repo names (not `owner/repo`)
-- Warns at runtime if a configured name doesn't match any discovered repository
+- Warns at runtime if a configured name doesn't match any discovered repository (includes a hint about `includeForks` when fork discovery is disabled)
 - Editable via the dashboard config UI; empty input maps to `[]` (no repos except selfRepo), not `null` (all repos). To restore `null` (all repos), remove the `allowedRepos` key from `config.json` directly.
+
+### includeForks
+
+Controls whether forked repositories are included in discovery.
+
+- **Field**: `includeForks` (boolean)
+- **Env var**: `YETI_INCLUDE_FORKS`
+- **Default**: `false` — only source (non-fork) repos are discovered via `gh repo list --source`
+- **Live-reloadable**: yes (clearing both the repo cache and the all-org-repos cache)
+- When `true`, the `--source` flag is omitted from `gh repo list`, so forks in the org appear alongside source repos
+- Affects both `listRepos()` (worker discovery) and `listAllOrgRepos()` (Repos onboarding page)
+- PRs created on forks stay within the fork — `gh pr create --repo <fork>` targets the fork, not the upstream parent
 
 Config changes made via the web UI (`POST /config`) take effect immediately
 at runtime — no restart required. The config module uses ESM live bindings

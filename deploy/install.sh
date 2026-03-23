@@ -87,6 +87,7 @@ if [[ ! -f "$CONFIG_FILE" ]]; then
   "skippedItems": [],
   "prioritizedItems": [],
   "allowedRepos": [],
+  "includeForks": false,
   "enabledJobs": [],
   "queueScanIntervalMs": 300000
 }
@@ -117,6 +118,9 @@ if [[ ! -f "$ENV_FILE" ]]; then
 # Codex backend
 # YETI_MAX_CODEX_WORKERS=1
 # YETI_CODEX_TIMEOUT_MS=1200000
+
+# Repo discovery
+# YETI_INCLUDE_FORKS=false
 CONF
   chmod 600 "$ENV_FILE"
   log "Created $ENV_FILE — edit it to set environment overrides"
