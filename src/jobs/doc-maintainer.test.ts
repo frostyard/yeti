@@ -3,6 +3,7 @@ import { mockRepo, mockPR } from "../test-helpers.js";
 
 vi.mock("../config.js", () => ({
   WORK_DIR: "/home/testuser/.yeti",
+  JOB_AI: {},
 }));
 
 vi.mock("../log.js", () => ({
@@ -38,7 +39,8 @@ const { mockFs, mockGh, mockClaude, mockDb, mockPlanParser } = vi.hoisted(() => 
     createWorktree: vi.fn(),
     removeWorktree: vi.fn(),
     enqueue: vi.fn(),
-    runClaude: vi.fn(),
+    runAI: vi.fn(),
+    resolveEnqueue: vi.fn(),
     hasNewCommits: vi.fn(),
     hasTreeDiff: vi.fn(),
     pushBranch: vi.fn(),
@@ -82,7 +84,8 @@ describe("doc-maintainer", () => {
     mockGh.getIssueComments.mockResolvedValue([]);
     mockClaude.createWorktree.mockResolvedValue("/tmp/worktree");
     mockClaude.enqueue.mockImplementation((fn: () => Promise<string>) => fn());
-    mockClaude.runClaude.mockResolvedValue("docs generated");
+    mockClaude.resolveEnqueue.mockReturnValue(mockClaude.enqueue);
+    mockClaude.runAI.mockResolvedValue("docs generated");
     mockClaude.hasNewCommits.mockResolvedValue(true);
     mockClaude.hasTreeDiff.mockResolvedValue(true);
     mockClaude.pushBranch.mockResolvedValue(undefined);
@@ -119,7 +122,7 @@ describe("doc-maintainer", () => {
 
     await run([repo]);
 
-    expect(mockClaude.runClaude).not.toHaveBeenCalled();
+    expect(mockClaude.runAI).not.toHaveBeenCalled();
     expect(mockDb.recordTaskComplete).toHaveBeenCalledWith(1);
   });
 
@@ -128,13 +131,15 @@ describe("doc-maintainer", () => {
 
     await run([repo]);
 
-    expect(mockClaude.runClaude).toHaveBeenCalledWith(
+    expect(mockClaude.runAI).toHaveBeenCalledWith(
       expect.stringContaining("maintaining documentation"),
       "/tmp/worktree",
+      undefined,
     );
     expect(mockClaude.generateDocsPRDescription).toHaveBeenCalledWith(
       "/tmp/worktree",
       repo.defaultBranch,
+      undefined,
     );
     expect(mockGh.createPR).toHaveBeenCalledWith(
       repo.fullName,
@@ -152,7 +157,7 @@ describe("doc-maintainer", () => {
 
     await run([repo]);
 
-    expect(mockClaude.runClaude).toHaveBeenCalled();
+    expect(mockClaude.runAI).toHaveBeenCalled();
     expect(mockClaude.pushBranch).toHaveBeenCalled();
     expect(mockGh.createPR).toHaveBeenCalled();
   });
@@ -167,7 +172,7 @@ describe("doc-maintainer", () => {
   });
 
   it("cleans up worktree on error", async () => {
-    mockClaude.runClaude.mockRejectedValue(new Error("claude crashed"));
+    mockClaude.runAI.mockRejectedValue(new Error("claude crashed"));
 
     await run([repo]);
 
@@ -178,7 +183,7 @@ describe("doc-maintainer", () => {
   it("reports errors without crashing the loop", async () => {
     const repo2 = mockRepo({ name: "test-repo-2", fullName: "test-org/test-repo-2" });
 
-    mockClaude.runClaude
+    mockClaude.runAI
       .mockRejectedValueOnce(new Error("first repo error"))
       .mockResolvedValueOnce("docs generated");
 
@@ -216,9 +221,10 @@ describe("doc-maintainer", () => {
         expect.stringContaining("# Issue #42: Add auth"),
       );
       // Prompt should include plan instructions
-      expect(mockClaude.runClaude).toHaveBeenCalledWith(
+      expect(mockClaude.runAI).toHaveBeenCalledWith(
         expect.stringContaining(".plans/"),
         "/tmp/worktree",
+        undefined,
       );
     });
 
@@ -261,9 +267,10 @@ describe("doc-maintainer", () => {
         expect.anything(),
       );
       // Prompt should NOT include plan instructions
-      expect(mockClaude.runClaude).toHaveBeenCalledWith(
+      expect(mockClaude.runAI).toHaveBeenCalledWith(
         expect.not.stringContaining(".plans/"),
         "/tmp/worktree",
+        undefined,
       );
     });
 

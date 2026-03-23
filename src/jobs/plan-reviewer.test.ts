@@ -52,6 +52,7 @@ const { mockGh, mockClaude, mockDb } = vi.hoisted(() => ({
     enqueueCopilot: vi.fn(),
     enqueueCodex: vi.fn(),
     runAI: vi.fn(),
+    resolveEnqueue: vi.fn(),
     randomSuffix: vi.fn().mockReturnValue("ab12"),
   },
   mockDb: {
@@ -79,6 +80,7 @@ describe("plan-reviewer", () => {
     mockClaude.enqueueCopilot.mockImplementation((fn: () => Promise<string>) => fn());
     mockClaude.enqueueCodex.mockImplementation((fn: () => Promise<string>) => fn());
     mockClaude.enqueue.mockImplementation((fn: () => Promise<string>) => fn());
+    mockClaude.resolveEnqueue.mockReturnValue(mockClaude.enqueue);
     mockClaude.runAI.mockResolvedValue("The plan looks solid but misses error handling for edge case X.");
     mockClaude.removeWorktree.mockResolvedValue(undefined);
     mockGh.listOpenIssues.mockResolvedValue([]);
@@ -198,9 +200,8 @@ describe("plan-reviewer", () => {
 
     await run([repo]);
 
-    // Should use enqueueCopilot since JOB_AI has backend: "copilot"
-    expect(mockClaude.enqueueCopilot).toHaveBeenCalled();
-    expect(mockClaude.enqueue).not.toHaveBeenCalled();
+    // Should call resolveEnqueue with the copilot backend config
+    expect(mockClaude.resolveEnqueue).toHaveBeenCalledWith({ backend: "copilot" });
 
     // runAI should receive the AI options from JOB_AI
     expect(mockClaude.runAI).toHaveBeenCalledWith(
@@ -230,9 +231,7 @@ describe("plan-reviewer", () => {
 
     await run([repo]);
 
-    expect(mockClaude.enqueueCodex).toHaveBeenCalled();
-    expect(mockClaude.enqueue).not.toHaveBeenCalled();
-    expect(mockClaude.enqueueCopilot).not.toHaveBeenCalled();
+    expect(mockClaude.resolveEnqueue).toHaveBeenCalledWith({ backend: "codex" });
 
     // Reset
     Object.defineProperty(configMod, "JOB_AI", {

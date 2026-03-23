@@ -40,7 +40,7 @@ vi.mock("node:fs", () => ({
   },
 }));
 
-import { enqueue, queueStatus, randomSuffix, datestamp, hasNewCommits, hasTreeDiff, generatePRDescription, generateDocsPRDescription, regeneratePRDescription, runClaude, cancelCurrentTask, cancelQueuedTasks, createWorktree, createWorktreeFromBranch, pushBranch, ensureClone, ClaudeTimeoutError, runAI, copilotQueueStatus, enqueueCopilot, codexQueueStatus, enqueueCodex, AiTimeoutError } from "./claude.js";
+import { enqueue, queueStatus, randomSuffix, datestamp, hasNewCommits, hasTreeDiff, generatePRDescription, generateDocsPRDescription, regeneratePRDescription, runClaude, cancelCurrentTask, cancelQueuedTasks, createWorktree, createWorktreeFromBranch, pushBranch, ensureClone, ClaudeTimeoutError, runAI, copilotQueueStatus, enqueueCopilot, codexQueueStatus, enqueueCodex, AiTimeoutError, resolveEnqueue } from "./claude.js";
 import { ShutdownError } from "./shutdown.js";
 import * as shutdown from "./shutdown.js";
 import fs from "node:fs";
@@ -513,7 +513,7 @@ describe("generatePRDescription", () => {
     await vi.advanceTimersByTimeAsync(0);
     child.emit("error", new Error("spawn failed"));
 
-    await expect(promise).rejects.toThrow("Failed to spawn claude");
+    await expect(promise).rejects.toThrow("Failed to spawn Claude");
   });
 
   it("throws when claude returns empty output", async () => {
@@ -982,6 +982,24 @@ function createMockChild() {
   });
   return child;
 }
+
+describe("resolveEnqueue", () => {
+  it("returns enqueue for undefined options", () => {
+    expect(resolveEnqueue()).toBe(enqueue);
+  });
+
+  it("returns enqueue for claude backend", () => {
+    expect(resolveEnqueue({ backend: "claude" })).toBe(enqueue);
+  });
+
+  it("returns enqueueCopilot for copilot backend", () => {
+    expect(resolveEnqueue({ backend: "copilot" })).toBe(enqueueCopilot);
+  });
+
+  it("returns enqueueCodex for codex backend", () => {
+    expect(resolveEnqueue({ backend: "codex" })).toBe(enqueueCodex);
+  });
+});
 
 describe("runAI", () => {
   it("defaults to claude backend when no options provided", async () => {

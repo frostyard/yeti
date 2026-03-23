@@ -1,4 +1,4 @@
-import { type Repo } from "../config.js";
+import { JOB_AI, type Repo } from "../config.js";
 import * as gh from "../github.js";
 import * as claude from "../claude.js";
 import * as log from "../log.js";
@@ -147,7 +147,8 @@ async function processRepo(repo: Repo): Promise<void> {
 
     log.info(`[improvement-identifier] Analyzing ${fullName}`);
     const prompt = buildPrompt(fullName, openIssueTitles, openPRTitles);
-    const output = await claude.enqueue(() => claude.runClaude(prompt, analysisWt!));
+    const aiOptions = JOB_AI["improvement-identifier"];
+    const output = await claude.resolveEnqueue(aiOptions)(() => claude.runAI(prompt, analysisWt!, aiOptions));
 
     improvements = parseImprovements(output);
     db.recordTaskComplete(analysisTaskId);
@@ -191,7 +192,8 @@ async function processRepo(repo: Repo): Promise<void> {
       db.updateTaskWorktree(implTaskId, implWt, implBranch);
 
       const implPrompt = buildImplementationPrompt(fullName, improvement);
-      await claude.enqueue(() => claude.runClaude(implPrompt, implWt!));
+      const aiOptions = JOB_AI["improvement-identifier"];
+      await claude.resolveEnqueue(aiOptions)(() => claude.runAI(implPrompt, implWt!, aiOptions));
 
       if (await claude.hasNewCommits(implWt, repo.defaultBranch) && await claude.hasTreeDiff(implWt, repo.defaultBranch)) {
         await claude.pushBranch(implWt, implBranch);

@@ -200,6 +200,13 @@ function cancelCodexQueuedTasks(): void {
   if (count > 0) log.info(`Cancelled ${count} queued codex task(s)`);
 }
 
+/** Select the correct enqueue function based on the AI backend in options. */
+export function resolveEnqueue(aiOptions?: AiOptions): typeof enqueue {
+  if (aiOptions?.backend === "codex") return enqueueCodex;
+  if (aiOptions?.backend === "copilot") return enqueueCopilot;
+  return enqueue;
+}
+
 // ── Git helpers ──
 
 export function git(args: string[], cwd: string): Promise<string> {
@@ -393,6 +400,7 @@ export async function generatePRDescription(
   wtPath: string,
   baseBranch: string,
   issue: { number: number; title: string; body: string },
+  aiOptions?: AiOptions,
 ): Promise<string> {
   const diff = await git(["diff", `origin/${baseBranch}...HEAD`], wtPath);
   const truncatedDiff = diff.slice(0, 30_000);
@@ -415,10 +423,10 @@ export async function generatePRDescription(
     `Do NOT include the raw diff or diffstat. Focus on the intent and effect of the changes.`,
   ].join("\n");
 
-  const description = await enqueue(() => runClaude(prompt, wtPath));
+  const description = await resolveEnqueue(aiOptions)(() => runAI(prompt, wtPath, aiOptions));
   if (!description.trim()) {
     throw new Error(
-      `Claude returned empty PR description for issue #${issue.number}`,
+      `AI returned empty PR description for issue #${issue.number}`,
     );
   }
   return description.trim();
@@ -428,6 +436,7 @@ export async function generatePRDescription(
 export async function generateDocsPRDescription(
   wtPath: string,
   baseBranch: string,
+  aiOptions?: AiOptions,
 ): Promise<string> {
   const diff = await git(["diff", `origin/${baseBranch}...HEAD`], wtPath);
   const truncatedDiff = diff.slice(0, 30_000);
@@ -447,9 +456,9 @@ export async function generateDocsPRDescription(
     `Do NOT include the raw diff or diffstat. Focus on the intent and effect of the changes.`,
   ].join("\n");
 
-  const description = await enqueue(() => runClaude(prompt, wtPath));
+  const description = await resolveEnqueue(aiOptions)(() => runAI(prompt, wtPath, aiOptions));
   if (!description.trim()) {
-    throw new Error("Claude returned empty PR description for docs update");
+    throw new Error("AI returned empty PR description for docs update");
   }
   return description.trim();
 }
@@ -459,6 +468,7 @@ export async function regeneratePRDescription(
   wtPath: string,
   baseBranch: string,
   pr: { number: number; title: string },
+  aiOptions?: AiOptions,
 ): Promise<string> {
   const diff = await git(["diff", `origin/${baseBranch}...HEAD`], wtPath);
   const truncatedDiff = diff.slice(0, 30_000);
@@ -478,9 +488,9 @@ export async function regeneratePRDescription(
     `Do NOT include the raw diff or diffstat. Focus on the intent and effect of the changes.`,
   ].join("\n");
 
-  const description = await enqueue(() => runClaude(prompt, wtPath));
+  const description = await resolveEnqueue(aiOptions)(() => runAI(prompt, wtPath, aiOptions));
   if (!description.trim()) {
-    throw new Error(`Claude returned empty PR description for PR #${pr.number}`);
+    throw new Error(`AI returned empty PR description for PR #${pr.number}`);
   }
   return description.trim();
 }

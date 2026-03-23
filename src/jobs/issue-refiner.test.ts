@@ -10,6 +10,7 @@ vi.mock("../config.js", () => ({
     needsPlanReview: "Needs Plan Review",
   },
   ENABLED_JOBS: [],
+  JOB_AI: {},
 }));
 
 vi.mock("../log.js", () => ({
@@ -51,7 +52,8 @@ const { mockGh, mockClaude, mockDb } = vi.hoisted(() => ({
     createWorktree: vi.fn(),
     removeWorktree: vi.fn(),
     enqueue: vi.fn(),
-    runClaude: vi.fn(),
+    runAI: vi.fn(),
+    resolveEnqueue: vi.fn(),
     randomSuffix: vi.fn().mockReturnValue("ab12"),
   },
   mockDb: {
@@ -86,7 +88,8 @@ describe("issue-refiner", () => {
     vi.clearAllMocks();
     mockClaude.createWorktree.mockResolvedValue("/tmp/worktree");
     mockClaude.enqueue.mockImplementation((fn: () => Promise<string>) => fn());
-    mockClaude.runClaude.mockResolvedValue("## Plan\nDo the thing");
+    mockClaude.resolveEnqueue.mockReturnValue(mockClaude.enqueue);
+    mockClaude.runAI.mockResolvedValue("## Plan\nDo the thing");
     mockClaude.removeWorktree.mockResolvedValue(undefined);
     mockGh.listOpenIssues.mockResolvedValue([]);
     mockGh.getSelfLogin.mockResolvedValue("yeti-bot[bot]");
@@ -130,7 +133,7 @@ describe("issue-refiner", () => {
 
     await run([repo]);
 
-    const prompt = mockClaude.runClaude.mock.calls[0][0] as string;
+    const prompt = mockClaude.runAI.mock.calls[0][0] as string;
     expect(prompt).toContain("Yeti Error Investigation Report");
     expect(prompt).toContain("Root cause: missing null check");
   });
@@ -138,7 +141,7 @@ describe("issue-refiner", () => {
   it("empty output — logs warning but still adds Ready label", async () => {
     const issue = mockIssue({ body: "Test issue body", labels: [{ name: "Needs Refinement" }] });
     mockGh.listOpenIssues.mockResolvedValueOnce([issue]);
-    mockClaude.runClaude.mockResolvedValue("");
+    mockClaude.runAI.mockResolvedValue("");
 
     await run([repo]);
 
@@ -149,7 +152,7 @@ describe("issue-refiner", () => {
   it("error handling — records task as failed", async () => {
     const issue = mockIssue({ body: "Test issue body", labels: [{ name: "Needs Refinement" }] });
     mockGh.listOpenIssues.mockResolvedValueOnce([issue]);
-    mockClaude.runClaude.mockRejectedValue(new Error("claude error"));
+    mockClaude.runAI.mockRejectedValue(new Error("claude error"));
 
     await run([repo]);
 
@@ -221,7 +224,7 @@ describe("issue-refiner", () => {
       .mockResolvedValueOnce([issue2]);
 
     // First issue fails, second succeeds
-    mockClaude.runClaude
+    mockClaude.runAI
       .mockRejectedValueOnce(new Error("fail"))
       .mockResolvedValueOnce("plan for issue 2");
 
@@ -249,7 +252,7 @@ describe("issue-refiner", () => {
       [issue.body, "Comment with ![img](https://example.com/img2.png)"],
       "/tmp/worktree",
     );
-    const prompt = mockClaude.runClaude.mock.calls[0][0] as string;
+    const prompt = mockClaude.runAI.mock.calls[0][0] as string;
     expect(prompt).toContain("## Attached Images");
   });
 
@@ -286,7 +289,7 @@ describe("issue-refiner", () => {
       issue.number,
       expect.stringContaining("## Implementation Plan"),
     );
-    const prompt = mockClaude.runClaude.mock.calls[0][0] as string;
+    const prompt = mockClaude.runAI.mock.calls[0][0] as string;
     expect(prompt).toContain("(No description provided)");
   });
 
@@ -345,7 +348,7 @@ describe("issue-refiner", () => {
 
     mockGh.getIssueComments.mockResolvedValue([planComment, humanComment]);
     mockGh.getCommentReactions.mockResolvedValue([]);
-    mockClaude.runClaude.mockResolvedValue("Yes, everything looks healthy now.");
+    mockClaude.runAI.mockResolvedValue("Yes, everything looks healthy now.");
 
     await run([repo]);
 
@@ -445,7 +448,7 @@ describe("issue-refiner", () => {
       { id: 100, body: "<!-- yeti-automated -->\n## Implementation Plan\n\nOld plan here", login: "yeti-bot" },
       { id: 101, body: "<!-- yeti-automated -->\n## Plan Review\n\nSome critique", login: "yeti-bot" },
     ]);
-    mockClaude.runClaude.mockResolvedValue("New fresh plan");
+    mockClaude.runAI.mockResolvedValue("New fresh plan");
 
     await run([repo]);
 

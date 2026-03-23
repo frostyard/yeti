@@ -36,6 +36,7 @@ const { mockFs, mockGh, mockClaude, mockDb } = vi.hoisted(() => ({
     enqueue: vi.fn(),
     enqueueCopilot: vi.fn(),
     enqueueCodex: vi.fn(),
+    resolveEnqueue: vi.fn(),
     runAI: vi.fn(),
     hasNewCommits: vi.fn(),
     hasTreeDiff: vi.fn(),
@@ -71,6 +72,7 @@ describe("mkdocs-update", () => {
     mockClaude.enqueue.mockImplementation((fn: () => Promise<string>) => fn());
     mockClaude.enqueueCopilot.mockImplementation((fn: () => Promise<string>) => fn());
     mockClaude.enqueueCodex.mockImplementation((fn: () => Promise<string>) => fn());
+    mockClaude.resolveEnqueue.mockReturnValue(mockClaude.enqueue);
     mockClaude.runAI.mockResolvedValue("docs updated");
     mockClaude.hasNewCommits.mockResolvedValue(true);
     mockClaude.hasTreeDiff.mockResolvedValue(true);
@@ -209,9 +211,7 @@ describe("mkdocs-update", () => {
 
     await run([repo]);
 
-    expect(mockClaude.enqueueCodex).toHaveBeenCalled();
-    expect(mockClaude.enqueue).not.toHaveBeenCalled();
-    expect(mockClaude.enqueueCopilot).not.toHaveBeenCalled();
+    expect(mockClaude.resolveEnqueue).toHaveBeenCalledWith({ backend: "codex" });
 
     // Reset
     Object.defineProperty(configMod, "JOB_AI", {
@@ -230,7 +230,7 @@ describe("mkdocs-update", () => {
 
     await run([repo]);
 
-    expect(mockClaude.enqueueCopilot).toHaveBeenCalled();
+    expect(mockClaude.resolveEnqueue).toHaveBeenCalledWith({ backend: "copilot" });
 
     // Reset
     Object.defineProperty(configMod, "JOB_AI", {

@@ -1,4 +1,4 @@
-import { LABELS, ENABLED_JOBS, type Repo } from "../config.js";
+import { LABELS, ENABLED_JOBS, JOB_AI, type Repo } from "../config.js";
 import * as gh from "../github.js";
 import { isRateLimited } from "../github.js";
 import * as claude from "../claude.js";
@@ -160,10 +160,11 @@ async function processIssue(repo: Repo, issue: gh.Issue): Promise<void> {
     db.updateTaskWorktree(taskId, wtPath, branchName);
 
     const comments = await gh.getIssueComments(fullName, issue.number);
+    const aiOptions = JOB_AI["issue-refiner"];
     const imageContext = await processTextForImages([issue.body, ...comments.map((c) => c.body)], wtPath);
     const prompt = buildNewPlanPrompt(fullName, issue, comments) + imageContext;
 
-    const planOutput = await claude.enqueue(() => claude.runClaude(prompt, wtPath!), gh.hasPriorityLabel(issue.labels));
+    const planOutput = await claude.resolveEnqueue(aiOptions)(() => claude.runAI(prompt, wtPath!, aiOptions), gh.hasPriorityLabel(issue.labels));
 
     if (planOutput.trim()) {
       await gh.commentOnIssue(fullName, issue.number, `${PLAN_HEADER}\n\n${planOutput}`);
@@ -207,6 +208,8 @@ async function processRefinement(
   const taskId = db.recordTaskStart("issue-refiner", fullName, issue.number, null);
   let wtPath: string | undefined;
 
+  const aiOptions = JOB_AI["issue-refiner"];
+
   try {
     const branchName = `yeti/plan-${issue.number}-${claude.randomSuffix()}`;
     wtPath = await claude.createWorktree(repo, branchName, "issue-refiner");
@@ -219,7 +222,7 @@ async function processRefinement(
       log.warn(`[issue-refiner] No plan comment found for ${fullName}#${issue.number}, posting fresh plan`);
       const imageContext = await processTextForImages([issue.body, ...comments.map((c) => c.body)], wtPath);
       const prompt = buildNewPlanPrompt(fullName, issue, comments) + imageContext;
-      const planOutput = await claude.enqueue(() => claude.runClaude(prompt, wtPath!), gh.hasPriorityLabel(issue.labels));
+      const planOutput = await claude.resolveEnqueue(aiOptions)(() => claude.runAI(prompt, wtPath!, aiOptions), gh.hasPriorityLabel(issue.labels));
 
       if (planOutput.trim()) {
         await gh.commentOnIssue(fullName, issue.number, `${PLAN_HEADER}\n\n${planOutput}`);
@@ -234,7 +237,7 @@ async function processRefinement(
 
       const imageContext = await processTextForImages([issue.body], wtPath);
       const prompt = buildRefinementPrompt(fullName, issue, planComment.body, feedback) + imageContext;
-      const planOutput = await claude.enqueue(() => claude.runClaude(prompt, wtPath!), gh.hasPriorityLabel(issue.labels));
+      const planOutput = await claude.resolveEnqueue(aiOptions)(() => claude.runAI(prompt, wtPath!, aiOptions), gh.hasPriorityLabel(issue.labels));
 
       if (planOutput.trim()) {
         // Check for "### Note" section to post separately
@@ -287,6 +290,7 @@ async function processFollowUp(
   log.info(`[issue-refiner] Responding to follow-up on ${fullName}#${issue.number}: ${issue.title}`);
 
   const taskId = db.recordTaskStart("issue-refiner", fullName, issue.number, null);
+  const aiOptions = JOB_AI["issue-refiner"];
   let wtPath: string | undefined;
 
   try {
@@ -309,7 +313,7 @@ async function processFollowUp(
     const imageContext = await processTextForImages([issue.body], wtPath);
     const prompt = buildFollowUpPrompt(fullName, issue, planComment.body, openPRNumber, unreactedComments) + imageContext;
 
-    const response = await claude.enqueue(() => claude.runClaude(prompt, wtPath!), gh.hasPriorityLabel(issue.labels));
+    const response = await claude.resolveEnqueue(aiOptions)(() => claude.runAI(prompt, wtPath!, aiOptions), gh.hasPriorityLabel(issue.labels));
 
     if (response.trim()) {
       await gh.commentOnIssue(fullName, issue.number, response);

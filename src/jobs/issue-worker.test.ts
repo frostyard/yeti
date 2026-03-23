@@ -8,6 +8,7 @@ vi.mock("../config.js", () => ({
     priority: "Priority",
     inReview: "In Review",
   },
+  JOB_AI: {},
 }));
 
 vi.mock("../log.js", () => ({
@@ -50,7 +51,8 @@ const { mockGh, mockClaude, mockDb } = vi.hoisted(() => ({
     createWorktree: vi.fn(),
     removeWorktree: vi.fn(),
     enqueue: vi.fn(),
-    runClaude: vi.fn(),
+    runAI: vi.fn(),
+    resolveEnqueue: vi.fn(),
     hasNewCommits: vi.fn(),
     hasTreeDiff: vi.fn(),
     pushBranch: vi.fn(),
@@ -89,7 +91,8 @@ describe("issue-worker", () => {
     vi.clearAllMocks();
     mockClaude.createWorktree.mockResolvedValue("/tmp/worktree");
     mockClaude.enqueue.mockImplementation((fn: () => Promise<string>) => fn());
-    mockClaude.runClaude.mockResolvedValue("implemented");
+    mockClaude.resolveEnqueue.mockReturnValue(mockClaude.enqueue);
+    mockClaude.runAI.mockResolvedValue("implemented");
     mockClaude.hasNewCommits.mockResolvedValue(true);
     mockClaude.hasTreeDiff.mockResolvedValue(true);
     mockClaude.pushBranch.mockResolvedValue(undefined);
@@ -160,7 +163,7 @@ describe("issue-worker", () => {
     it("error handling — records failed task, trigger label stays", async () => {
       const issue = mockIssue({ labels: [{ name: "Refined" }] });
       mockGh.listIssuesByLabel.mockResolvedValueOnce([issue]);
-      mockClaude.runClaude.mockRejectedValue(new Error("claude error"));
+      mockClaude.runAI.mockRejectedValue(new Error("claude error"));
 
       await run([repo]);
 
@@ -261,7 +264,7 @@ describe("issue-worker", () => {
 
       await run([repo]);
 
-      const prompt = mockClaude.runClaude.mock.calls[0][0] as string;
+      const prompt = mockClaude.runAI.mock.calls[0][0] as string;
       expect(prompt).toContain("PR 1 of 3");
       expect(prompt).toContain("Add database schema");
       expect(prompt).toContain("Do NOT implement changes from other phases");
@@ -340,7 +343,7 @@ describe("issue-worker", () => {
       await run([repo]);
 
       expect(mockClaude.createWorktree).not.toHaveBeenCalled();
-      expect(mockClaude.runClaude).not.toHaveBeenCalled();
+      expect(mockClaude.runAI).not.toHaveBeenCalled();
       expect(mockGh.createPR).not.toHaveBeenCalled();
       expect(mockGh.removeLabel).toHaveBeenCalledWith(repo.fullName, 1, "Refined");
     });
@@ -386,7 +389,7 @@ describe("issue-worker", () => {
       await run([repo]);
 
       // Only one runClaude call (implementation only, no plan rewrite)
-      expect(mockClaude.runClaude).toHaveBeenCalledTimes(1);
+      expect(mockClaude.runAI).toHaveBeenCalledTimes(1);
 
       // Progress comment posted (not plan edit)
       expect(mockGh.commentOnIssue).toHaveBeenCalledWith(
@@ -417,7 +420,7 @@ describe("issue-worker", () => {
       // No progress comment posted (already exists)
       expect(mockGh.commentOnIssue).not.toHaveBeenCalled();
       // Implementation still runs
-      expect(mockClaude.runClaude).toHaveBeenCalledTimes(1);
+      expect(mockClaude.runAI).toHaveBeenCalledTimes(1);
     });
 
     it("progress comment failure does not block implementation", async () => {
@@ -433,7 +436,7 @@ describe("issue-worker", () => {
       await run([repo]);
 
       // Implementation still proceeds
-      expect(mockClaude.runClaude).toHaveBeenCalledTimes(1);
+      expect(mockClaude.runAI).toHaveBeenCalledTimes(1);
       expect(mockGh.createPR).toHaveBeenCalled();
       expect(mockGh.removeLabel).toHaveBeenCalledWith(repo.fullName, 1, "Refined");
     });
@@ -448,7 +451,7 @@ describe("issue-worker", () => {
 
       // No progress comment for first phase
       expect(mockGh.commentOnIssue).not.toHaveBeenCalled();
-      expect(mockClaude.runClaude).toHaveBeenCalledTimes(1);
+      expect(mockClaude.runAI).toHaveBeenCalledTimes(1);
     });
 
     it("progress comment contains merged PR numbers and titles", async () => {
@@ -485,7 +488,7 @@ describe("issue-worker", () => {
       [issue.body, "![comment img](https://example.com/comment.png)"],
       "/tmp/worktree",
     );
-    const prompt = mockClaude.runClaude.mock.calls[0][0] as string;
+    const prompt = mockClaude.runAI.mock.calls[0][0] as string;
     expect(prompt).toContain("## Attached Images");
   });
 });

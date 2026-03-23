@@ -1,4 +1,4 @@
-import { type Repo } from "../config.js";
+import { JOB_AI, type Repo } from "../config.js";
 import * as gh from "../github.js";
 import { isRateLimited, RateLimitError } from "../github.js";
 import * as claude from "../claude.js";
@@ -61,12 +61,13 @@ async function resolveConflicts(repo: Repo, pr: gh.PR): Promise<boolean> {
       `5. Completing the merge with \`git commit --no-edit\``,
     ].join("\n");
 
-    await claude.enqueue(() => claude.runClaude(prompt, wtPath!), gh.hasPriorityLabel(pr.labels));
+    const aiOptions = JOB_AI["ci-fixer"];
+    await claude.resolveEnqueue(aiOptions)(() => claude.runAI(prompt, wtPath!, aiOptions), gh.hasPriorityLabel(pr.labels));
 
     if (await claude.hasNewCommits(wtPath, pr.headRefName) && await claude.hasTreeDiff(wtPath, pr.headRefName)) {
       await claude.pushBranch(wtPath, pr.headRefName);
       try {
-        const description = await claude.regeneratePRDescription(wtPath, pr.baseRefName, pr);
+        const description = await claude.regeneratePRDescription(wtPath, pr.baseRefName, pr, aiOptions);
         await gh.updatePRBody(fullName, pr.number, description);
       } catch (descErr) {
         log.warn(`[ci-fixer] Failed to update PR description for ${fullName}#${pr.number}: ${descErr}`);
@@ -151,7 +152,8 @@ async function classifyCIFailure(
   ].join("\n");
 
   try {
-    const response = await claude.enqueue(() => claude.runClaude(prompt, process.cwd()), gh.hasPriorityLabel(pr.labels));
+    const aiOptions = JOB_AI["ci-fixer"];
+    const response = await claude.resolveEnqueue(aiOptions)(() => claude.runAI(prompt, process.cwd(), aiOptions), gh.hasPriorityLabel(pr.labels));
 
     // Try to parse JSON from response
     const jsonMatch = response.match(/\{[\s\S]*?"related"[\s\S]*?\}/);
@@ -256,12 +258,13 @@ async function fixCI(repo: Repo, pr: gh.PR, failLog: string): Promise<void> {
       `Make commits with clear messages as you work.`,
     ].join("\n");
 
-    await claude.enqueue(() => claude.runClaude(prompt, wtPath!), gh.hasPriorityLabel(pr.labels));
+    const aiOptions = JOB_AI["ci-fixer"];
+    await claude.resolveEnqueue(aiOptions)(() => claude.runAI(prompt, wtPath!, aiOptions), gh.hasPriorityLabel(pr.labels));
 
     if (await claude.hasNewCommits(wtPath, pr.headRefName) && await claude.hasTreeDiff(wtPath, pr.headRefName)) {
       await claude.pushBranch(wtPath, pr.headRefName);
       try {
-        const description = await claude.regeneratePRDescription(wtPath, pr.baseRefName, pr);
+        const description = await claude.regeneratePRDescription(wtPath, pr.baseRefName, pr, aiOptions);
         await gh.updatePRBody(fullName, pr.number, description);
       } catch (descErr) {
         log.warn(`[ci-fixer] Failed to update PR description for ${fullName}#${pr.number}: ${descErr}`);
@@ -377,7 +380,8 @@ async function revertPreviousUnrelatedFixes(
       `Be conservative — only revert commits you are confident are unrelated automated fixes.`,
     ].join("\n");
 
-    await claude.enqueue(() => claude.runClaude(prompt, wtPath!), gh.hasPriorityLabel(pr.labels));
+    const aiOptions = JOB_AI["ci-fixer"];
+    await claude.resolveEnqueue(aiOptions)(() => claude.runAI(prompt, wtPath!, aiOptions), gh.hasPriorityLabel(pr.labels));
 
     if (await claude.hasNewCommits(wtPath, pr.headRefName) && await claude.hasTreeDiff(wtPath, pr.headRefName)) {
       await claude.pushBranch(wtPath, pr.headRefName);

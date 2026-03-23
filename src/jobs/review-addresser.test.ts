@@ -7,6 +7,7 @@ vi.mock("../config.js", () => ({
     ready: "Ready",
     priority: "Priority",
   },
+  JOB_AI: {},
 }));
 
 vi.mock("../log.js", () => ({
@@ -44,7 +45,8 @@ const { mockGh, mockClaude, mockDb } = vi.hoisted(() => ({
     createWorktreeFromBranch: vi.fn(),
     removeWorktree: vi.fn(),
     enqueue: vi.fn(),
-    runClaude: vi.fn(),
+    runAI: vi.fn(),
+    resolveEnqueue: vi.fn(),
     hasNewCommits: vi.fn(),
     hasTreeDiff: vi.fn(),
     pushBranch: vi.fn(),
@@ -90,7 +92,8 @@ describe("review-addresser", () => {
     mockGh.populateQueueCache.mockReturnValue(undefined);
     mockClaude.createWorktreeFromBranch.mockResolvedValue("/tmp/worktree");
     mockClaude.enqueue.mockImplementation((fn: () => Promise<string>) => fn());
-    mockClaude.runClaude.mockResolvedValue("addressed");
+    mockClaude.resolveEnqueue.mockReturnValue(mockClaude.enqueue);
+    mockClaude.runAI.mockResolvedValue("addressed");
     mockClaude.hasNewCommits.mockResolvedValue(true);
     mockClaude.hasTreeDiff.mockResolvedValue(true);
     mockClaude.pushBranch.mockResolvedValue(undefined);
@@ -108,7 +111,7 @@ describe("review-addresser", () => {
     expect(mockGh.removeLabel).toHaveBeenCalledWith(repo.fullName, pr.number, "Ready");
     expect(mockClaude.createWorktreeFromBranch).toHaveBeenCalledWith(repo, pr.headRefName, "review-addresser");
     expect(mockClaude.pushBranch).toHaveBeenCalled();
-    expect(mockClaude.regeneratePRDescription).toHaveBeenCalledWith("/tmp/worktree", pr.baseRefName, pr);
+    expect(mockClaude.regeneratePRDescription).toHaveBeenCalledWith("/tmp/worktree", pr.baseRefName, pr, undefined);
     expect(mockGh.updatePRBody).toHaveBeenCalledWith(repo.fullName, pr.number, "## Summary\nUpdated");
     expect(mockGh.commentOnIssue).toHaveBeenCalledWith(repo.fullName, pr.number, "addressed");
     expect(mockGh.addReaction).toHaveBeenCalledWith(repo.fullName, 100, "+1");
@@ -149,7 +152,7 @@ describe("review-addresser", () => {
   it("error — records failure", async () => {
     const pr = mockPR({ headRefName: "yeti/fix-123" });
     mockGh.listPRs.mockResolvedValue([pr]);
-    mockClaude.runClaude.mockRejectedValue(new Error("claude error"));
+    mockClaude.runAI.mockRejectedValue(new Error("claude error"));
 
     await run([repo]);
 
@@ -162,7 +165,7 @@ describe("review-addresser", () => {
     const pr = mockPR({ headRefName: "yeti/fix-123" });
     mockGh.listPRs.mockResolvedValue([pr]);
     mockClaude.hasNewCommits.mockResolvedValue(false);
-    mockClaude.runClaude.mockResolvedValue("   ");
+    mockClaude.runAI.mockResolvedValue("   ");
 
     await run([repo]);
 
@@ -174,7 +177,7 @@ describe("review-addresser", () => {
     const pr = mockPR({ headRefName: "yeti/fix-123" });
     mockGh.listPRs.mockResolvedValue([pr]);
     mockClaude.hasNewCommits.mockResolvedValue(true);
-    mockClaude.runClaude.mockResolvedValue("Fixed the issue and improved test coverage.");
+    mockClaude.runAI.mockResolvedValue("Fixed the issue and improved test coverage.");
 
     await run([repo]);
 
@@ -212,7 +215,7 @@ describe("review-addresser", () => {
       ["Fix this ![screenshot](https://example.com/review.png)"],
       "/tmp/worktree",
     );
-    const prompt = mockClaude.runClaude.mock.calls[0][0] as string;
+    const prompt = mockClaude.runAI.mock.calls[0][0] as string;
     expect(prompt).toContain("## Attached Images");
   });
 

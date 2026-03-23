@@ -30,6 +30,7 @@ const { mockConfig, mockClient, mockEventHandlers, mockChannel } = vi.hoisted(()
       DISCORD_CHANNEL_ID: "",
       DISCORD_ALLOWED_USERS: [] as string[],
       GITHUB_OWNERS: ["frostyard"],
+      JOB_AI: {} as Record<string, unknown>,
     },
     mockClient,
     mockEventHandlers,
@@ -61,7 +62,8 @@ vi.mock("./db.js", () => ({
 vi.mock("./claude.js", () => ({
   queueStatus: vi.fn().mockReturnValue({ pending: 2, active: 1 }),
   enqueue: vi.fn((fn: () => Promise<string>) => fn()),
-  runClaude: vi.fn(() => Promise.resolve("This issue is about fixing a bug.")),
+  resolveEnqueue: vi.fn().mockReturnValue((fn: () => Promise<string>) => fn()),
+  runAI: vi.fn(() => Promise.resolve("This issue is about fixing a bug.")),
 }));
 
 vi.mock("./github.js", () => ({
@@ -79,7 +81,7 @@ vi.mock("./github.js", () => ({
 import { isDiscordConfigured, discordStatus, notify, start, stop, ready } from "./discord.js";
 import * as gh from "./github.js";
 import * as db from "./db.js";
-import { runClaude } from "./claude.js";
+import { runAI } from "./claude.js";
 import type { Scheduler } from "./scheduler.js";
 
 function makeMessage(overrides: Partial<{
@@ -429,7 +431,7 @@ describe("start and commands", () => {
     });
     expect(gh.getIssueBody).toHaveBeenCalledWith("frostyard/snosi", 10);
     expect(gh.getIssueComments).toHaveBeenCalledWith("frostyard/snosi", 10);
-    expect(runClaude).toHaveBeenCalled();
+    expect(runAI).toHaveBeenCalled();
     expect(msg.reply).toHaveBeenCalledWith("Looking into **frostyard/snosi#10**...");
     expect(msg.reply).toHaveBeenCalledWith("This issue is about fixing a bug.");
   });

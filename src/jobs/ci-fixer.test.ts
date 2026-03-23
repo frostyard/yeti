@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { mockRepo, mockPR } from "../test-helpers.js";
 import { ShutdownError } from "../shutdown.js";
 
-vi.mock("../config.js", () => ({}));
+vi.mock("../config.js", () => ({ JOB_AI: {} }));
 
 const mockLog = vi.hoisted(() => ({
   info: vi.fn(),
@@ -60,7 +60,8 @@ const { mockGh, mockClaude, mockDb, MockRateLimitError } = vi.hoisted(() => {
     createWorktreeFromBranch: vi.fn(),
     removeWorktree: vi.fn(),
     enqueue: vi.fn(),
-    runClaude: vi.fn(),
+    runAI: vi.fn(),
+    resolveEnqueue: vi.fn(),
     hasNewCommits: vi.fn(),
     hasTreeDiff: vi.fn(),
     pushBranch: vi.fn(),
@@ -102,7 +103,8 @@ describe("ci-fixer", () => {
     mockGh.isYetiComment.mockReturnValue(false);
     mockClaude.createWorktreeFromBranch.mockResolvedValue("/tmp/worktree");
     mockClaude.enqueue.mockImplementation((fn: () => Promise<string>) => fn());
-    mockClaude.runClaude.mockResolvedValue('{"related": true, "fingerprint": "", "reason": "related to PR"}');
+    mockClaude.resolveEnqueue.mockReturnValue(mockClaude.enqueue);
+    mockClaude.runAI.mockResolvedValue('{"related": true, "fingerprint": "", "reason": "related to PR"}');
     mockClaude.hasNewCommits.mockResolvedValue(true);
     mockClaude.hasTreeDiff.mockResolvedValue(true);
     mockClaude.pushBranch.mockResolvedValue(undefined);
@@ -158,7 +160,7 @@ describe("ci-fixer", () => {
     });
     mockGh.getFailedRunLog.mockResolvedValue("error: test failed");
     // Classification returns related
-    mockClaude.runClaude
+    mockClaude.runAI
       .mockResolvedValueOnce('{"related": true, "fingerprint": "", "reason": "test failure in changed file"}')
       .mockResolvedValueOnce("fixed");
 
@@ -167,7 +169,7 @@ describe("ci-fixer", () => {
     expect(mockGh.getPRChangedFiles).toHaveBeenCalledWith(repo.fullName, pr.number);
     expect(mockClaude.createWorktreeFromBranch).toHaveBeenCalledWith(repo, pr.headRefName, "ci-fixer");
     expect(mockClaude.pushBranch).toHaveBeenCalled();
-    expect(mockClaude.regeneratePRDescription).toHaveBeenCalledWith("/tmp/worktree", pr.baseRefName, pr);
+    expect(mockClaude.regeneratePRDescription).toHaveBeenCalledWith("/tmp/worktree", pr.baseRefName, pr, undefined);
     expect(mockGh.updatePRBody).toHaveBeenCalledWith(repo.fullName, pr.number, "## Summary\nUpdated");
     expect(mockNotify).toHaveBeenCalledWith(expect.stringContaining("[ci-fixer] Pushed fix"));
     expect(mockDb.recordTaskComplete).toHaveBeenCalledWith(1);
@@ -183,7 +185,7 @@ describe("ci-fixer", () => {
     });
     mockGh.getFailedRunLog.mockResolvedValue("error: flakey timeout");
     // Classification returns unrelated
-    mockClaude.runClaude.mockResolvedValueOnce(
+    mockClaude.runAI.mockResolvedValueOnce(
       '{"related": false, "fingerprint": "flakey-test:auth-timeout", "reason": "intermittent timeout unrelated to PR"}',
     );
 
@@ -224,7 +226,7 @@ describe("ci-fixer", () => {
       link: "https://github.com/org/repo/actions/runs/123",
     });
     mockGh.getFailedRunLog.mockResolvedValue("error: flakey timeout");
-    mockClaude.runClaude.mockResolvedValueOnce(
+    mockClaude.runAI.mockResolvedValueOnce(
       '{"related": false, "fingerprint": "flakey-test:auth-timeout", "reason": "timeout"}',
     );
     // Existing issue found
@@ -258,7 +260,7 @@ describe("ci-fixer", () => {
     });
     mockGh.getFailedRunLog.mockResolvedValue("error: some failure");
     // First PR: flakey-test fingerprint, second PR: runner fingerprint
-    mockClaude.runClaude
+    mockClaude.runAI
       .mockResolvedValueOnce('{"related": false, "fingerprint": "flakey-test:timeout", "reason": "timeout"}')
       .mockResolvedValueOnce('{"related": false, "fingerprint": "runner:disk-space", "reason": "disk space"}');
     // Structural grouping: single search, no existing issue
@@ -301,13 +303,13 @@ describe("ci-fixer", () => {
     });
     mockGh.getFailedRunLog.mockResolvedValue("error: flakey timeout");
     // Classification: unrelated
-    mockClaude.runClaude.mockResolvedValueOnce(
+    mockClaude.runAI.mockResolvedValueOnce(
       '{"related": false, "fingerprint": "flakey-test:timeout", "reason": "timeout"}',
     );
     // DB says there are previous ci-fixer tasks
     mockDb.hasPreviousCiFixerTasks.mockReturnValue(true);
     // Revert Claude call
-    mockClaude.runClaude.mockResolvedValueOnce("reverted commits");
+    mockClaude.runAI.mockResolvedValueOnce("reverted commits");
 
     await run([repo]);
 
@@ -334,7 +336,7 @@ describe("ci-fixer", () => {
       link: "https://github.com/org/repo/actions/runs/123",
     });
     mockGh.getFailedRunLog.mockResolvedValue("error: runner issue");
-    mockClaude.runClaude.mockResolvedValueOnce(
+    mockClaude.runAI.mockResolvedValueOnce(
       '{"related": false, "fingerprint": "runner:disk-space", "reason": "disk space issue"}',
     );
     mockDb.hasPreviousCiFixerTasks.mockReturnValue(false);
@@ -360,7 +362,7 @@ describe("ci-fixer", () => {
       link: "https://github.com/org/repo/actions/runs/123",
     });
     mockGh.getFailedRunLog.mockResolvedValue("error: flakey timeout");
-    mockClaude.runClaude.mockResolvedValueOnce(
+    mockClaude.runAI.mockResolvedValueOnce(
       '{"related": false, "fingerprint": "flakey-test:timeout", "reason": "timeout"}',
     );
     // rev-list returns 3 (behind by 3 commits)
@@ -389,7 +391,7 @@ describe("ci-fixer", () => {
       link: "https://github.com/org/repo/actions/runs/123",
     });
     mockGh.getFailedRunLog.mockResolvedValue("error: flakey timeout");
-    mockClaude.runClaude.mockResolvedValueOnce(
+    mockClaude.runAI.mockResolvedValueOnce(
       '{"related": false, "fingerprint": "flakey-test:timeout", "reason": "timeout"}',
     );
     // rev-list returns 0 (already up-to-date)
@@ -410,7 +412,7 @@ describe("ci-fixer", () => {
       link: "https://github.com/org/repo/actions/runs/123",
     });
     mockGh.getFailedRunLog.mockResolvedValue("error: flakey timeout");
-    mockClaude.runClaude.mockResolvedValueOnce(
+    mockClaude.runAI.mockResolvedValueOnce(
       '{"related": false, "fingerprint": "flakey-test:timeout", "reason": "timeout"}',
     );
     // Behind by 2 commits, merge has conflicts
@@ -434,7 +436,7 @@ describe("ci-fixer", () => {
       link: "https://github.com/org/repo/actions/runs/123",
     });
     mockGh.getFailedRunLog.mockResolvedValue("error: flakey timeout");
-    mockClaude.runClaude.mockResolvedValueOnce(
+    mockClaude.runAI.mockResolvedValueOnce(
       '{"related": false, "fingerprint": "flakey-test:timeout", "reason": "timeout"}',
     );
     // createWorktreeFromBranch fails for merge-base
@@ -459,7 +461,7 @@ describe("ci-fixer", () => {
     });
     mockGh.getFailedRunLog.mockResolvedValue("error: test failed");
     // Claude returns malformed output for classification, then valid fix
-    mockClaude.runClaude
+    mockClaude.runAI
       .mockResolvedValueOnce("I cannot determine the issue, here is some random text")
       .mockResolvedValueOnce("fixed");
 
@@ -482,7 +484,7 @@ describe("ci-fixer", () => {
     // Changed files returns empty (failure case)
     mockGh.getPRChangedFiles.mockResolvedValue([]);
     // Classification still returns related with empty files
-    mockClaude.runClaude
+    mockClaude.runAI
       .mockResolvedValueOnce('{"related": true, "fingerprint": "", "reason": "related"}')
       .mockResolvedValueOnce("fixed");
 
@@ -500,7 +502,7 @@ describe("ci-fixer", () => {
       link: "https://github.com/org/repo/actions/runs/123",
     });
     mockGh.getFailedRunLog.mockResolvedValue("error: flakey test");
-    mockClaude.runClaude.mockResolvedValueOnce(
+    mockClaude.runAI.mockResolvedValueOnce(
       '{"related": false, "fingerprint": "flakey-test:timeout", "reason": "timeout"}',
     );
     // Issue creation fails
@@ -567,7 +569,7 @@ describe("ci-fixer", () => {
       link: "https://github.com/org/repo/actions/runs/123",
     });
     mockGh.getFailedRunLog.mockResolvedValue("error: test failed");
-    mockClaude.runClaude
+    mockClaude.runAI
       .mockResolvedValueOnce('{"related": true, "fingerprint": "", "reason": "related"}')
       .mockResolvedValueOnce("fixed");
     mockClaude.hasNewCommits.mockResolvedValue(false);
@@ -589,7 +591,7 @@ describe("ci-fixer", () => {
     await run([repo]);
 
     expect(mockClaude.pushBranch).toHaveBeenCalled();
-    expect(mockClaude.regeneratePRDescription).toHaveBeenCalledWith("/tmp/worktree", pr.baseRefName, pr);
+    expect(mockClaude.regeneratePRDescription).toHaveBeenCalledWith("/tmp/worktree", pr.baseRefName, pr, undefined);
     expect(mockGh.updatePRBody).toHaveBeenCalledWith(repo.fullName, pr.number, "## Summary\nUpdated");
   });
 
@@ -615,7 +617,7 @@ describe("ci-fixer", () => {
       link: "https://github.com/org/repo/actions/runs/123",
     });
     mockGh.getFailedRunLog.mockResolvedValue("error: test failed");
-    mockClaude.runClaude
+    mockClaude.runAI
       .mockResolvedValueOnce('{"related": true, "fingerprint": "", "reason": "related"}')
       .mockResolvedValueOnce("fixed");
     mockClaude.regeneratePRDescription.mockRejectedValue(new Error("Claude unavailable"));
@@ -639,7 +641,7 @@ describe("ci-fixer", () => {
     });
     mockGh.getFailedRunLog.mockResolvedValue("log output");
     // Classification returns related, then fix Claude call fails
-    mockClaude.runClaude
+    mockClaude.runAI
       .mockResolvedValueOnce('{"related": true, "fingerprint": "", "reason": "related"}')
       .mockRejectedValueOnce(new Error("claude error"));
 
@@ -667,7 +669,7 @@ describe("ci-fixer", () => {
     });
     mockGh.getFailedRunLog.mockResolvedValue("log output");
     // Classification is skipped for ci-unrelated fix PRs, so only the fix call matters
-    mockClaude.runClaude.mockRejectedValueOnce(new Error("claude error"));
+    mockClaude.runAI.mockRejectedValueOnce(new Error("claude error"));
 
     await run([repo]);
 
@@ -696,7 +698,7 @@ describe("ci-fixer", () => {
     });
     mockGh.getFailedRunLog.mockResolvedValue("log output");
     // Classification is skipped for ci-unrelated fix PRs
-    mockClaude.runClaude.mockRejectedValueOnce(new Error("claude error"));
+    mockClaude.runAI.mockRejectedValueOnce(new Error("claude error"));
     // Existing error comment from Yeti
     mockGh.getIssueComments.mockResolvedValue([
       { id: 777, body: "### CI Fixer Error\n\nprevious error", login: "yeti-bot" },
@@ -727,7 +729,7 @@ describe("ci-fixer", () => {
     });
     mockGh.getFailedRunLog.mockResolvedValue("log output");
     // Classification is skipped for ci-unrelated fix PRs
-    mockClaude.runClaude.mockRejectedValueOnce(new ShutdownError("shutting down"));
+    mockClaude.runAI.mockRejectedValueOnce(new ShutdownError("shutting down"));
 
     await run([repo]);
 
@@ -751,7 +753,7 @@ describe("ci-fixer", () => {
     });
     mockGh.getFailedRunLog.mockResolvedValue("log output");
     // Classification is skipped for ci-unrelated fix PRs
-    mockClaude.runClaude.mockRejectedValueOnce(new MockRateLimitError("rate limited"));
+    mockClaude.runAI.mockRejectedValueOnce(new MockRateLimitError("rate limited"));
 
     await run([repo]);
 
@@ -774,7 +776,7 @@ describe("ci-fixer", () => {
     });
     mockGh.getFailedRunLog.mockResolvedValue("log output");
     // Classification is skipped for ci-unrelated fix PRs
-    mockClaude.runClaude.mockRejectedValueOnce(new Error("claude error"));
+    mockClaude.runAI.mockRejectedValueOnce(new Error("claude error"));
     // Commenting itself fails
     mockGh.getIssueComments.mockRejectedValue(new Error("API error"));
 
@@ -799,7 +801,7 @@ describe("ci-fixer", () => {
     });
     mockGh.getFailedRunLog.mockResolvedValue("error: test failed");
     // Only one runClaude call — for the fix, not classification
-    mockClaude.runClaude.mockResolvedValueOnce("fixed the issue");
+    mockClaude.runAI.mockResolvedValueOnce("fixed the issue");
 
     await run([repo]);
 
@@ -822,7 +824,7 @@ describe("ci-fixer", () => {
       link: "https://github.com/org/repo/actions/runs/123",
     });
     mockGh.getFailedRunLog.mockResolvedValue("error: flakey timeout");
-    mockClaude.runClaude.mockResolvedValueOnce(
+    mockClaude.runAI.mockResolvedValueOnce(
       '{"related": false, "fingerprint": "flakey-test:timeout", "reason": "timeout"}',
     );
 
@@ -851,7 +853,7 @@ describe("ci-fixer", () => {
       link: "https://github.com/org/repo/actions/runs/123",
     });
     mockGh.getFailedRunLog.mockResolvedValue("error: some failure");
-    mockClaude.runClaude
+    mockClaude.runAI
       .mockResolvedValueOnce('{"related": false, "fingerprint": "flakey-test:timeout", "reason": "timeout"}')
       .mockResolvedValueOnce('{"related": false, "fingerprint": "runner:disk-space", "reason": "disk space"}')
       .mockResolvedValueOnce('{"related": false, "fingerprint": "flakey-test:auth", "reason": "auth flake"}');
@@ -879,7 +881,7 @@ describe("ci-fixer", () => {
       link: "https://github.com/org/repo/actions/runs/123",
     });
     mockGh.getFailedRunLog.mockResolvedValue("error: some failure");
-    mockClaude.runClaude
+    mockClaude.runAI
       .mockResolvedValueOnce('{"related": false, "fingerprint": "flakey-test:timeout", "reason": "timeout"}')
       .mockResolvedValueOnce('{"related": false, "fingerprint": "runner:disk-space", "reason": "disk space"}');
     // Each repo's search returns empty
