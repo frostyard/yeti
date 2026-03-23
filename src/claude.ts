@@ -574,6 +574,8 @@ export function runAI(prompt: string, cwd: string, options?: AiOptions): Promise
       }
       if (code !== 0) {
         log.warn(`${config.name} exited with code ${code}: ${stderr.slice(0, 500)}`);
+        reject(new Error(`${config.name} exited with code ${code}: ${stderr.slice(0, 500)}`));
+        return;
       }
       resolve(stdout);
     });
@@ -706,6 +708,8 @@ export function runClaude(prompt: string, cwd: string): Promise<string> {
       }
       if (code !== 0) {
         log.warn(`claude exited with code ${code}: ${stderr.slice(0, 500)}`);
+        reject(new Error(`claude exited with code ${code}: ${stderr.slice(0, 500)}`));
+        return;
       }
       resolve(stdout);
     });
