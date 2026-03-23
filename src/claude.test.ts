@@ -260,7 +260,7 @@ describe("runClaude", () => {
     expect(stdinMock.end).toHaveBeenCalled();
   });
 
-  it("still resolves stdout on non-zero exit code", async () => {
+  it("rejects on non-zero exit code", async () => {
     const child = new EventEmitter() as ChildProcess & EventEmitter;
     const stdoutEmitter = new EventEmitter();
     const stderrEmitter = new EventEmitter();
@@ -279,8 +279,7 @@ describe("runClaude", () => {
     stderrEmitter.emit("data", Buffer.from("error msg"));
     child.emit("close", 1, null);
 
-    const result = await promise;
-    expect(result).toBe("partial output");
+    await expect(promise).rejects.toThrow("claude exited with code 1: error msg");
   });
 
   it("rejects on spawn error", async () => {
@@ -1156,5 +1155,27 @@ describe("runAI with codex backend", () => {
     stdoutEmitter.emit("data", Buffer.from("ok"));
     child.emit("close", 0, null);
     await promise;
+  });
+
+  it("rejects when codex exits with non-zero code", async () => {
+    const child = new EventEmitter() as ChildProcess & EventEmitter;
+    const stdoutEmitter = new EventEmitter();
+    const stderrEmitter = new EventEmitter();
+    const stdinMock = { write: vi.fn(), end: vi.fn() };
+
+    Object.assign(child, {
+      stdout: stdoutEmitter,
+      stderr: stderrEmitter,
+      stdin: stdinMock,
+    });
+
+    mockSpawn.mockReturnValue(child as any);
+
+    const promise = runAI("do the thing", "/tmp/codex-test", { backend: "codex" });
+
+    stderrEmitter.emit("data", Buffer.from("error: unexpected argument '--approval-mode' found"));
+    child.emit("close", 2, null);
+
+    await expect(promise).rejects.toThrow("Codex exited with code 2");
   });
 });

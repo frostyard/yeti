@@ -263,4 +263,33 @@ describe("plan-reviewer", () => {
     // Should record failure so it retries
     expect(mockDb.recordTaskFailed).toHaveBeenCalledWith(1, "Empty review output");
   });
+
+  it("reports error when runAI rejects with non-zero exit", async () => {
+    const issue = mockIssue({
+      body: "Test issue body",
+      labels: [{ name: "Needs Plan Review" }],
+    });
+    mockGh.listOpenIssues.mockResolvedValueOnce([issue]);
+    mockGh.getIssueComments.mockResolvedValue([
+      { id: 501, body: planCommentBody, login: "yeti-bot" },
+    ]);
+    mockGh.getCommentReactions.mockResolvedValue([]);
+    mockClaude.runAI.mockRejectedValueOnce(
+      new Error("Codex exited with code 2: error: unexpected argument '--approval-mode' found"),
+    );
+
+    await run([repo]);
+
+    expect(reportError).toHaveBeenCalledWith(
+      "plan-reviewer:process-issue",
+      expect.stringContaining("#1"),
+      expect.any(Error),
+    );
+    expect(mockDb.recordTaskFailed).toHaveBeenCalledWith(
+      1,
+      expect.stringContaining("Codex exited with code 2"),
+    );
+    expect(mockGh.commentOnIssue).not.toHaveBeenCalled();
+    expect(mockClaude.removeWorktree).toHaveBeenCalled();
+  });
 });
