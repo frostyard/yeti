@@ -40,7 +40,7 @@ interface BackendConfig {
 const BACKENDS: Record<AiBackend, BackendConfig> = {
   claude: { binary: "claude", args: ["-p", "--dangerously-skip-permissions"], promptVia: "stdin", name: "Claude" },
   copilot: { binary: "copilot", args: ["--allow-all-tools", "-s", "--no-ask-user"], promptVia: "flag", name: "Copilot" },
-  codex: { binary: "codex", args: ["--approval-mode", "full-auto"], promptVia: "positional", name: "Codex" },
+  codex: { binary: "codex", args: ["exec", "--full-auto"], promptVia: "positional", name: "Codex" },
 };
 
 // ── Bounded concurrent queue ──
