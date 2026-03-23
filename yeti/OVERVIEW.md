@@ -30,6 +30,7 @@ src/
 ├── pages/
 │   ├── dashboard.ts     Main status page HTML builder
 │   ├── jobs.ts          Jobs page HTML builder (all jobs with backend/model/schedule)
+│   ├── repos.ts         Repos page HTML builder (per-repo active/completed items, add repo dialog)
 │   ├── queue.ts         Work queue page HTML builder
 │   ├── logs.ts          Log list, detail, and issue logs page HTML builders
 │   ├── config.ts        Config editor page HTML builder
@@ -175,6 +176,8 @@ via `AsyncLocalStorage` context). See [Database Schema](database-schema.md).
 Routes:
 
 - `GET /` — Dashboard: job status with Last Run/Next Run columns, "Run" buttons, queue overview
+- `GET /repos` — Repos page: per-repo view of active queue items and recently completed tasks, Add Repo dialog for onboarding new repos
+- `POST /repos/add` — Add a repo to the allowedRepos config
 - `GET /jobs` — Jobs page: all jobs with descriptions, enabled/disabled state, AI backend/model, schedule, Run/Pause controls
 - `GET /health` — JSON health check
 - `GET /status` — JSON with jobs (including `jobSchedules` with per-job `nextRunIn` countdowns), uptime, queue, integrations

@@ -358,6 +358,18 @@ export function getRecentActions(jobFilter?: string, limit = 10): RecentAction[]
     .all(...params) as RecentAction[];
 }
 
+export function getRecentCompletedTasks(limit = 10): Task[] {
+  return getDb()
+    .prepare(`
+      SELECT * FROM tasks
+      WHERE status = 'completed' AND item_number > 0
+        AND completed_at >= datetime('now', '-7 days')
+      ORDER BY completed_at DESC
+      LIMIT ?
+    `)
+    .all(limit) as Task[];
+}
+
 export function hasPreviousCiFixerTasks(repo: string, prNumber: number): boolean {
   const row = getDb()
     .prepare(

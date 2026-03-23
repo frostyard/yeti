@@ -3,8 +3,8 @@ import crypto from "node:crypto";
 import { queueStatus, copilotQueueStatus, cancelCurrentTask } from "./claude.js";
 import { SERVER_PORT, getConfigForDisplay, writeConfig, type ConfigFile } from "./config.js";
 import * as config from "./config.js";
-import { getQueueSnapshot, enrichQueueItemsWithPRStatus, mergePR, removeQueueItem, type QueueCategory } from "./github.js";
-import { getRecentJobRuns, getRecentWorkItems, getDistinctJobNames, getJobRun, getJobRunLogs, getJobRunLogsSince, getLatestRunIdsByJob, getRunningTasks, getTasksByRunId, getWorkItemsForRuns, searchRunsByItem, getRunsForIssue, getLogsForRuns } from "./db.js";
+import { getQueueSnapshot, enrichQueueItemsWithPRStatus, mergePR, removeQueueItem, listAllOrgRepos, listRepos, type QueueCategory } from "./github.js";
+import { getRecentJobRuns, getRecentWorkItems, getDistinctJobNames, getJobRun, getJobRunLogs, getJobRunLogsSince, getLatestRunIdsByJob, getRunningTasks, getTasksByRunId, getWorkItemsForRuns, searchRunsByItem, getRunsForIssue, getLogsForRuns, getRecentCompletedTasks } from "./db.js";
 import * as log from "./log.js";
 import type { Scheduler } from "./scheduler.js";
 import { msUntilHour } from "./scheduler.js";
@@ -16,6 +16,7 @@ import { buildLogsListPage, buildLogDetailPage, buildIssueLogsPage } from "./pag
 import { buildConfigPage } from "./pages/config.js";
 import { buildJobsPage, type JobInfo } from "./pages/jobs.js";
 import { buildLoginPage } from "./pages/login.js";
+import { buildReposPage } from "./pages/repos.js";
 
 // Re-export for backwards compatibility with tests and other consumers
 export { formatUptime, formatRelativeTime } from "./pages/layout.js";
@@ -246,6 +247,33 @@ async function handleRequest(req: http.IncomingMessage, res: http.ServerResponse
     }
   }
 
+  if (req.method === "POST" && req.url === "/repos/add") {
+    if (!requireAuth(req, res)) return;
+    try {
+      const body = await readBody(req);
+      const { repo } = JSON.parse(body) as { repo: string };
+      if (!repo) throw new Error("Missing repo name");
+      const current = config.ALLOWED_REPOS;
+      if (current === null) {
+        // Convert from "all repos" to explicit list: fetch all current repos + new one
+        const allRepos = await listRepos();
+        const names = allRepos.map(r => r.name);
+        if (!names.includes(repo)) names.push(repo);
+        writeConfig({ allowedRepos: names });
+      } else {
+        if (!current.includes(repo)) {
+          writeConfig({ allowedRepos: [...current, repo] });
+        }
+      }
+      res.writeHead(200, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ result: "added" }));
+    } catch (err) {
+      res.writeHead(500, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ error: String(err) }));
+    }
+    return;
+  }
+
   if (req.method === "POST" && req.url === "/config") {
     if (!requireAuth(req, res)) return;
 
@@ -467,6 +495,29 @@ async function handleRequest(req: http.IncomingMessage, res: http.ServerResponse
       schedInfo,
       copilotQueueStatus(),
     );
+    res.writeHead(200, { "Content-Type": "text/html" });
+    res.end(html);
+    return;
+  }
+
+  if (req.url === "/repos") {
+    if (!requireAuth(req, res)) return;
+    const ALL_CATEGORIES: QueueCategory[] = ["ready", "needs-refinement", "refined", "needs-review-addressing", "auto-mergeable", "needs-triage", "needs-plan-review"];
+    const repos = await listRepos();
+    const allOrgRepos = await listAllOrgRepos();
+    const snapshot = getQueueSnapshot(ALL_CATEGORIES);
+    await enrichQueueItemsWithPRStatus(snapshot.items);
+    const recentTasks = getRecentCompletedTasks(50);
+    const configuredNames = new Set(repos.map(r => r.name.toLowerCase()));
+    const availableRepos = allOrgRepos.filter(r => !configuredNames.has(r.name.toLowerCase()));
+    const html = buildReposPage({
+      repos,
+      queueItems: snapshot.items,
+      recentTasks,
+      availableRepos,
+      allowedReposIsNull: config.ALLOWED_REPOS === null,
+      theme,
+    });
     res.writeHead(200, { "Content-Type": "text/html" });
     res.end(html);
     return;
