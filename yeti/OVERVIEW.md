@@ -175,6 +175,7 @@ via `AsyncLocalStorage` context). See [Database Schema](database-schema.md).
 Routes:
 
 - `GET /` — Dashboard: job status with Last Run/Next Run columns, "Run" buttons, queue overview
+- `GET /jobs` — Jobs page: all jobs with descriptions, enabled/disabled state, AI backend/model, schedule, Run/Pause controls
 - `GET /health` — JSON health check
 - `GET /status` — JSON with jobs (including `jobSchedules` with per-job `nextRunIn` countdowns), uptime, queue, integrations
 - `GET /login` / `POST /login` — Token-based authentication
