@@ -201,7 +201,7 @@ function cancelCodexQueuedTasks(): void {
 }
 
 /** Select the correct enqueue function based on the AI backend in options. */
-export function resolveEnqueue(aiOptions?: AiOptions) {
+export function resolveEnqueue(aiOptions?: AiOptions): typeof enqueue {
   if (aiOptions?.backend === "codex") return enqueueCodex;
   if (aiOptions?.backend === "copilot") return enqueueCopilot;
   return enqueue;
@@ -426,7 +426,7 @@ export async function generatePRDescription(
   const description = await resolveEnqueue(aiOptions)(() => runAI(prompt, wtPath, aiOptions));
   if (!description.trim()) {
     throw new Error(
-      `Claude returned empty PR description for issue #${issue.number}`,
+      `AI returned empty PR description for issue #${issue.number}`,
     );
   }
   return description.trim();
@@ -458,7 +458,7 @@ export async function generateDocsPRDescription(
 
   const description = await resolveEnqueue(aiOptions)(() => runAI(prompt, wtPath, aiOptions));
   if (!description.trim()) {
-    throw new Error("Claude returned empty PR description for docs update");
+    throw new Error("AI returned empty PR description for docs update");
   }
   return description.trim();
 }
@@ -490,7 +490,7 @@ export async function regeneratePRDescription(
 
   const description = await resolveEnqueue(aiOptions)(() => runAI(prompt, wtPath, aiOptions));
   if (!description.trim()) {
-    throw new Error(`Claude returned empty PR description for PR #${pr.number}`);
+    throw new Error(`AI returned empty PR description for PR #${pr.number}`);
   }
   return description.trim();
 }

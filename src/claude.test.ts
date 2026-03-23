@@ -983,6 +983,24 @@ function createMockChild() {
   return child;
 }
 
+describe("resolveEnqueue", () => {
+  it("returns enqueue for undefined options", () => {
+    expect(resolveEnqueue()).toBe(enqueue);
+  });
+
+  it("returns enqueue for claude backend", () => {
+    expect(resolveEnqueue({ backend: "claude" })).toBe(enqueue);
+  });
+
+  it("returns enqueueCopilot for copilot backend", () => {
+    expect(resolveEnqueue({ backend: "copilot" })).toBe(enqueueCopilot);
+  });
+
+  it("returns enqueueCodex for codex backend", () => {
+    expect(resolveEnqueue({ backend: "codex" })).toBe(enqueueCodex);
+  });
+});
+
 describe("runAI", () => {
   it("defaults to claude backend when no options provided", async () => {
     const child = createMockChild();
