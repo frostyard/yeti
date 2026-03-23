@@ -158,7 +158,10 @@ new tasks when the system is shutting down (via `shutdown.ts`, throwing
 cancellation (`cancelCurrentTask`). Concurrent clones to the same repo are
 deduplicated. Claude is invoked via
 `spawn("claude", ["-p", "--dangerously-skip-permissions"])` with the prompt
-on stdin. PR description generation uses three-dot diff
+on stdin. Copilot uses the `-m` flag. Codex uses the `exec` subcommand with
+`--full-auto` and the prompt as a positional argument (`promptVia:
+"positional"` — the prompt is appended as the last CLI arg, after any
+`--model` flag). PR description generation uses three-dot diff
 (`origin/base...HEAD`) to isolate branch changes from concurrent
 main-branch movement. Each Claude process has a configurable **timeout**
 (`CLAUDE_TIMEOUT_MS`, default 20 minutes) — on expiry, SIGTERM is sent with a
@@ -180,7 +183,7 @@ Routes:
 - `POST /repos/add` — Add a repo to the allowedRepos config
 - `GET /jobs` — Jobs page: all jobs with descriptions, enabled/disabled state, AI backend/model, schedule, Run/Pause controls
 - `GET /health` — JSON health check
-- `GET /status` — JSON with jobs (including `jobSchedules` with per-job `nextRunIn` countdowns), uptime, queue, integrations
+- `GET /status` — JSON with jobs (including `jobSchedules` with per-job `nextRunIn` countdowns), `jobAi` (per-job backend/model config for live dashboard updates), uptime, queue, integrations
 - `GET /login` / `POST /login` — Token-based authentication
 - `POST /trigger/:job` — Manual job trigger (returns 200/409/404)
 - `POST /pause/:job` — Toggle pause/resume for a job
@@ -320,7 +323,11 @@ throughput with host resource usage. The concurrency limit is configurable via
 Each process has a configurable timeout (`claudeTimeoutMs`, default 20 min)
 with SIGTERM/SIGKILL escalation. A 5-minute heartbeat logs PID, elapsed time,
 and stdout byte count. Timed-out processes throw `ClaudeTimeoutError` with
-diagnostic fields, surfaced in error reports for debugging.
+diagnostic fields, surfaced in error reports for debugging. Both `runAI()` and
+`runClaude()` reject their promises on non-zero exit codes (error includes exit
+code and first 500 bytes of stderr), ensuring AI process failures propagate to
+job-level error handling and `reportError()` rather than being silently
+swallowed.
 
 ### Skip-If-Busy Scheduling
 
