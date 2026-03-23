@@ -39,7 +39,7 @@ For a typical starting point, enable the core workflow jobs:
 ]
 ```
 
-All available jobs: `issue-refiner`, `issue-worker`, `ci-fixer`, `review-addresser`, `auto-merger`, `doc-maintainer`, `repo-standards`, `improvement-identifier`, `issue-auditor`, `triage-yeti-errors`, `plan-reviewer`.
+All available jobs: `issue-refiner`, `issue-worker`, `ci-fixer`, `review-addresser`, `auto-merger`, `doc-maintainer`, `repo-standards`, `improvement-identifier`, `issue-auditor`, `triage-yeti-errors`, `plan-reviewer`, `mkdocs-update`.
 
 ### `githubOwners`
 
@@ -52,6 +52,14 @@ GitHub organizations or usernames whose repositories Yeti should scan. Defaults 
 ### `allowedRepos`
 
 An optional allow-list of specific repositories (by name, not full path) to process. When set, Yeti ignores all other repos under the configured owners. When `null` or omitted, all repos under the owners are eligible.
+
+### `includeForks`
+
+Whether to include forked repositories when scanning for work. Defaults to `false`. Set to `true` if you want Yeti to discover and process issues/PRs in forks.
+
+```json
+"includeForks": true
+```
 
 ```json
 "allowedRepos": ["frontend", "api", "docs"]
@@ -110,7 +118,9 @@ Most configuration changes take effect without restarting the service. When you 
 - `authToken`
 - `maxClaudeWorkers`, `claudeTimeoutMs`
 - `maxCopilotWorkers`, `copilotTimeoutMs`
+- `maxCodexWorkers`, `codexTimeoutMs`
 - `jobAi`
+- `includeForks`
 - `logRetentionDays`, `logRetentionPerJob`
 - `queueScanIntervalMs`
 - `discordAllowedUsers`

@@ -21,6 +21,7 @@ Changes to live-reloadable fields take effect without restarting the service. Ot
 | `allowedRepos` | `string[] \| null` | `null` | `YETI_ALLOWED_REPOS` (comma-sep) | No | Repo allow-list. `null` means all repos under `githubOwners` are scanned |
 | `logRetentionDays` | `number` | `14` | -- | Yes | Delete logs older than N days |
 | `logRetentionPerJob` | `number` | `20` | -- | Yes | Max log runs to keep per job |
+| `includeForks` | `boolean` | `false` | `YETI_INCLUDE_FORKS` | Yes | Include forked repositories when scanning for work |
 | `queueScanIntervalMs` | `number` | `300000` (5 min) | -- | Yes | How often the lightweight queue label scanner runs |
 
 ## AI Backend Settings

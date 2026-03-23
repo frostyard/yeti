@@ -80,7 +80,7 @@ Any job can be manually triggered via the dashboard or API (`POST /trigger/:job`
 
 ### AI Backend
 
-Jobs marked "AI: Yes" use Claude CLI by default. Individual jobs can be routed to a different backend (e.g., Copilot) or model via the [`jobAi` config](../configuration.md#example-per-job-ai-overrides).
+Jobs marked "AI: Yes" use Claude CLI by default. Individual jobs can be routed to a different backend (e.g., Copilot or Codex) or model via the [`jobAi` config](../configuration.md#example-per-job-ai-overrides).
 
 ### Rate Limiting
 

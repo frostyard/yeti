@@ -1,6 +1,6 @@
 # Optimization
 
-Yeti runs standard `claude` and `copilot` CLI sessions inside your repository. Every job that calls AI spawns a real CLI process in a git worktree of your repo --- the same process you'd get if you opened a terminal, `cd`'d into your project, and ran `claude` yourself.
+Yeti runs standard `claude`, `copilot`, and `codex` CLI sessions inside your repository. Every job that calls AI spawns a real CLI process in a git worktree of your repo --- the same process you'd get if you opened a terminal, `cd`'d into your project, and ran `claude` yourself.
 
 This means **all your existing agent configuration applies**. CLAUDE.md files, skills, hooks, settings --- Yeti's AI reads and follows them just like an interactive session would. The quality of Yeti's plans, implementations, and fixes is directly tied to how well your repository is set up for AI agents.
 
@@ -25,9 +25,12 @@ claude -p --dangerously-skip-permissions
 
 # Copilot backend
 copilot --allow-all-tools -s --no-ask-user -p "<prompt>"
+
+# Codex backend
+codex exec --full-auto "<prompt>"
 ```
 
-Both run with full filesystem access in your repo's worktree. The CLI loads whatever configuration it finds there --- exactly as it would in an interactive session.
+All three run with full filesystem access in your repo's worktree. The CLI loads whatever configuration it finds there --- exactly as it would in an interactive session.
 
 ---
 

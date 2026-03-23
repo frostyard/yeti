@@ -66,7 +66,7 @@ The cold reality: most of the time you spent on an issue was not making decision
 - **Web dashboard** --- Real-time view of job status, work queue, logs, and configuration. Runs on port 9384.
 - **Discord bot** --- Create issues, analyze PRs, trigger jobs, and get notifications from your Discord server
 - **Multi-repo** --- Monitors all repositories under your configured GitHub organizations
-- **Multi-backend AI** --- Route different jobs to Claude or Copilot with per-job model overrides
+- **Multi-backend AI** --- Route different jobs to Claude, Copilot, or Codex with per-job model overrides
 - **Priority queue** --- Mark issues as `Priority` to move them to the front of every queue
 - **Live configuration** --- Most settings reload without restart. Pause jobs, skip items, adjust intervals from the dashboard.
 - **Auto-updates** --- A systemd timer checks for new releases every 60 seconds, downloads them, and restarts with health check and automatic rollback
