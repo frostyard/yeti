@@ -226,7 +226,8 @@ if (enabledJobs.length === 0) {
 }
 
 const scheduler = startJobs(enabledJobs, config.PAUSED_JOBS);
-const server = createServer(scheduler);
+const allJobInfo = jobs.map(j => ({ name: j.name, intervalMs: j.intervalMs, ...(j.scheduledHour !== undefined ? { scheduledHour: j.scheduledHour } : {}) }));
+const server = createServer(scheduler, allJobInfo);
 
 // ── Queue label scanner (infrastructure — always runs) ──
 

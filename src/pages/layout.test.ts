@@ -4,7 +4,7 @@ vi.mock("../config.js", () => ({
   GITHUB_OWNERS: ["frostyard"],
 }));
 
-import { siteTitle } from "./layout.js";
+import { siteTitle, buildNav } from "./layout.js";
 import * as config from "../config.js";
 
 describe("siteTitle", () => {
@@ -33,5 +33,20 @@ describe("siteTitle", () => {
   it("escapes HTML in org names", () => {
     (config as { GITHUB_OWNERS: readonly string[] }).GITHUB_OWNERS = ["<script>"];
     expect(siteTitle()).toBe("yeti — &lt;script&gt;");
+  });
+});
+
+describe("buildNav", () => {
+  it("includes all navigation links in order", () => {
+    const nav = buildNav("system");
+    expect(nav).toContain('href="/"');
+    expect(nav).toContain('href="/jobs"');
+    expect(nav).toContain('href="/queue"');
+    expect(nav).toContain('href="/logs"');
+    expect(nav).toContain('href="/config"');
+    // Jobs should come before Queue
+    const jobsPos = nav.indexOf("/jobs");
+    const queuePos = nav.indexOf("/queue");
+    expect(jobsPos).toBeLessThan(queuePos);
   });
 });

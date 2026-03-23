@@ -14,6 +14,7 @@ import { buildStatusPage } from "./pages/dashboard.js";
 import { buildQueuePage } from "./pages/queue.js";
 import { buildLogsListPage, buildLogDetailPage, buildIssueLogsPage } from "./pages/logs.js";
 import { buildConfigPage } from "./pages/config.js";
+import { buildJobsPage, type JobInfo } from "./pages/jobs.js";
 import { buildLoginPage } from "./pages/login.js";
 
 // Re-export for backwards compatibility with tests and other consumers
@@ -101,10 +102,10 @@ function parseFormBody(body: string): Record<string, string> {
 
 // ── Server ──
 
-export function createServer(scheduler: Scheduler): http.Server {
+export function createServer(scheduler: Scheduler, allJobs: JobInfo[] = []): http.Server {
   const server = http.createServer(async (req, res) => {
     try {
-      await handleRequest(req, res, scheduler);
+      await handleRequest(req, res, scheduler, allJobs);
     } catch (err) {
       log.error(`HTTP handler error: ${err}`);
       if (!res.headersSent) {
@@ -128,7 +129,7 @@ function getTheme(req: http.IncomingMessage): "dark" | "light" | "system" {
   return "system";
 }
 
-async function handleRequest(req: http.IncomingMessage, res: http.ServerResponse, scheduler: Scheduler): Promise<void> {
+async function handleRequest(req: http.IncomingMessage, res: http.ServerResponse, scheduler: Scheduler, allJobs: JobInfo[]): Promise<void> {
   const theme = getTheme(req);
 
   // ── POST routes ──
@@ -465,6 +466,25 @@ async function handleRequest(req: http.IncomingMessage, res: http.ServerResponse
       paused,
       schedInfo,
       copilotQueueStatus(),
+    );
+    res.writeHead(200, { "Content-Type": "text/html" });
+    res.end(html);
+    return;
+  }
+
+  if (req.url === "/jobs") {
+    if (!requireAuth(req, res)) return;
+    const jobs: Record<string, boolean> = {};
+    for (const [name, running] of scheduler.jobStates()) {
+      jobs[name] = running;
+    }
+    const latestRuns = getLatestRunIdsByJob();
+    const paused = scheduler.pausedJobs();
+    const schedInfo = scheduler.jobScheduleInfo();
+    const enabledSet = new Set(config.ENABLED_JOBS);
+    const html = buildJobsPage(
+      allJobs, enabledSet, config.JOB_AI,
+      jobs, latestRuns, theme, paused, schedInfo,
     );
     res.writeHead(200, { "Content-Type": "text/html" });
     res.end(html);
