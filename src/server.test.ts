@@ -29,6 +29,7 @@ vi.mock("./config.js", () => ({
   SKIPPED_ITEMS: [],
   PRIORITIZED_ITEMS: [],
   ENABLED_JOBS: ["issue-worker", "ci-fixer"],
+  ALLOWED_REPOS: ["repo1", "repo2"],
   JOB_AI: {},
 }));
 
@@ -57,6 +58,13 @@ vi.mock("./github.js", () => ({
   enrichQueueItemsWithPRStatus: vi.fn().mockResolvedValue(undefined),
   mergePR: vi.fn().mockResolvedValue(undefined),
   removeQueueItem: vi.fn(),
+  listRepos: vi.fn().mockResolvedValue([
+    { owner: "owner1", name: "repo1", fullName: "owner1/repo1", defaultBranch: "main" },
+  ]),
+  listAllOrgRepos: vi.fn().mockResolvedValue([
+    { owner: "owner1", name: "repo1", fullName: "owner1/repo1", defaultBranch: "main" },
+    { owner: "owner1", name: "repo2", fullName: "owner1/repo2", defaultBranch: "main" },
+  ]),
 }));
 
 vi.mock("./db.js", () => ({
@@ -98,6 +106,7 @@ vi.mock("./db.js", () => ({
   searchRunsByItem: vi.fn().mockReturnValue([]),
   getRunsForIssue: vi.fn().mockReturnValue([]),
   getLogsForRuns: vi.fn().mockReturnValue(new Map()),
+  getRecentCompletedTasks: vi.fn().mockReturnValue([]),
 }));
 
 import { formatUptime, buildLogsListPage, buildLogDetailPage, buildIssueLogsPage, buildQueuePage } from "./server.js";
@@ -529,6 +538,26 @@ describe("HTTP server", () => {
     expect(res.status).toBe(404);
   });
 
+  it("GET /repos returns 200 with HTML", async () => {
+    const res = await request(server, "GET", "/repos");
+    expect(res.status).toBe(200);
+    expect(res.headers["content-type"]).toBe("text/html");
+    expect(res.body).toContain("Repos");
+    expect(res.body).toContain("owner1/repo1");
+  });
+
+  it("POST /repos/add adds a repo to config", async () => {
+    const { writeConfig: wc } = await import("./config.js");
+    const res = await request(server, "POST", "/repos/add", {
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ repo: "new-repo" }),
+    });
+    expect(res.status).toBe(200);
+    const body = JSON.parse(res.body);
+    expect(body.result).toBe("added");
+    expect(wc).toHaveBeenCalled();
+  });
+
   it("GET /logs renders search input", async () => {
     const res = await request(server, "GET", "/logs");
     expect(res.status).toBe(200);
@@ -704,6 +733,19 @@ describe("HTTP server with auth", () => {
 
   it("GET /logs/:runId/tail returns 401 when no credentials provided", async () => {
     const res = await request(server, "GET", "/logs/abc-123/tail");
+    expect(res.status).toBe(401);
+  });
+
+  it("GET /repos returns 401 when no credentials provided", async () => {
+    const res = await request(server, "GET", "/repos");
+    expect(res.status).toBe(401);
+  });
+
+  it("POST /repos/add returns 401 when no credentials provided", async () => {
+    const res = await request(server, "POST", "/repos/add", {
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ repo: "new-repo" }),
+    });
     expect(res.status).toBe(401);
   });
 
