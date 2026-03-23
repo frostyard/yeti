@@ -1,9 +1,9 @@
 import { Client, GatewayIntentBits, type Message, type TextChannel } from "discord.js";
-import { DISCORD_BOT_TOKEN, DISCORD_CHANNEL_ID, DISCORD_ALLOWED_USERS, GITHUB_OWNERS } from "./config.js";
+import { DISCORD_BOT_TOKEN, DISCORD_CHANNEL_ID, DISCORD_ALLOWED_USERS, GITHUB_OWNERS, JOB_AI } from "./config.js";
 import * as log from "./log.js";
 import * as gh from "./github.js";
 import * as db from "./db.js";
-import { queueStatus, enqueue, runClaude } from "./claude.js";
+import { queueStatus, enqueue, runAI, resolveEnqueue } from "./claude.js";
 import type { Scheduler } from "./scheduler.js";
 
 let client: Client | null = null;
@@ -264,7 +264,8 @@ async function handleCommand(command: string, args: string[], message: Message):
           commentText,
         ].join("\n");
 
-        const summary = await enqueue(() => runClaude(prompt, process.cwd()));
+        const aiOptions = JOB_AI["discord"];
+        const summary = await resolveEnqueue(aiOptions)(() => runAI(prompt, process.cwd(), aiOptions));
         const truncated = summary.length > 1900 ? summary.slice(0, 1900) + "..." : summary;
         await message.reply(truncated);
       } catch (err) {

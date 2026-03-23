@@ -1,4 +1,4 @@
-import { SELF_REPO, type Repo } from "../config.js";
+import { SELF_REPO, JOB_AI, type Repo } from "../config.js";
 import * as gh from "../github.js";
 import * as claude from "../claude.js";
 import * as log from "../log.js";
@@ -301,7 +301,8 @@ async function processIssue(
 
     const errorDetails = parseYetiError(issue.body);
     const prompt = buildInvestigationPrompt(issue, errorDetails, otherIssues);
-    const output = await claude.enqueue(() => claude.runClaude(prompt, wtPath!), gh.hasPriorityLabel(issue.labels));
+    const aiOptions = JOB_AI["triage-yeti-errors"];
+    const output = await claude.resolveEnqueue(aiOptions)(() => claude.runAI(prompt, wtPath!, aiOptions), gh.hasPriorityLabel(issue.labels));
 
     if (output.trim()) {
       const relatedNumbers = parseRelatedIssues(output);

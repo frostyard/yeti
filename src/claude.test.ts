@@ -40,7 +40,7 @@ vi.mock("node:fs", () => ({
   },
 }));
 
-import { enqueue, queueStatus, randomSuffix, datestamp, hasNewCommits, hasTreeDiff, generatePRDescription, generateDocsPRDescription, regeneratePRDescription, runClaude, cancelCurrentTask, cancelQueuedTasks, createWorktree, createWorktreeFromBranch, pushBranch, ensureClone, ClaudeTimeoutError, runAI, copilotQueueStatus, enqueueCopilot, codexQueueStatus, enqueueCodex, AiTimeoutError } from "./claude.js";
+import { enqueue, queueStatus, randomSuffix, datestamp, hasNewCommits, hasTreeDiff, generatePRDescription, generateDocsPRDescription, regeneratePRDescription, runClaude, cancelCurrentTask, cancelQueuedTasks, createWorktree, createWorktreeFromBranch, pushBranch, ensureClone, ClaudeTimeoutError, runAI, copilotQueueStatus, enqueueCopilot, codexQueueStatus, enqueueCodex, AiTimeoutError, resolveEnqueue } from "./claude.js";
 import { ShutdownError } from "./shutdown.js";
 import * as shutdown from "./shutdown.js";
 import fs from "node:fs";
@@ -513,7 +513,7 @@ describe("generatePRDescription", () => {
     await vi.advanceTimersByTimeAsync(0);
     child.emit("error", new Error("spawn failed"));
 
-    await expect(promise).rejects.toThrow("Failed to spawn claude");
+    await expect(promise).rejects.toThrow("Failed to spawn Claude");
   });
 
   it("throws when claude returns empty output", async () => {

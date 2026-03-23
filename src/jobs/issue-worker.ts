@@ -1,4 +1,4 @@
-import { LABELS, type Repo } from "../config.js";
+import { LABELS, JOB_AI, type Repo } from "../config.js";
 import * as gh from "../github.js";
 import { isRateLimited } from "../github.js";
 import * as claude from "../claude.js";
@@ -192,12 +192,13 @@ async function processIssue(repo: Repo, issue: gh.Issue): Promise<void> {
     // 3. Build phase-aware prompt
     const prompt = buildPrompt(fullName, issue, plan, currentPhase, totalPhases, mergedPRs, comments, imageContext);
 
-    await claude.enqueue(() => claude.runClaude(prompt, wtPath!), gh.isItemPrioritized(fullName, issue.number) || gh.hasPriorityLabel(issue.labels));
+    const aiOptions = JOB_AI["issue-worker"];
+    await claude.resolveEnqueue(aiOptions)(() => claude.runAI(prompt, wtPath!, aiOptions), gh.isItemPrioritized(fullName, issue.number) || gh.hasPriorityLabel(issue.labels));
 
     if (await claude.hasNewCommits(wtPath, repo.defaultBranch) && await claude.hasTreeDiff(wtPath, repo.defaultBranch)) {
       await claude.pushBranch(wtPath, branchName);
       const description = await claude.generatePRDescription(
-        wtPath, repo.defaultBranch, issue,
+        wtPath, repo.defaultBranch, issue, aiOptions,
       );
 
       // 4. Create PR with appropriate title and body

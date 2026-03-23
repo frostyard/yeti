@@ -1,4 +1,4 @@
-import { LABELS, type Repo } from "../config.js";
+import { LABELS, JOB_AI, type Repo } from "../config.js";
 import * as gh from "../github.js";
 import { isRateLimited } from "../github.js";
 import * as claude from "../claude.js";
@@ -37,12 +37,13 @@ async function processPR(repo: Repo, pr: gh.PR, reviewData: gh.PRReviewData): Pr
       imageContext,
     ].join("\n");
 
-    const claudeOutput = await claude.enqueue(() => claude.runClaude(prompt, wtPath!), gh.hasPriorityLabel(pr.labels));
+    const aiOptions = JOB_AI["review-addresser"];
+    const claudeOutput = await claude.resolveEnqueue(aiOptions)(() => claude.runAI(prompt, wtPath!, aiOptions), gh.hasPriorityLabel(pr.labels));
 
     if (await claude.hasNewCommits(wtPath, pr.headRefName) && await claude.hasTreeDiff(wtPath, pr.headRefName)) {
       await claude.pushBranch(wtPath, pr.headRefName);
       try {
-        const description = await claude.regeneratePRDescription(wtPath, pr.baseRefName, pr);
+        const description = await claude.regeneratePRDescription(wtPath, pr.baseRefName, pr, aiOptions);
         await gh.updatePRBody(fullName, pr.number, description);
       } catch (descErr) {
         log.warn(`[review-addresser] Failed to update PR description for ${fullName}#${pr.number}: ${descErr}`);

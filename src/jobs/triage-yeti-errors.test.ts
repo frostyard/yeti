@@ -3,6 +3,7 @@ import { mockRepo, mockIssue } from "../test-helpers.js";
 
 vi.mock("../config.js", () => ({
   SELF_REPO: "test-org/test-repo",
+  JOB_AI: {},
 }));
 
 vi.mock("../log.js", () => ({
@@ -31,7 +32,8 @@ const { mockGh, mockClaude, mockDb } = vi.hoisted(() => ({
     createWorktree: vi.fn(),
     removeWorktree: vi.fn(),
     enqueue: vi.fn(),
-    runClaude: vi.fn(),
+    runAI: vi.fn(),
+    resolveEnqueue: vi.fn(),
     randomSuffix: vi.fn().mockReturnValue("ab12"),
   },
   mockDb: {
@@ -77,7 +79,8 @@ describe("triage-yeti-errors", () => {
     vi.clearAllMocks();
     mockClaude.createWorktree.mockResolvedValue("/tmp/worktree");
     mockClaude.enqueue.mockImplementation((fn: () => Promise<string>) => fn());
-    mockClaude.runClaude.mockResolvedValue("Root cause: transient 502\n\nRELATED_ISSUES: none");
+    mockClaude.resolveEnqueue.mockReturnValue(mockClaude.enqueue);
+    mockClaude.runAI.mockResolvedValue("Root cause: transient 502\n\nRELATED_ISSUES: none");
     mockClaude.removeWorktree.mockResolvedValue(undefined);
     mockGh.listOpenIssues.mockResolvedValue([]);
     mockGh.populateQueueCache.mockReturnValue(undefined);
@@ -338,7 +341,7 @@ describe("triage-yeti-errors", () => {
 
       mockGh.getIssueComments.mockResolvedValue([]);
 
-      mockClaude.runClaude
+      mockClaude.runAI
         .mockResolvedValueOnce("Root cause found\n\nRELATED_ISSUES: 15")
         .mockResolvedValueOnce("Another report\n\nRELATED_ISSUES: none");
 
@@ -356,7 +359,7 @@ describe("triage-yeti-errors", () => {
       });
       mockGh.listOpenIssues.mockResolvedValue([issue]);
       mockGh.getIssueComments.mockResolvedValue([]);
-      mockClaude.runClaude.mockResolvedValue("");
+      mockClaude.runAI.mockResolvedValue("");
 
       await run([selfRepo]);
 
@@ -374,7 +377,7 @@ describe("triage-yeti-errors", () => {
       });
       mockGh.listOpenIssues.mockResolvedValue([issue]);
       mockGh.getIssueComments.mockResolvedValue([]);
-      mockClaude.runClaude.mockRejectedValue(new Error("claude error"));
+      mockClaude.runAI.mockRejectedValue(new Error("claude error"));
 
       await run([selfRepo]);
 
@@ -400,7 +403,7 @@ describe("triage-yeti-errors", () => {
       });
       mockGh.listOpenIssues.mockResolvedValue([issue]);
       mockGh.getIssueComments.mockResolvedValue([]);
-      mockClaude.runClaude.mockResolvedValue("Investigation findings here\n\nRELATED_ISSUES: none");
+      mockClaude.runAI.mockResolvedValue("Investigation findings here\n\nRELATED_ISSUES: none");
 
       await run([selfRepo]);
 

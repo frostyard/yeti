@@ -1,6 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
-import { type Repo } from "../config.js";
+import { JOB_AI, type Repo } from "../config.js";
 import * as gh from "../github.js";
 import * as claude from "../claude.js";
 import * as log from "../log.js";
@@ -125,7 +125,8 @@ async function processRepo(repo: Repo): Promise<void> {
     // Step 4: Generate/update documentation
     log.info(`[doc-maintainer] Generating docs for ${fullName}`);
     const prompt = buildDocPrompt(fullName, plans.length);
-    await claude.enqueue(() => claude.runClaude(prompt, wtPath!));
+    const aiOptions = JOB_AI["doc-maintainer"];
+    await claude.resolveEnqueue(aiOptions)(() => claude.runAI(prompt, wtPath!, aiOptions));
 
     // Clean up temporary plans directory (must not be committed)
     const plansDir = path.join(wtPath!, ".plans");
@@ -140,7 +141,7 @@ async function processRepo(repo: Repo): Promise<void> {
 
     // Step 5: Push and create PR
     if (await claude.hasNewCommits(wtPath, repo.defaultBranch) && await claude.hasTreeDiff(wtPath, repo.defaultBranch)) {
-      const description = await claude.generateDocsPRDescription(wtPath, repo.defaultBranch);
+      const description = await claude.generateDocsPRDescription(wtPath, repo.defaultBranch, aiOptions);
       await claude.pushBranch(wtPath, branchName);
       const prNumber = await gh.createPR(
         fullName,

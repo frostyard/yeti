@@ -53,11 +53,7 @@ async function processIssue(repo: Repo, issue: gh.Issue, planComment: gh.IssueCo
     const aiOptions = JOB_AI["plan-reviewer"];
     const prompt = buildReviewPrompt(fullName, issue, planComment.body);
 
-    const enqueueFn =
-      aiOptions?.backend === "codex" ? claude.enqueueCodex :
-      aiOptions?.backend === "copilot" ? claude.enqueueCopilot :
-      claude.enqueue;
-    const reviewOutput = await enqueueFn(
+    const reviewOutput = await claude.resolveEnqueue(aiOptions)(
       () => claude.runAI(prompt, wtPath!, aiOptions),
       gh.hasPriorityLabel(issue.labels),
     );

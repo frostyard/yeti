@@ -141,7 +141,7 @@ ${htmlOpenTag(theme)}
     <table class="config-table">
       <thead><tr><th>Job</th><th>Backend</th><th>Model</th></tr></thead>
       <tbody>
-        ${["issue-refiner", "issue-worker", "ci-fixer", "review-addresser", "doc-maintainer", "improvement-identifier", "plan-reviewer", "mkdocs-update"].map(job => {
+        ${["issue-refiner", "issue-worker", "ci-fixer", "review-addresser", "doc-maintainer", "improvement-identifier", "plan-reviewer", "mkdocs-update", "triage-yeti-errors", "discord"].map(job => {
           const jobCfg = (cfg.jobAi as Record<string, { backend?: string; model?: string }> | undefined)?.[job] ?? {};
           return `<tr>
             <td>${escapeHtml(job)}</td>

@@ -324,8 +324,8 @@ throughput with host resource usage. The concurrency limit is configurable via
 Each process has a configurable timeout (`claudeTimeoutMs`, default 20 min)
 with SIGTERM/SIGKILL escalation. A 5-minute heartbeat logs PID, elapsed time,
 and stdout byte count. Timed-out processes throw `ClaudeTimeoutError` with
-diagnostic fields, surfaced in error reports for debugging. Both `runAI()` and
-`runClaude()` reject their promises on non-zero exit codes (error includes exit
+diagnostic fields, surfaced in error reports for debugging. `runAI()` (used by
+all jobs) and the legacy `runClaude()` reject their promises on non-zero exit codes (error includes exit
 code and first 500 bytes of stderr), ensuring AI process failures propagate to
 job-level error handling and `reportError()` rather than being silently
 swallowed.

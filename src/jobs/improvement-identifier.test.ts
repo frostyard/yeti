@@ -3,6 +3,7 @@ import { mockRepo } from "../test-helpers.js";
 
 vi.mock("../config.js", () => ({
   WORK_DIR: "/home/testuser/.yeti",
+  JOB_AI: {},
 }));
 
 vi.mock("../log.js", () => ({
@@ -36,7 +37,8 @@ const { mockFs, mockGh, mockClaude, mockDb } = vi.hoisted(() => ({
     createWorktree: vi.fn(),
     removeWorktree: vi.fn(),
     enqueue: vi.fn(),
-    runClaude: vi.fn(),
+    runAI: vi.fn(),
+    resolveEnqueue: vi.fn(),
     hasNewCommits: vi.fn(),
     hasTreeDiff: vi.fn(),
     pushBranch: vi.fn(),
@@ -80,7 +82,8 @@ describe("improvement-identifier", () => {
     mockGh.createPR.mockResolvedValue(42);
     mockClaude.createWorktree.mockResolvedValue("/tmp/worktree");
     mockClaude.enqueue.mockImplementation((fn: () => Promise<string>) => fn());
-    mockClaude.runClaude.mockResolvedValue(`\`\`\`json\n${validResponse}\n\`\`\``);
+    mockClaude.resolveEnqueue.mockReturnValue(mockClaude.enqueue);
+    mockClaude.runAI.mockResolvedValue(`\`\`\`json\n${validResponse}\n\`\`\``);
     mockClaude.removeWorktree.mockResolvedValue(undefined);
     mockClaude.hasNewCommits.mockResolvedValue(true);
     mockClaude.hasTreeDiff.mockResolvedValue(true);
@@ -104,7 +107,7 @@ describe("improvement-identifier", () => {
     await run([repo]);
 
     expect(mockClaude.createWorktree).not.toHaveBeenCalled();
-    expect(mockClaude.runClaude).not.toHaveBeenCalled();
+    expect(mockClaude.runAI).not.toHaveBeenCalled();
     expect(mockGh.createPR).not.toHaveBeenCalled();
   });
 
@@ -130,7 +133,7 @@ describe("improvement-identifier", () => {
   });
 
   it("no PRs created when Claude finds nothing", async () => {
-    mockClaude.runClaude.mockResolvedValue(`\`\`\`json\n${emptyResponse}\n\`\`\``);
+    mockClaude.runAI.mockResolvedValue(`\`\`\`json\n${emptyResponse}\n\`\`\``);
 
     await run([repo]);
 
@@ -182,7 +185,7 @@ describe("improvement-identifier", () => {
   });
 
   it("PR title follows refactor: convention", async () => {
-    mockClaude.runClaude.mockResolvedValue(
+    mockClaude.runAI.mockResolvedValue(
       `\`\`\`json\n${JSON.stringify({ improvements: [{ title: "Test improvement", body: "Test body" }] })}\n\`\`\``,
     );
 
@@ -197,7 +200,7 @@ describe("improvement-identifier", () => {
   });
 
   it("PR body includes traceability footer", async () => {
-    mockClaude.runClaude.mockResolvedValue(
+    mockClaude.runAI.mockResolvedValue(
       `\`\`\`json\n${JSON.stringify({ improvements: [{ title: "Test", body: "Test body" }] })}\n\`\`\``,
     );
 
@@ -242,7 +245,7 @@ describe("improvement-identifier", () => {
 
   it("implementation worktree is cleaned up on error", async () => {
     // First runClaude call succeeds (analysis), second fails (implementation)
-    mockClaude.runClaude
+    mockClaude.runAI
       .mockResolvedValueOnce(`\`\`\`json\n${JSON.stringify({ improvements: [{ title: "Test", body: "Body" }] })}\n\`\`\``)
       .mockRejectedValueOnce(new Error("claude crashed"));
 
@@ -254,7 +257,7 @@ describe("improvement-identifier", () => {
 
   it("error in one improvement does not block others", async () => {
     // Analysis returns 2 improvements; first implementation fails, second succeeds
-    mockClaude.runClaude
+    mockClaude.runAI
       .mockResolvedValueOnce(`\`\`\`json\n${validResponse}\n\`\`\``)
       .mockRejectedValueOnce(new Error("first impl failed"))
       .mockResolvedValueOnce("done");
@@ -277,13 +280,13 @@ describe("improvement-identifier", () => {
     await run([repo]);
 
     // The analysis runClaude call should include both issue and PR titles
-    const analysisPrompt = mockClaude.runClaude.mock.calls[0][0] as string;
+    const analysisPrompt = mockClaude.runAI.mock.calls[0][0] as string;
     expect(analysisPrompt).toContain("Fix bug");
     expect(analysisPrompt).toContain("refactor: Improve X");
   });
 
   it("handles Claude output parse failure gracefully", async () => {
-    mockClaude.runClaude.mockResolvedValue("I couldn't analyze the repo, sorry!");
+    mockClaude.runAI.mockResolvedValue("I couldn't analyze the repo, sorry!");
 
     await run([repo]);
 
@@ -292,7 +295,7 @@ describe("improvement-identifier", () => {
   });
 
   it("cleans up analysis worktree on error", async () => {
-    mockClaude.runClaude.mockRejectedValue(new Error("claude crashed"));
+    mockClaude.runAI.mockRejectedValue(new Error("claude crashed"));
 
     await run([repo]);
 
@@ -303,7 +306,7 @@ describe("improvement-identifier", () => {
   it("reports errors without crashing the loop", async () => {
     const repo2 = mockRepo({ name: "test-repo-2", fullName: "test-org/test-repo-2" });
 
-    mockClaude.runClaude
+    mockClaude.runAI
       .mockRejectedValueOnce(new Error("first repo error"))
       .mockResolvedValueOnce(`\`\`\`json\n${validResponse}\n\`\`\``);
 
@@ -340,7 +343,7 @@ describe("improvement-identifier", () => {
         { title: "Improvement 12", body: "Body 12" },
       ],
     });
-    mockClaude.runClaude.mockResolvedValue(`\`\`\`json\n${manyImprovements}\n\`\`\``);
+    mockClaude.runAI.mockResolvedValue(`\`\`\`json\n${manyImprovements}\n\`\`\``);
 
     await run([repo]);
 
