@@ -100,6 +100,33 @@ Click into any entry to see the full log output --- every line the job produced 
 
 You can also view all log entries related to a specific issue. This is useful when you want to trace the full history of how Yeti processed a particular item: the refinement run, the implementation run, any CI fix attempts, and review addressing.
 
+## Jobs page
+
+The jobs page (`/jobs`) gives you a comprehensive view of every registered job --- both enabled and disabled. It is the go-to place for understanding what Yeti is configured to do and how each job is running.
+
+Each job row shows:
+
+| Column | Description |
+|---|---|
+| **Job** | Name and a short description of what the job does |
+| **Enabled** | Whether the job is in the `enabledJobs` config list |
+| **Backend** | Which AI backend the job uses (Claude or Copilot) |
+| **Model** | The AI model override, or "default" |
+| **Schedule** | Interval (e.g., "Every 5 min") or daily hour (e.g., "Daily at 1:00") |
+| **Status** | Running, Paused, Idle, or Disabled |
+| **Last Run** | Relative time since the last execution |
+| **Next Run** | Countdown to the next scheduled run |
+| **Logs** | Link to the latest run's log (or "Live" if currently running) |
+
+### Controls
+
+Enabled jobs have action buttons:
+
+- **Run** --- Trigger the job immediately
+- **Pause / Resume** --- Toggle whether the job runs on its schedule
+
+The page live-updates every 10 seconds, so you can leave it open to monitor job activity.
+
 ## Config page
 
 The config page (`/config`) lets you view and edit Yeti's configuration directly from the browser.

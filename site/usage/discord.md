@@ -43,7 +43,7 @@ Yeti posts to your configured channel automatically. You do not need to set anyt
 
 - **Issue audit summaries** --- The `issue-auditor` job posts its nightly findings: mislabeled issues, stale items, anomalies across your repos
 - **Error reports** --- When something goes wrong, the error reporter sends a summary with deduplication (the same error will not flood your channel)
-- **Job activity** --- Completion notifications for significant work
+- **Job activity** --- Notifications for significant work: PRs created, plans produced, CI fixes pushed, reviews addressed, merges completed, and more. Each notification includes a direct GitHub link to the relevant issue or PR.
 
 Notifications are informational. They do not require a response --- just a glance to confirm things are running smoothly, like checking the weather before heading out.
 
