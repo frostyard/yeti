@@ -436,7 +436,7 @@ async function fetchRepos(): Promise<Repo[]> {
 
 /** Returns all org repos without the allowedRepos filter. Used by the Repos page to show available repos for onboarding. */
 export async function listAllOrgRepos(): Promise<Repo[]> {
-  return apiCache.dedupedFetch("all-org-repos", REPO_CACHE_TTL, fetchRepos);
+  return apiCache.dedupedFetch("all-org-repos", REPO_CACHE_TTL, fetchRepos) as Promise<Repo[]>;
 }
 
 // ── Issue search & creation ──
