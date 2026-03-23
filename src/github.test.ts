@@ -25,6 +25,7 @@ vi.mock("./config.js", () => ({
   },
   SELF_REPO: "test-org/test-repo",
   ALLOWED_REPOS: null as readonly string[] | null,
+  INCLUDE_FORKS: false,
   SKIPPED_ITEMS: [],
   PRIORITIZED_ITEMS: [],
 }));
@@ -93,6 +94,7 @@ import {
   clearQueueCacheByCategories,
   issueUrl,
   pullUrl,
+  listAllOrgRepos,
 } from "./github.js";
 
 describe("gh retry logic", () => {
@@ -435,6 +437,74 @@ describe("listRepos", () => {
 
     const repos = await listRepos();
     expect(repos).toEqual([]); // error caught, returns empty
+  });
+
+  it("includes --source flag by default (INCLUDE_FORKS = false)", async () => {
+    const repoData = [
+      { nameWithOwner: "test-owner/repo1", name: "repo1", owner: { login: "test-owner" }, defaultBranchRef: { name: "main" }, isArchived: false },
+    ];
+    mockExecFile.mockImplementation((_cmd: string, _args: string[], _opts: any, cb: any) => {
+      cb(null, JSON.stringify(repoData), "");
+    });
+
+    await listRepos();
+    const args = mockExecFile.mock.calls[0][1] as string[];
+    expect(args).toContain("--source");
+  });
+
+  it("omits --source flag when INCLUDE_FORKS is true", async () => {
+    (config as any).INCLUDE_FORKS = true;
+    const repoData = [
+      { nameWithOwner: "test-owner/repo1", name: "repo1", owner: { login: "test-owner" }, defaultBranchRef: { name: "main" }, isArchived: false },
+    ];
+    mockExecFile.mockImplementation((_cmd: string, _args: string[], _opts: any, cb: any) => {
+      cb(null, JSON.stringify(repoData), "");
+    });
+
+    await listRepos();
+    const args = mockExecFile.mock.calls[0][1] as string[];
+    expect(args).not.toContain("--source");
+    (config as any).INCLUDE_FORKS = false;
+  });
+
+  it("clearRepoCache also invalidates listAllOrgRepos cache", async () => {
+    const repoData = [
+      { nameWithOwner: "test-owner/repo1", name: "repo1", owner: { login: "test-owner" }, defaultBranchRef: { name: "main" }, isArchived: false },
+    ];
+    mockExecFile.mockImplementation((_cmd: string, _args: string[], _opts: any, cb: any) => {
+      cb(null, JSON.stringify(repoData), "");
+    });
+
+    await listAllOrgRepos();
+    expect(mockExecFile).toHaveBeenCalledTimes(1);
+
+    // Without clearing, second call should use cache
+    await listAllOrgRepos();
+    expect(mockExecFile).toHaveBeenCalledTimes(1);
+
+    // After clearing, should re-fetch
+    clearRepoCache();
+    await listAllOrgRepos();
+    expect(mockExecFile).toHaveBeenCalledTimes(2);
+  });
+
+  it("warns about forks hint when INCLUDE_FORKS is false and allowedRepo not found", async () => {
+    (config as any).ALLOWED_REPOS = ["repo1", "missing-fork"];
+    const repoData = [
+      { nameWithOwner: "test-owner/repo1", name: "repo1", owner: { login: "test-owner" }, defaultBranchRef: { name: "main" }, isArchived: false },
+    ];
+    mockExecFile.mockImplementation((_cmd: string, _args: string[], _opts: any, cb: any) => {
+      cb(null, JSON.stringify(repoData), "");
+    });
+
+    await listRepos();
+    expect(log.warn).toHaveBeenCalledWith(
+      expect.stringContaining("missing-fork"),
+    );
+    expect(log.warn).toHaveBeenCalledWith(
+      expect.stringContaining("includeForks"),
+    );
+    (config as any).ALLOWED_REPOS = null;
   });
 });
 

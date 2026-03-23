@@ -12,6 +12,7 @@ export function buildConfigPage(saved: boolean, theme: Theme): string {
 
   const envMap: Record<string, string> = {
     allowedRepos: "YETI_ALLOWED_REPOS",
+    includeForks: "YETI_INCLUDE_FORKS",
     githubOwners: "YETI_GITHUB_OWNERS",
     selfRepo: "YETI_SELF_REPO",
     port: "PORT",
@@ -83,6 +84,10 @@ ${htmlOpenTag(theme)}
     <input type="text" name="allowedRepos" id="allowedRepos" value="${escapeHtml(Array.isArray(cfg.allowedRepos) ? (cfg.allowedRepos as string[]).join(", ") : "")}"${isDisabled("allowedRepos") ? " disabled" : ""}>
     ${envNote("allowedRepos")}
     <div class="field-note">Restricts which repos Yeti processes. Empty means no repos (use with caution). To allow all repos, remove the allowedRepos key from config.json.</div>
+
+    <label><input type="checkbox" name="includeForks" value="true" ${cfg.includeForks ? "checked" : ""}${isDisabled("includeForks") ? " disabled" : ""}> Include forked repositories in discovery</label>
+    ${envNote("includeForks")}
+    <div class="field-note">When enabled, forked repos in the org are discovered alongside source repos. Default: off.</div>
 
     <h2>Server</h2>
     <label for="port">Port</label>

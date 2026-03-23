@@ -80,6 +80,7 @@ export interface ConfigFile {
   skippedItems?: Array<{ repo: string; number: number }>;
   prioritizedItems?: Array<{ repo: string; number: number }>;
   allowedRepos?: string[];
+  includeForks?: boolean;
   enabledJobs?: string[];
   queueScanIntervalMs?: number;
 }
@@ -187,11 +188,13 @@ function loadConfig() {
   const allowedRepos = process.env["YETI_ALLOWED_REPOS"] !== undefined
     ? process.env["YETI_ALLOWED_REPOS"].split(",").map((s) => s.trim()).filter(Boolean)
     : file.allowedRepos ?? null;
+  const includeForks = process.env["YETI_INCLUDE_FORKS"] === "true"
+    || (process.env["YETI_INCLUDE_FORKS"] === undefined && (file.includeForks ?? false));
   const enabledJobs = file.enabledJobs ?? [];
   const jobAi = file.jobAi ?? {};
   const queueScanIntervalMs = file.queueScanIntervalMs ?? 5 * 60 * 1000;
 
-  return { githubOwners, selfRepo, port, intervals, schedules, logRetentionDays, logRetentionPerJob, discordBotToken, discordChannelId, discordAllowedUsers, authToken, maxClaudeWorkers, claudeTimeoutMs, maxCopilotWorkers, copilotTimeoutMs, maxCodexWorkers, codexTimeoutMs, pausedJobs, skippedItems, prioritizedItems, allowedRepos, enabledJobs, jobAi, queueScanIntervalMs };
+  return { githubOwners, selfRepo, port, intervals, schedules, logRetentionDays, logRetentionPerJob, discordBotToken, discordChannelId, discordAllowedUsers, authToken, maxClaudeWorkers, claudeTimeoutMs, maxCopilotWorkers, copilotTimeoutMs, maxCodexWorkers, codexTimeoutMs, pausedJobs, skippedItems, prioritizedItems, allowedRepos, includeForks, enabledJobs, jobAi, queueScanIntervalMs };
 }
 
 const config = loadConfig();
@@ -210,6 +213,7 @@ export let PAUSED_JOBS: readonly string[] = config.pausedJobs;
 export let SKIPPED_ITEMS: ReadonlyArray<{ repo: string; number: number }> = config.skippedItems;
 export let PRIORITIZED_ITEMS: ReadonlyArray<{ repo: string; number: number }> = config.prioritizedItems;
 export let ALLOWED_REPOS: readonly string[] | null = config.allowedRepos;
+export let INCLUDE_FORKS = config.includeForks;
 export let ENABLED_JOBS: readonly string[] = config.enabledJobs;
 export let MAX_COPILOT_WORKERS = config.maxCopilotWorkers;
 export let COPILOT_TIMEOUT_MS = config.copilotTimeoutMs;
@@ -263,6 +267,7 @@ export function reloadConfig(): void {
   SKIPPED_ITEMS = fresh.skippedItems;
   PRIORITIZED_ITEMS = fresh.prioritizedItems;
   ALLOWED_REPOS = fresh.allowedRepos;
+  INCLUDE_FORKS = fresh.includeForks;
   ENABLED_JOBS = fresh.enabledJobs;
   MAX_COPILOT_WORKERS = fresh.maxCopilotWorkers;
   COPILOT_TIMEOUT_MS = fresh.copilotTimeoutMs;

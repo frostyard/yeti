@@ -412,6 +412,33 @@ describe("HTTP server", () => {
     expect(res.body).toMatch(/name="allowedRepos"[^>]*value=""/);
   });
 
+  it("POST /config sets includeForks to true when checkbox checked", async () => {
+    const { writeConfig: wc } = await import("./config.js");
+    await request(server, "POST", "/config", {
+      body: "includeForks=true",
+    });
+    expect(wc).toHaveBeenCalledWith(
+      expect.objectContaining({ includeForks: true }),
+    );
+  });
+
+  it("POST /config sets includeForks to false when checkbox absent", async () => {
+    const { writeConfig: wc } = await import("./config.js");
+    await request(server, "POST", "/config", {
+      body: "selfRepo=org%2Frepo",
+    });
+    expect(wc).toHaveBeenCalledWith(
+      expect.objectContaining({ includeForks: false }),
+    );
+  });
+
+  it("GET /config renders includeForks checkbox", async () => {
+    const res = await request(server, "GET", "/config");
+    expect(res.status).toBe(200);
+    expect(res.body).toContain('name="includeForks"');
+    expect(res.body).toContain("Include forked repositories");
+  });
+
   it("GET /login redirects to / when auth disabled", async () => {
     const res = await request(server, "GET", "/login");
     expect(res.status).toBe(303);
