@@ -14,11 +14,11 @@ Changes to live-reloadable fields take effect without restarting the service. Ot
 
 | Field | Type | Default | Env Var | Live Reload | Description |
 |-------|------|---------|---------|:-----------:|-------------|
-| `githubOwners` | `string[]` | `["frostyard"]` | `YETI_GITHUB_OWNERS` (comma-sep) | No | GitHub orgs/users to scan for repositories |
-| `selfRepo` | `string` | `frostyard/yeti` | `YETI_SELF_REPO` | No | Repository where Yeti files error issues about itself |
+| `githubOwners` | `string[]` | `["frostyard"]` | `YETI_GITHUB_OWNERS` (comma-sep) | Yes | GitHub orgs/users to scan for repositories |
+| `selfRepo` | `string` | `frostyard/yeti` | `YETI_SELF_REPO` | Yes | Repository where Yeti files error issues about itself |
 | `port` | `number` | `9384` | `PORT` | No | HTTP dashboard port |
-| `authToken` | `string` | `""` | `YETI_AUTH_TOKEN` | No | Dashboard auth token (empty = no auth) |
-| `allowedRepos` | `string[] \| null` | `null` | `YETI_ALLOWED_REPOS` (comma-sep) | No | Repo allow-list. `null` means all repos under `githubOwners` are scanned |
+| `authToken` | `string` | `""` | `YETI_AUTH_TOKEN` | Yes | Dashboard auth token (empty = no auth) |
+| `allowedRepos` | `string[] \| null` | `null` | `YETI_ALLOWED_REPOS` (comma-sep) | Yes | Repo allow-list. `null` means all repos under `githubOwners` are scanned |
 | `logRetentionDays` | `number` | `14` | -- | Yes | Delete logs older than N days |
 | `logRetentionPerJob` | `number` | `20` | -- | Yes | Max log runs to keep per job |
 | `includeForks` | `boolean` | `false` | `YETI_INCLUDE_FORKS` | Yes | Include forked repositories when scanning for work |
@@ -28,10 +28,10 @@ Changes to live-reloadable fields take effect without restarting the service. Ot
 
 | Field | Type | Default | Env Var | Live Reload | Description |
 |-------|------|---------|---------|:-----------:|-------------|
-| `maxClaudeWorkers` | `number` | `2` | `YETI_MAX_CLAUDE_WORKERS` | No | Max concurrent Claude CLI processes |
-| `claudeTimeoutMs` | `number` | `1200000` (20 min) | `YETI_CLAUDE_TIMEOUT_MS` | No | Timeout per Claude call (minimum 60s) |
-| `maxCopilotWorkers` | `number` | `1` | `YETI_MAX_COPILOT_WORKERS` | No | Max concurrent Copilot CLI processes |
-| `copilotTimeoutMs` | `number` | `1200000` (20 min) | `YETI_COPILOT_TIMEOUT_MS` | No | Timeout per Copilot call (minimum 60s) |
+| `maxClaudeWorkers` | `number` | `2` | `YETI_MAX_CLAUDE_WORKERS` | Yes | Max concurrent Claude CLI processes |
+| `claudeTimeoutMs` | `number` | `1200000` (20 min) | `YETI_CLAUDE_TIMEOUT_MS` | Yes | Timeout per Claude call (minimum 60s) |
+| `maxCopilotWorkers` | `number` | `1` | `YETI_MAX_COPILOT_WORKERS` | Yes | Max concurrent Copilot CLI processes |
+| `copilotTimeoutMs` | `number` | `1200000` (20 min) | `YETI_COPILOT_TIMEOUT_MS` | Yes | Timeout per Copilot call (minimum 60s) |
 | `maxCodexWorkers` | `number` | `1` | `YETI_MAX_CODEX_WORKERS` | Yes | Max concurrent Codex CLI processes (0 to disable) |
 | `codexTimeoutMs` | `number` | `1200000` (20 min) | `YETI_CODEX_TIMEOUT_MS` | Yes | Timeout per Codex call (minimum 60s) |
 | `jobAi` | `Record<string, {backend?, model?}>` | `{}` | -- | Yes | Per-job AI backend and model overrides |
@@ -89,12 +89,13 @@ The `jobAi` field lets you route specific jobs to different AI backends or model
 {
   "jobAi": {
     "plan-reviewer": { "backend": "copilot" },
+    "doc-maintainer": { "backend": "codex" },
     "issue-refiner": { "model": "opus" }
   }
 }
 ```
 
-When a `backend` is specified, the job's work is queued through that backend's worker pool (respecting its own concurrency limits and timeouts). When only a `model` is specified, the job still uses the default Claude backend but passes the model name through.
+Supported backends: `claude` (default), `copilot`, and `codex`. When a `backend` is specified, the job's work is queued through that backend's worker pool (respecting its own concurrency limits and timeouts). When only a `model` is specified, the job still uses the default Claude backend but passes the model name through.
 
 ---
 
@@ -132,6 +133,8 @@ A more complete configuration with intervals, schedules, and integrations:
   "maxClaudeWorkers": 2,
   "claudeTimeoutMs": 1200000,
   "maxCopilotWorkers": 1,
+  "maxCodexWorkers": 1,
+  "includeForks": false,
   "enabledJobs": [
     "issue-refiner",
     "plan-reviewer",
