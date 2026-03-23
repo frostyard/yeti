@@ -33,7 +33,7 @@ src/
 │   ├── logs.ts          Log list, detail, and issue logs page HTML builders
 │   ├── config.ts        Config editor page HTML builder
 │   ├── login.ts         Login page HTML builder
-│   └── layout.ts        Shared layout (header, theme support, formatters)
+│   └── layout.ts        Shared layout (header, theme, siteTitle, formatters)
 └── jobs/
     ├── issue-refiner.ts        Discovers issues needing plans via comment analysis
     ├── plan-reviewer.ts        Adversarial plan review using configurable AI backend
@@ -121,6 +121,8 @@ are enabled. `clearQueueCacheByCategories()` selectively clears scanner
 categories before each scan to prevent stale entries. The `listRepos()` function
 falls back to a stale cache when the fresh fetch returns empty (transient
 failure protection).
+Provides `issueUrl()` and `pullUrl()` URL builder helpers used by job
+notifications to include clickable GitHub links in Discord messages.
 Provides `isItemSkipped()` and `isItemPrioritized()` helpers that check
 items against the `skippedItems` and `prioritizedItems` config lists,
 used by jobs to exclude or fast-track specific issues/PRs. Provides
@@ -242,13 +244,13 @@ stored version (same-version restart / crash recovery). Checks
 `discordStatus().connected` and logs a warning (rather than a success message)
 when Discord is not connected at announcement time.
 
-**`notify.ts`** — Notification dispatcher. Forwards to `discord.ts` so callers only need one import. All internal modules that send notifications import from `notify.ts`. Jobs announce key outcomes via `notify()`: PR creation (issue-worker, improvement-identifier, doc-maintainer, mkdocs-update), PR merge (auto-merger), plan production/update (issue-refiner), plan review (plan-reviewer), CI fix push and merge conflict resolution (ci-fixer), and review addressing (review-addresser). Messages use a `[job-name]` prefix for scannability.
+**`notify.ts`** — Notification dispatcher. Forwards to `discord.ts` so callers only need one import. All internal modules that send notifications import from `notify.ts`. Jobs announce key outcomes via `notify()`: PR creation (issue-worker, improvement-identifier, doc-maintainer, mkdocs-update), PR merge (auto-merger), plan production/update (issue-refiner), plan review (plan-reviewer), CI fix push and merge conflict resolution (ci-fixer), and review addressing (review-addresser). Messages use a `[job-name]` prefix for scannability and include GitHub links (via `issueUrl`/`pullUrl` from `github.ts`) that Discord auto-embeds.
 
 **`discord.ts`** — Discord bot integration using discord.js. Connects as a bot user, sends notifications to a configured channel, and handles `!yeti` commands from authorised users. Commands: `status`, `jobs`, `trigger <job>`, `pause <job>`, `resume <job>`, `issue <repo> <title>`, `look <repo>#<number>`, `assign <repo>#<number>`, `recent [job]`, `help`. Requires `discordBotToken`, `discordChannelId`, and `discordAllowedUsers` in config. Only processes messages from the configured channel and from users in the allow-list. Uses `console.log` for its own error output to avoid recursive notify loops. The scheduler reference is injected at startup to enable job control commands. Exports a `ready()` function that returns a `Promise<void>` resolving when the bot's WebSocket handshake completes and the channel is available (10-second timeout; resolves immediately if Discord is not configured). Used by `main.ts` to ensure notifications can be delivered before the deployment announcement. See [Discord Setup](discord-setup.md).
 
 ### Dashboard (`src/pages/`)
 
-The web dashboard is a first-class consumer of job, config, and queue data. Page builders in `src/pages/` render HTML for the dashboard routes in `server.ts`. Any changes to config fields, job states, queue categories, or log/task schemas must be reflected in the corresponding page builders — the dashboard is not optional.
+The web dashboard is a first-class consumer of job, config, and queue data. Page builders in `src/pages/` render HTML for the dashboard routes in `server.ts`. `layout.ts` exports a `siteTitle()` helper that builds page titles from `GITHUB_OWNERS` (e.g. "yeti — frostyard — Queue"), reading the config at call time for live-reload compatibility. Any changes to config fields, job states, queue categories, or log/task schemas must be reflected in the corresponding page builders — the dashboard is not optional.
 
 ## Jobs
 
@@ -593,6 +595,12 @@ release their own tarball, and multiple instances can coexist on the same host
 (using different `INSTALL_DIR` or systemd units), each self-updating from its
 own fork's releases. The `install.sh` bootstrap script pre-populates
 `selfRepo` and `githubOwners` in the initial config from the detected repo.
+
+**Dynamic user detection**: `deploy.sh` resolves the service user dynamically
+by reading the `User=` directive from the installed systemd unit file
+(`/etc/systemd/system/yeti.service`), then derives the home directory via
+`getent passwd`. This avoids hardcoding a username, allowing the service to
+run as any user without modifying deploy scripts.
 
 ## Filesystem Layout (Runtime)
 
