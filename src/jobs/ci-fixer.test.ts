@@ -53,6 +53,8 @@ const { mockGh, mockClaude, mockDb, MockRateLimitError } = vi.hoisted(() => {
     editIssueComment: vi.fn(),
     isYetiComment: vi.fn(),
     RateLimitError: MockRateLimitError,
+    issueUrl: (fullName: string, number: number) => `https://github.com/${fullName}/issues/${number}`,
+    pullUrl: (fullName: string, number: number) => `https://github.com/${fullName}/pull/${number}`,
   },
   mockClaude: {
     createWorktreeFromBranch: vi.fn(),

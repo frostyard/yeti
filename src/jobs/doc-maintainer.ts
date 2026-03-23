@@ -149,7 +149,7 @@ async function processRepo(repo: Repo): Promise<void> {
         description,
       );
       log.info(`[doc-maintainer] Created docs PR #${prNumber} for ${fullName}`);
-      notify(`[doc-maintainer] Created PR #${prNumber} for ${fullName}`);
+      notify(`[doc-maintainer] Created PR #${prNumber} for ${fullName}\n${gh.pullUrl(fullName, prNumber)}`);
     } else {
       log.warn(`[doc-maintainer] No commits produced for ${fullName}`);
     }

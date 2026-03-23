@@ -44,6 +44,7 @@ const { mockGh, mockClaude, mockDb } = vi.hoisted(() => ({
     isItemPrioritized: vi.fn().mockReturnValue(false),
     hasPriorityLabel: vi.fn().mockReturnValue(false),
     populateQueueCache: vi.fn(),
+    pullUrl: (fullName: string, number: number) => `https://github.com/${fullName}/pull/${number}`,
   },
   mockClaude: {
     createWorktree: vi.fn(),

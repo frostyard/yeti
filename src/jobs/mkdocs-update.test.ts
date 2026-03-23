@@ -28,6 +28,7 @@ const { mockFs, mockGh, mockClaude, mockDb } = vi.hoisted(() => ({
   mockGh: {
     listPRs: vi.fn(),
     createPR: vi.fn(),
+    pullUrl: (fullName: string, number: number) => `https://github.com/${fullName}/pull/${number}`,
   },
   mockClaude: {
     createWorktree: vi.fn(),

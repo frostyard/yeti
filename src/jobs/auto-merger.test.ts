@@ -37,6 +37,8 @@ const { mockGh } = vi.hoisted(() => ({
     isItemSkipped: vi.fn().mockReturnValue(false),
     hasPriorityLabel: vi.fn().mockReturnValue(false),
     populateQueueCache: vi.fn(),
+    issueUrl: (fullName: string, number: number) => `https://github.com/${fullName}/issues/${number}`,
+    pullUrl: (fullName: string, number: number) => `https://github.com/${fullName}/pull/${number}`,
   },
 }));
 

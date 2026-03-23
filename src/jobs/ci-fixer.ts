@@ -35,7 +35,7 @@ async function resolveConflicts(repo: Repo, pr: gh.PR): Promise<boolean> {
       // Merge was auto-resolved by git — just push
       await claude.pushBranch(wtPath, pr.headRefName);
       log.info(`[ci-fixer] Clean merge pushed for ${fullName}#${pr.number}`);
-      notify(`[ci-fixer] Resolved merge conflict for ${fullName}#${pr.number}`);
+      notify(`[ci-fixer] Resolved merge conflict for ${fullName}#${pr.number}\n${gh.pullUrl(fullName, pr.number)}`);
       db.recordTaskComplete(taskId);
       return true;
     }
@@ -72,7 +72,7 @@ async function resolveConflicts(repo: Repo, pr: gh.PR): Promise<boolean> {
         log.warn(`[ci-fixer] Failed to update PR description for ${fullName}#${pr.number}: ${descErr}`);
       }
       log.info(`[ci-fixer] Conflict resolution pushed for ${fullName}#${pr.number}`);
-      notify(`[ci-fixer] Resolved merge conflict for ${fullName}#${pr.number}`);
+      notify(`[ci-fixer] Resolved merge conflict for ${fullName}#${pr.number}\n${gh.pullUrl(fullName, pr.number)}`);
     } else {
       log.warn(`[ci-fixer] No commits from conflict resolution for ${fullName}#${pr.number}`);
       await claude.abortMerge(wtPath);
@@ -267,7 +267,7 @@ async function fixCI(repo: Repo, pr: gh.PR, failLog: string): Promise<void> {
         log.warn(`[ci-fixer] Failed to update PR description for ${fullName}#${pr.number}: ${descErr}`);
       }
       log.info(`[ci-fixer] Pushed fix for ${fullName}#${pr.number}`);
-      notify(`[ci-fixer] Pushed fix for ${fullName}#${pr.number}`);
+      notify(`[ci-fixer] Pushed fix for ${fullName}#${pr.number}\n${gh.pullUrl(fullName, pr.number)}`);
     } else {
       log.warn(`[ci-fixer] No commits produced for ${fullName}#${pr.number}`);
     }
@@ -303,7 +303,7 @@ async function fileUnrelatedIssue(
       ].join("\n");
       issueNumber = await gh.createIssue(repoName, title, body, []);
       log.info(`[ci-fixer] Created issue #${issueNumber} for unrelated CI failures`);
-      notify(`[ci-fixer] Created ci-unrelated issue ${repoName}#${issueNumber}`);
+      notify(`[ci-fixer] Created ci-unrelated issue ${repoName}#${issueNumber}\n${gh.issueUrl(repoName, issueNumber)}`);
     }
 
     for (const occ of occurrences) {

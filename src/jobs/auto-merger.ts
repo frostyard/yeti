@@ -60,7 +60,7 @@ export async function run(repos: Repo[]): Promise<void> {
           gh.populateQueueCache("auto-mergeable", repo.fullName, { number: pr.number, title: pr.title, type: "pr", updatedAt: pr.updatedAt, priority: gh.hasPriorityLabel(pr.labels) });
           log.info(`[auto-merger] Merging ${repo.fullName}#${pr.number}: ${pr.title}`);
           await gh.mergePR(repo.fullName, pr.number);
-          notify(`[auto-merger] Merged ${repo.fullName}#${pr.number}`);
+          notify(`[auto-merger] Merged ${repo.fullName}#${pr.number}\n${gh.pullUrl(repo.fullName, pr.number)}`);
 
           if (isYetiPR) {
             const match = pr.headRefName.match(/^yeti\/issue-(\d+)-/);

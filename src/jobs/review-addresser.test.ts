@@ -38,6 +38,7 @@ const { mockGh, mockClaude, mockDb } = vi.hoisted(() => ({
     isItemSkipped: vi.fn().mockReturnValue(false),
     hasPriorityLabel: vi.fn().mockReturnValue(false),
     populateQueueCache: vi.fn(),
+    pullUrl: (fullName: string, number: number) => `https://github.com/${fullName}/pull/${number}`,
   },
   mockClaude: {
     createWorktreeFromBranch: vi.fn(),

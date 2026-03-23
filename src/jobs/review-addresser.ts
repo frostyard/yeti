@@ -48,7 +48,7 @@ async function processPR(repo: Repo, pr: gh.PR, reviewData: gh.PRReviewData): Pr
         log.warn(`[review-addresser] Failed to update PR description for ${fullName}#${pr.number}: ${descErr}`);
       }
       log.info(`[review-addresser] Pushed changes for ${fullName}#${pr.number}`);
-      notify(`[review-addresser] Addressed review on ${fullName}#${pr.number}`);
+      notify(`[review-addresser] Addressed review on ${fullName}#${pr.number}\n${gh.pullUrl(fullName, pr.number)}`);
     }
 
     if (claudeOutput.trim()) {
