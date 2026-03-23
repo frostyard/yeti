@@ -100,6 +100,29 @@ Click into any entry to see the full log output --- every line the job produced 
 
 You can also view all log entries related to a specific issue. This is useful when you want to trace the full history of how Yeti processed a particular item: the refinement run, the implementation run, any CI fix attempts, and review addressing.
 
+## Repos page
+
+The repos page (`/repos`) shows all configured repositories with their current activity and recent history. It is the central place for understanding which repos Yeti is watching and what work is happening in each one.
+
+### Summary
+
+At the top, a summary shows:
+
+- **Configured Repos** --- How many repositories are in the `allowedRepos` config
+- **Active Repos** --- How many repos currently have items in the work queue
+
+### Per-repo detail
+
+Each configured repository gets its own section showing:
+
+- **GitHub links** --- Direct links to the repo's Issues and Pull Requests pages
+- **Active items** --- Issues and PRs currently in the work queue, with labels, check status, and links to both Yeti logs and GitHub
+- **Recently Completed** --- A collapsible list of tasks Yeti finished in the last 7 days, showing the job name, item number, and completion time
+
+### Adding repos
+
+If `allowedRepos` is set in your config, the page shows an **Add Repo** button that lists other repositories in your GitHub org that are not yet configured. Selecting one adds it to `allowedRepos` via the config file. If no `allowedRepos` filter is set (all org repos are included), the page notes this instead.
+
 ## Jobs page
 
 The jobs page (`/jobs`) gives you a comprehensive view of every registered job --- both enabled and disabled. It is the go-to place for understanding what Yeti is configured to do and how each job is running.
