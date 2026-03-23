@@ -145,9 +145,14 @@ four states: `"passing"`, `"failing"`, `"pending"`, or `"none"` (no checks
 exist at all — used by auto-merger to distinguish doc-only PRs that skip CI
 from PRs with in-progress checks).
 
-**`claude.ts`** — Two concerns: (1) a module-level **bounded concurrent queue**
-(`enqueue`) that runs up to `MAX_CLAUDE_WORKERS` (default 2) Claude processes in
-parallel; (2) git worktree helpers — `ensureClone`, `createWorktree`,
+**`claude.ts`** — Two concerns: (1) **multi-backend AI dispatch** with three
+bounded concurrent queues — `enqueue` (Claude, `MAX_CLAUDE_WORKERS` default 2),
+`enqueueCopilot` (Copilot, `MAX_COPILOT_WORKERS` default 1), and `enqueueCodex`
+(Codex, `MAX_CODEX_WORKERS` default 1). `resolveEnqueue(aiOptions)` selects the
+correct queue based on the backend in `AiOptions` (codex → `enqueueCodex`,
+copilot → `enqueueCopilot`, default → `enqueue`). All jobs call `runAI()` through
+`resolveEnqueue()` for backend-agnostic dispatch; `runClaude()` is retained as a
+legacy wrapper. (2) Git worktree helpers — `ensureClone`, `createWorktree`,
 `createWorktreeFromBranch`, `removeWorktree`, `attemptMerge`, `pushBranch`,
 `generatePRDescription`, etc. `ensureClone` (exported) clones a repo on first
 use and on subsequent calls runs `git fetch --all --prune` followed by
@@ -315,20 +320,30 @@ review-addresser) and by checking for existing report comments (triage jobs).
 The issue-auditor reconciles label state daily, adding missing `In Review`
 labels to issues with open PRs and removing stale ones.
 
-### Bounded Claude Queue
+### Multi-Backend AI Dispatch
 
-All Claude invocations go through a module-level queue in `claude.ts`. Up to
-`MAX_CLAUDE_WORKERS` (default 2) `claude` processes run concurrently, balancing
-throughput with host resource usage. The concurrency limit is configurable via
-`maxClaudeWorkers` in `config.json` or the `YETI_MAX_CLAUDE_WORKERS` env var.
-Each process has a configurable timeout (`claudeTimeoutMs`, default 20 min)
-with SIGTERM/SIGKILL escalation. A 5-minute heartbeat logs PID, elapsed time,
-and stdout byte count. Timed-out processes throw `ClaudeTimeoutError` with
-diagnostic fields, surfaced in error reports for debugging. `runAI()` (used by
-all jobs) and the legacy `runClaude()` reject their promises on non-zero exit codes (error includes exit
-code and first 500 bytes of stderr), ensuring AI process failures propagate to
-job-level error handling and `reportError()` rather than being silently
-swallowed.
+All AI invocations go through `claude.ts`, which manages three independent
+bounded concurrent queues — one per backend (Claude, Copilot, Codex). Each
+queue has its own concurrency limit and timeout:
+
+| Backend | Queue | Workers config | Default | Timeout config | Default |
+|---------|-------|----------------|---------|----------------|---------|
+| Claude | `enqueue` | `maxClaudeWorkers` | 2 | `claudeTimeoutMs` | 20 min |
+| Copilot | `enqueueCopilot` | `maxCopilotWorkers` | 1 | `copilotTimeoutMs` | 20 min |
+| Codex | `enqueueCodex` | `maxCodexWorkers` | 1 | `codexTimeoutMs` | 20 min |
+
+All jobs use `resolveEnqueue(aiOptions)` to select the correct queue based on
+the `JOB_AI` config for that job, then call `runAI()` for backend-agnostic
+execution. This means any job can be switched to a different AI backend by
+setting `jobAi.<job-name>.backend` in `config.json` — no code changes needed.
+
+Each process has a configurable timeout with SIGTERM/SIGKILL escalation. A
+5-minute heartbeat logs PID, elapsed time, and stdout byte count. Timed-out
+processes throw `ClaudeTimeoutError` with diagnostic fields, surfaced in error
+reports for debugging. `runAI()` rejects its promise on non-zero exit codes
+(error includes exit code and first 500 bytes of stderr), ensuring AI process
+failures propagate to job-level error handling and `reportError()` rather than
+being silently swallowed.
 
 ### Skip-If-Busy Scheduling
 
@@ -531,7 +546,8 @@ defaults.
 | `copilotTimeoutMs` | `YETI_COPILOT_TIMEOUT_MS` | `1200000` (20 min, minimum 60s) |
 | `maxCodexWorkers` | `YETI_MAX_CODEX_WORKERS` | `1` |
 | `codexTimeoutMs` | `YETI_CODEX_TIMEOUT_MS` | `1200000` (20 min, minimum 60s) |
-| `jobAi` | — | `{}` (per-job AI backend/model overrides) |
+| `includeForks` | `YETI_INCLUDE_FORKS` | `false` (only source repos discovered) |
+| `jobAi` | — | `{}` (per-job AI backend/model overrides — all jobs respect this) |
 | `authToken` | `YETI_AUTH_TOKEN` | *(empty — auth disabled)* |
 | `pausedJobs` | — | `[]` (job names to pause on startup) |
 | `enabledJobs` | — | `[]` (job names to register with the scheduler; empty = no jobs run) |
