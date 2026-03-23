@@ -105,6 +105,14 @@ export function stripYetiMarker(body: string): string {
   return body.replace(YETI_COMMENT_MARKER, "").replace(YETI_VISIBLE_HEADER, "").trim();
 }
 
+export function issueUrl(fullName: string, number: number): string {
+  return `https://github.com/${fullName}/issues/${number}`;
+}
+
+export function pullUrl(fullName: string, number: number): string {
+  return `https://github.com/${fullName}/pull/${number}`;
+}
+
 // ── Repo cache (shared across all jobs) ──
 
 const REPO_CACHE_TTL = 5 * 60 * 1000; // 5 minutes

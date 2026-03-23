@@ -206,7 +206,7 @@ async function processIssue(repo: Repo, issue: gh.Issue): Promise<void> {
 
       const prNumber = await gh.createPR(fullName, branchName, prTitle, prBody);
       log.info(`[issue-worker] Created PR #${prNumber} (${currentPhase}/${totalPhases}) for ${fullName}#${issue.number}`);
-      notify(`[issue-worker] Created PR #${prNumber} for ${fullName}#${issue.number}`);
+      notify(`[issue-worker] Created PR #${prNumber} for ${fullName}#${issue.number}\n${gh.pullUrl(fullName, prNumber)}`);
       await gh.addLabel(fullName, issue.number, LABELS.inReview);
 
       // Propagate Priority label to the new PR

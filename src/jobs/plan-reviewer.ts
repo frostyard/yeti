@@ -67,7 +67,7 @@ async function processIssue(repo: Repo, issue: gh.Issue, planComment: gh.IssueCo
 
     await gh.commentOnIssue(fullName, issue.number, `${REVIEW_HEADER}\n\n${reviewOutput}`);
     log.info(`[plan-reviewer] Posted review for ${fullName}#${issue.number}`);
-    notify(`[plan-reviewer] Review posted for ${fullName}#${issue.number}`);
+    notify(`[plan-reviewer] Review posted for ${fullName}#${issue.number}\n${gh.issueUrl(fullName, issue.number)}`);
 
     // Mark plan comment as processed
     await gh.addReaction(fullName, planComment.id, "+1");

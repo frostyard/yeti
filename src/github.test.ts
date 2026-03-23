@@ -91,6 +91,8 @@ import {
   getPRReviewDecision,
   scanQueueLabels,
   clearQueueCacheByCategories,
+  issueUrl,
+  pullUrl,
 } from "./github.js";
 
 describe("gh retry logic", () => {
@@ -2076,5 +2078,15 @@ describe("scanQueueLabels", () => {
     // Restore defaults
     (config as Record<string, unknown>).SKIPPED_ITEMS = [];
     (config as Record<string, unknown>).PRIORITIZED_ITEMS = [];
+  });
+});
+
+describe("URL helpers", () => {
+  it("issueUrl builds correct GitHub issue URL", () => {
+    expect(issueUrl("frostyard/yeti", 78)).toBe("https://github.com/frostyard/yeti/issues/78");
+  });
+
+  it("pullUrl builds correct GitHub pull request URL", () => {
+    expect(pullUrl("frostyard/yeti", 42)).toBe("https://github.com/frostyard/yeti/pull/42");
   });
 });

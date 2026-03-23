@@ -198,7 +198,7 @@ async function processRepo(repo: Repo): Promise<void> {
         const prBody = improvement.body + FOOTER;
         const prNumber = await gh.createPR(fullName, implBranch, `refactor: ${improvement.title}`, prBody);
         log.info(`[improvement-identifier] Created PR for "${improvement.title}" in ${fullName}`);
-        notify(`[improvement-identifier] Created PR #${prNumber} for ${fullName}`);
+        notify(`[improvement-identifier] Created PR #${prNumber} for ${fullName}\n${gh.pullUrl(fullName, prNumber)}`);
       } else {
         log.warn(`[improvement-identifier] No commits produced for "${improvement.title}" in ${fullName}`);
       }
