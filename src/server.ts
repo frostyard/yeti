@@ -469,6 +469,7 @@ async function handleRequest(req: http.IncomingMessage, res: http.ServerResponse
         codexQueue: { pending: cxq.pending, active: cxq.active },
         runningTasks,
         jobSchedules,
+        jobAi: config.JOB_AI,
         discord: discordStatus(),
       }),
     );

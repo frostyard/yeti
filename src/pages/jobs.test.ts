@@ -22,7 +22,7 @@ describe("buildJobsPage", () => {
   const defaultArgs = () => ({
     allJobs: makeJobs(),
     enabledJobs: new Set(["issue-worker", "ci-fixer"]),
-    jobAi: {} as Readonly<Record<string, { backend?: "claude" | "copilot"; model?: string }>>,
+    jobAi: {} as Readonly<Record<string, { backend?: "claude" | "copilot" | "codex"; model?: string }>>,
     runningJobs: { "issue-worker": true, "ci-fixer": false } as Record<string, boolean>,
     latestRuns: new Map([
       ["issue-worker", { runId: "run-1", status: "completed", startedAt: "2025-01-01 00:00:00", completedAt: "2025-01-01 00:01:00" }],
@@ -159,6 +159,26 @@ describe("buildJobsPage", () => {
       args.latestRuns, args.theme, args.paused, args.scheduleInfo,
     );
     expect(html).toContain('href="/logs/run-1"');
+  });
+
+  it("shows Codex backend from JOB_AI config", () => {
+    const args = defaultArgs();
+    args.jobAi = { "ci-fixer": { backend: "codex" } };
+    const html = buildJobsPage(
+      args.allJobs, args.enabledJobs, args.jobAi, args.runningJobs,
+      args.latestRuns, args.theme, args.paused, args.scheduleInfo,
+    );
+    expect(html).toContain("Codex");
+  });
+
+  it("renders id attributes on backend and model cells", () => {
+    const args = defaultArgs();
+    const html = buildJobsPage(
+      args.allJobs, args.enabledJobs, args.jobAi, args.runningJobs,
+      args.latestRuns, args.theme, args.paused, args.scheduleInfo,
+    );
+    expect(html).toContain('id="job-backend-issue-worker"');
+    expect(html).toContain('id="job-model-issue-worker"');
   });
 
   it("shows paused status for paused jobs", () => {

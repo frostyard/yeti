@@ -106,7 +106,7 @@ export function buildJobsPage(
       ? `<span style="color:var(--success)">Enabled</span>`
       : `<span style="color:var(--text-subtle)">Disabled</span>`;
 
-    const backendLabel = backend === "copilot" ? "Copilot" : "Claude";
+    const backendLabel = backend === "copilot" ? "Copilot" : backend === "codex" ? "Codex" : "Claude";
 
     return `<tr>
       <td>
@@ -114,8 +114,8 @@ export function buildJobsPage(
         <div style="font-size:0.8rem;color:var(--text-secondary)">${description}</div>
       </td>
       <td>${enabledBadge}</td>
-      <td>${backendLabel}</td>
-      <td>${model}</td>
+      <td id="job-backend-${name}">${backendLabel}</td>
+      <td id="job-model-${name}">${model}</td>
       <td>${scheduleText}</td>
       <td id="job-${name}" class="${statusClass}">${statusText}</td>
       <td id="job-lastrun-${name}">${lastRunText}</td>
@@ -219,6 +219,19 @@ ${htmlOpenTag(theme)}
               if (lr) lr.textContent = info.lastCompletedAt ? formatRelativeTime(info.lastCompletedAt) : '\u2014';
               var nr = document.getElementById('job-nextrun-' + name);
               if (nr) nr.textContent = info.nextRunIn !== null ? formatCountdown(info.nextRunIn) : '\u2014';
+            });
+          }
+          if (data.jobAi) {
+            document.querySelectorAll('[id^="job-backend-"]').forEach(function(el) {
+              var name = el.id.replace('job-backend-', '');
+              var ai = data.jobAi[name];
+              var backend = ai && ai.backend ? ai.backend : 'claude';
+              el.textContent = backend === 'copilot' ? 'Copilot' : backend === 'codex' ? 'Codex' : 'Claude';
+            });
+            document.querySelectorAll('[id^="job-model-"]').forEach(function(el) {
+              var name = el.id.replace('job-model-', '');
+              var ai = data.jobAi[name];
+              el.textContent = ai && ai.model ? ai.model : 'default';
             });
           }
         })
