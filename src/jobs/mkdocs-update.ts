@@ -70,7 +70,10 @@ async function processRepo(repo: Repo): Promise<void> {
     log.info(`[mkdocs-update] Updating mkdocs content for ${fullName}`);
     const prompt = buildMkdocsPrompt(fullName);
     const aiOptions = JOB_AI["mkdocs-update"];
-    const enqueueFn = aiOptions?.backend === "copilot" ? claude.enqueueCopilot : claude.enqueue;
+    const enqueueFn =
+      aiOptions?.backend === "codex" ? claude.enqueueCodex :
+      aiOptions?.backend === "copilot" ? claude.enqueueCopilot :
+      claude.enqueue;
     await enqueueFn(() => claude.runAI(prompt, wtPath!, aiOptions));
 
     // Step 4: Push and create PR

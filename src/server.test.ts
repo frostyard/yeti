@@ -46,6 +46,7 @@ vi.mock("./version.js", () => ({
 vi.mock("./claude.js", () => ({
   queueStatus: vi.fn().mockReturnValue({ pending: 2, active: 1 }),
   copilotQueueStatus: vi.fn().mockReturnValue({ pending: 0, active: 0 }),
+  codexQueueStatus: vi.fn().mockReturnValue({ pending: 0, active: 0 }),
   cancelCurrentTask: vi.fn().mockReturnValue(true),
 }));
 

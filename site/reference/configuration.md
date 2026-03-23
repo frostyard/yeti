@@ -31,6 +31,8 @@ Changes to live-reloadable fields take effect without restarting the service. Ot
 | `claudeTimeoutMs` | `number` | `1200000` (20 min) | `YETI_CLAUDE_TIMEOUT_MS` | No | Timeout per Claude call (minimum 60s) |
 | `maxCopilotWorkers` | `number` | `1` | `YETI_MAX_COPILOT_WORKERS` | No | Max concurrent Copilot CLI processes |
 | `copilotTimeoutMs` | `number` | `1200000` (20 min) | `YETI_COPILOT_TIMEOUT_MS` | No | Timeout per Copilot call (minimum 60s) |
+| `maxCodexWorkers` | `number` | `1` | `YETI_MAX_CODEX_WORKERS` | No | Max concurrent Codex CLI processes |
+| `codexTimeoutMs` | `number` | `1200000` (20 min) | `YETI_CODEX_TIMEOUT_MS` | No | Timeout per Codex call (minimum 60s) |
 | `jobAi` | `Record<string, {backend?, model?}>` | `{}` | -- | Yes | Per-job AI backend and model overrides |
 
 ## Discord Integration

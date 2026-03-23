@@ -3,7 +3,7 @@ import { execFile, spawn } from "node:child_process";
 import type { ChildProcess } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
-import { WORK_DIR, MAX_CLAUDE_WORKERS, CLAUDE_TIMEOUT_MS, MAX_COPILOT_WORKERS, COPILOT_TIMEOUT_MS, type Repo } from "./config.js";
+import { WORK_DIR, MAX_CLAUDE_WORKERS, CLAUDE_TIMEOUT_MS, MAX_COPILOT_WORKERS, COPILOT_TIMEOUT_MS, MAX_CODEX_WORKERS, CODEX_TIMEOUT_MS, type Repo } from "./config.js";
 import * as log from "./log.js";
 import { isShuttingDown, ShutdownError } from "./shutdown.js";
 
@@ -23,7 +23,7 @@ export function datestamp(): string {
 
 // ── AI backend types ──
 
-export type AiBackend = "claude" | "copilot";
+export type AiBackend = "claude" | "copilot" | "codex";
 
 export interface AiOptions {
   backend?: AiBackend;
@@ -33,13 +33,14 @@ export interface AiOptions {
 interface BackendConfig {
   binary: string;
   args: string[];
-  promptVia: "stdin" | "flag";  // "stdin" = pipe via stdin, "flag" = pass as -p argument
+  promptVia: "stdin" | "flag" | "positional";  // "stdin" = pipe via stdin, "flag" = pass as -p argument, "positional" = append as last arg
   name: string;
 }
 
 const BACKENDS: Record<AiBackend, BackendConfig> = {
   claude: { binary: "claude", args: ["-p", "--dangerously-skip-permissions"], promptVia: "stdin", name: "Claude" },
   copilot: { binary: "copilot", args: ["--allow-all-tools", "-s", "--no-ask-user"], promptVia: "flag", name: "Copilot" },
+  codex: { binary: "codex", args: ["--approval-mode", "full-auto"], promptVia: "positional", name: "Codex" },
 };
 
 // ── Bounded concurrent queue ──
@@ -97,6 +98,7 @@ export function cancelQueuedTasks(): void {
   }
   if (count > 0) log.info(`Cancelled ${count} queued task(s)`);
   cancelCopilotQueuedTasks();
+  cancelCodexQueuedTasks();
 }
 
 // ── Copilot queue (separate from Claude queue) ──
@@ -145,6 +147,54 @@ function cancelCopilotQueuedTasks(): void {
     count++;
   }
   if (count > 0) log.info(`Cancelled ${count} queued copilot task(s)`);
+}
+
+// ── Codex queue (separate from Claude and Copilot queues) ──
+
+const codexQueue: QueuedTask[] = [];
+let codexActiveCount = 0;
+
+function drainCodex(): void {
+  while (codexQueue.length > 0 && codexActiveCount < MAX_CODEX_WORKERS) {
+    const idx = codexQueue.findIndex((t) => t.priority);
+    const task = idx >= 0 ? codexQueue.splice(idx, 1)[0] : codexQueue.shift()!;
+    codexActiveCount++;
+    (async () => {
+      try {
+        const result = await task.fn();
+        task.resolve(result);
+      } catch (err) {
+        task.reject(err);
+      } finally {
+        codexActiveCount--;
+        drainCodex();
+      }
+    })();
+  }
+}
+
+export function codexQueueStatus(): { pending: number; active: number } {
+  return { pending: codexQueue.length, active: codexActiveCount };
+}
+
+export function enqueueCodex<T>(fn: () => Promise<T>, priority = false): Promise<T> {
+  if (isShuttingDown()) {
+    return Promise.reject(new ShutdownError("Shutting down — task not started"));
+  }
+  return new Promise<T>((resolve, reject) => {
+    codexQueue.push({ fn, resolve: resolve as (v: unknown) => void, reject, priority });
+    drainCodex();
+  });
+}
+
+function cancelCodexQueuedTasks(): void {
+  let count = 0;
+  while (codexQueue.length > 0) {
+    const task = codexQueue.shift()!;
+    task.reject(new ShutdownError("Shutting down — task cancelled"));
+    count++;
+  }
+  if (count > 0) log.info(`Cancelled ${count} queued codex task(s)`);
 }
 
 // ── Git helpers ──
@@ -436,7 +486,7 @@ export async function regeneratePRDescription(
 export function runAI(prompt: string, cwd: string, options?: AiOptions): Promise<string> {
   const backend = options?.backend ?? "claude";
   const config = BACKENDS[backend];
-  const timeoutMs = backend === "copilot" ? COPILOT_TIMEOUT_MS : CLAUDE_TIMEOUT_MS;
+  const timeoutMs = backend === "copilot" ? COPILOT_TIMEOUT_MS : backend === "codex" ? CODEX_TIMEOUT_MS : CLAUDE_TIMEOUT_MS;
 
   return new Promise((resolve, reject) => {
     const args = [...config.args];
@@ -445,6 +495,10 @@ export function runAI(prompt: string, cwd: string, options?: AiOptions): Promise
     }
     if (options?.model) {
       args.push("--model", options.model);
+    }
+    // Positional prompt must come last, after all flags
+    if (config.promptVia === "positional") {
+      args.push(prompt);
     }
 
     const child = spawn(config.binary, args, {
@@ -532,7 +586,7 @@ export function runAI(prompt: string, cwd: string, options?: AiOptions): Promise
     if (config.promptVia === "stdin") {
       child.stdin.write(prompt);
     }
-    child.stdin.end();
+    child.stdin.end();  // always close stdin to signal EOF
   });
 }
 

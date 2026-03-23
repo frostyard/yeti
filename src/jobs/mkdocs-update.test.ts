@@ -35,6 +35,7 @@ const { mockFs, mockGh, mockClaude, mockDb } = vi.hoisted(() => ({
     removeWorktree: vi.fn(),
     enqueue: vi.fn(),
     enqueueCopilot: vi.fn(),
+    enqueueCodex: vi.fn(),
     runAI: vi.fn(),
     hasNewCommits: vi.fn(),
     hasTreeDiff: vi.fn(),
@@ -69,6 +70,7 @@ describe("mkdocs-update", () => {
     mockClaude.createWorktree.mockResolvedValue("/tmp/worktree");
     mockClaude.enqueue.mockImplementation((fn: () => Promise<string>) => fn());
     mockClaude.enqueueCopilot.mockImplementation((fn: () => Promise<string>) => fn());
+    mockClaude.enqueueCodex.mockImplementation((fn: () => Promise<string>) => fn());
     mockClaude.runAI.mockResolvedValue("docs updated");
     mockClaude.hasNewCommits.mockResolvedValue(true);
     mockClaude.hasTreeDiff.mockResolvedValue(true);
@@ -196,6 +198,26 @@ describe("mkdocs-update", () => {
     expect(mockDb.recordTaskStart).toHaveBeenCalledWith("mkdocs-update", repo.fullName, 0, null);
     expect(mockDb.updateTaskWorktree).toHaveBeenCalledWith(1, "/tmp/worktree", expect.stringContaining("yeti/mkdocs-update-"));
     expect(mockDb.recordTaskComplete).toHaveBeenCalledWith(1);
+  });
+
+  it("uses enqueueCodex when JOB_AI backend is codex", async () => {
+    const configMod = await import("../config.js");
+    Object.defineProperty(configMod, "JOB_AI", {
+      value: { "mkdocs-update": { backend: "codex" } },
+      writable: true,
+    });
+
+    await run([repo]);
+
+    expect(mockClaude.enqueueCodex).toHaveBeenCalled();
+    expect(mockClaude.enqueue).not.toHaveBeenCalled();
+    expect(mockClaude.enqueueCopilot).not.toHaveBeenCalled();
+
+    // Reset
+    Object.defineProperty(configMod, "JOB_AI", {
+      value: {},
+      writable: true,
+    });
   });
 
   it("uses enqueueCopilot when JOB_AI backend is copilot", async () => {
