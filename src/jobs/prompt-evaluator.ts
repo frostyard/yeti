@@ -193,6 +193,7 @@ interface EvalResult {
 
 export function buildReport(
   promptName: string,
+  variantPromptText: string,
   rationale: string,
   results: EvalResult[],
 ): { title: string; body: string } {
@@ -235,6 +236,16 @@ export function buildReport(
     `### Proposed Change Rationale`,
     ``,
     rationale,
+    ``,
+    `### Proposed Variant Prompt`,
+    ``,
+    `<details><summary>Click to expand the full variant prompt text</summary>`,
+    ``,
+    "```",
+    variantPromptText,
+    "```",
+    ``,
+    `</details>`,
     ``,
     `---`,
     ``,
@@ -437,7 +448,7 @@ async function evaluatePrompt(entry: PromptEntry, repo: Repo): Promise<void> {
       if (existing.length > 0) {
         log.info(`[prompt-evaluator] Skipping — similar issue already exists: #${existing[0].number}`);
       } else {
-        const report = buildReport(entry.name, variant.rationale, results);
+        const report = buildReport(entry.name, variant.variant, variant.rationale, results);
         const issueNumber = await gh.createIssue(SELF_REPO, report.title, report.body, ["prompt-improvement"]);
         log.info(`[prompt-evaluator] Created issue #${issueNumber} for ${entry.name}`);
         notify(`[prompt-evaluator] Improvement found for ${entry.name} — issue #${issueNumber}\n${gh.issueUrl(SELF_REPO, issueNumber)}`);

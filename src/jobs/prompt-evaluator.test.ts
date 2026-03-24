@@ -355,7 +355,7 @@ describe("parseJudgment", () => {
 
 describe("buildReport", () => {
   it("includes prompt name in title", () => {
-    const report = buildReport("buildNewPlanPrompt", "rationale text", [
+    const report = buildReport("buildNewPlanPrompt", "the variant prompt text", "rationale text", [
       {
         testCase: { title: "Test", body: "Body" },
         currentOutput: "current output",
@@ -368,7 +368,7 @@ describe("buildReport", () => {
   });
 
   it("includes test case details in body", () => {
-    const report = buildReport("buildNewPlanPrompt", "rationale text", [
+    const report = buildReport("buildNewPlanPrompt", "the variant prompt text", "rationale text", [
       {
         testCase: { title: "Test issue", body: "Issue body" },
         currentOutput: "current output",
@@ -380,5 +380,6 @@ describe("buildReport", () => {
     expect(report.body).toContain("current output");
     expect(report.body).toContain("variant output");
     expect(report.body).toContain("rationale text");
+    expect(report.body).toContain("the variant prompt text");
   });
 });
