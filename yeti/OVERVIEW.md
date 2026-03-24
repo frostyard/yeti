@@ -273,7 +273,7 @@ See [Jobs](jobs.md) for detailed behavior of each.
 
 | Job | Trigger | Interval | Summary |
 |-----|---------|----------|---------|
-| `issue-refiner` | Issues labelled `Needs Refinement` | 5 min | Posts implementation plans for issues with `Needs Refinement` label (exempt: `[ci-unrelated]` and `[yeti-error]` issues), refines plans based on unreacted human feedback, responds to follow-up questions on issues with open PRs |
+| `issue-refiner` | Issues labelled `Needs Refinement` | 5 min | Posts implementation plans for issues with `Needs Refinement` label (exempt: `[ci-unrelated]` and `[yeti-error]` issues); asks clarifying questions for underspecified issues instead of guessing; refines plans based on unreacted human feedback; responds to follow-up questions on issues with open PRs |
 | `plan-reviewer` | Issues labelled `Needs Plan Review` | 10 min | Adversarial review of implementation plans using configurable AI backend |
 | `issue-worker` | Label `Refined` | 5 min | Implements the issue, creates a PR |
 | `ci-fixer` | Any open PR with failing checks | 10 min | Resolves merge conflicts, fixes CI failures |
