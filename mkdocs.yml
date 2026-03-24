@@ -86,6 +86,7 @@ nav:
           - repo-standards: reference/jobs/repo-standards.md
           - triage-yeti-errors: reference/jobs/triage-yeti-errors.md
           - mkdocs-update: reference/jobs/mkdocs-update.md
+          - prompt-evaluator: reference/jobs/prompt-evaluator.md
 
 extra_css:
   - stylesheets/extra.css
