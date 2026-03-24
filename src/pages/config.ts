@@ -27,6 +27,7 @@ export function buildConfigPage(saved: boolean, theme: Theme, username?: string 
     githubAppClientId: "YETI_GITHUB_APP_CLIENT_ID",
     githubAppClientSecret: "YETI_GITHUB_APP_CLIENT_SECRET",
     externalUrl: "YETI_EXTERNAL_URL",
+    webhookSecret: "YETI_WEBHOOK_SECRET",
   };
 
   function envNote(key: string): string {
@@ -145,6 +146,13 @@ ${htmlOpenTag(theme)}
     <label>External URL</label>
     <div class="readonly-value">${escapeHtml(String(cfg.externalUrl ?? "")) || "<em>Not configured</em>"}</div>
     ${envNote("externalUrl")}
+
+    <h2>Webhooks (optional)</h2>
+    <div class="field-note">Enables near-real-time job triggers and dashboard updates via GitHub webhooks. Edit in <code>~/.yeti/config.json</code> and restart.</div>
+
+    <label>Webhook Secret</label>
+    <div class="readonly-value">${escapeHtml(String(cfg.webhookSecret ?? "")) || "<em>Not configured</em>"}</div>
+    ${envNote("webhookSecret")}
 
     <h2>Intervals (minutes)</h2>
     ${Object.entries(intervals).map(([key, value]) =>

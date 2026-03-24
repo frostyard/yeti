@@ -29,7 +29,7 @@ import { cancelQueuedTasks, cancelCurrentTask } from "./claude.js";
 import { reportError } from "./error-reporter.js";
 import { VERSION } from "./version.js";
 import { announceIfNewVersion } from "./startup-announce.js";
-import { isGitHubAppConfigured, initGitHubApp } from "./github-app.js";
+import { isGitHubAppConfigured, initGitHubApp, configureWebhook } from "./github-app.js";
 
 log.info(`yeti ${VERSION} starting up`);
 
@@ -109,6 +109,17 @@ if (isGitHubAppConfigured()) {
     log.error(`Failed to initialize GitHub App: ${err}`);
     log.warn("Falling back to personal gh CLI auth");
   }
+}
+
+// ── Webhook configuration (optional) ──
+
+if (config.WEBHOOK_SECRET && config.EXTERNAL_URL && isGitHubAppConfigured()) {
+  await configureWebhook(config.EXTERNAL_URL, config.WEBHOOK_SECRET);
+  log.info("Webhooks: URL configured — ensure events are enabled in GitHub App settings");
+} else if (config.WEBHOOK_SECRET && !isGitHubAppConfigured()) {
+  log.warn("webhookSecret is set but GitHub App is not configured — webhooks require a GitHub App");
+} else if (!config.WEBHOOK_SECRET) {
+  log.info("Webhooks: not configured");
 }
 
 // ── Jobs ──

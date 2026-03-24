@@ -90,6 +90,7 @@ export interface ConfigFile {
   githubAppClientId?: string;
   githubAppClientSecret?: string;
   externalUrl?: string;
+  webhookSecret?: string;
 }
 
 function loadConfig() {
@@ -216,7 +217,9 @@ function loadConfig() {
     externalUrl = "";
   }
 
-  return { githubOwners, selfRepo, port, intervals, schedules, logRetentionDays, logRetentionPerJob, discordBotToken, discordChannelId, discordAllowedUsers, authToken, maxClaudeWorkers, claudeTimeoutMs, maxCopilotWorkers, copilotTimeoutMs, maxCodexWorkers, codexTimeoutMs, pausedJobs, skippedItems, prioritizedItems, allowedRepos, includeForks, enabledJobs, jobAi, queueScanIntervalMs, githubAppId, githubAppInstallationId, githubAppPrivateKeyPath, githubAppClientId, githubAppClientSecret, externalUrl };
+  const webhookSecret = process.env["YETI_WEBHOOK_SECRET"] ?? file.webhookSecret ?? "";
+
+  return { githubOwners, selfRepo, port, intervals, schedules, logRetentionDays, logRetentionPerJob, discordBotToken, discordChannelId, discordAllowedUsers, authToken, maxClaudeWorkers, claudeTimeoutMs, maxCopilotWorkers, copilotTimeoutMs, maxCodexWorkers, codexTimeoutMs, pausedJobs, skippedItems, prioritizedItems, allowedRepos, includeForks, enabledJobs, jobAi, queueScanIntervalMs, githubAppId, githubAppInstallationId, githubAppPrivateKeyPath, githubAppClientId, githubAppClientSecret, externalUrl, webhookSecret };
 }
 
 const config = loadConfig();
@@ -254,6 +257,8 @@ export const GITHUB_APP_PRIVATE_KEY_PATH = config.githubAppPrivateKeyPath;
 export const GITHUB_APP_CLIENT_ID = config.githubAppClientId;
 export const GITHUB_APP_CLIENT_SECRET = config.githubAppClientSecret;
 export const EXTERNAL_URL = config.externalUrl;
+// Immutable — requires restart (webhooks)
+export const WEBHOOK_SECRET = config.webhookSecret;
 // Live-reloadable
 export let DISCORD_ALLOWED_USERS: readonly string[] = config.discordAllowedUsers;
 
@@ -309,7 +314,7 @@ export function reloadConfig(): void {
   notifyListeners();
 }
 
-const SENSITIVE_KEYS = new Set(["authToken", "discordBotToken", "githubAppClientSecret"]);
+const SENSITIVE_KEYS = new Set(["authToken", "discordBotToken", "githubAppClientSecret", "webhookSecret"]);
 
 function maskValue(value: string): string {
   if (!value) return "Not configured";

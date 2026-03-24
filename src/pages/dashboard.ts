@@ -2,6 +2,7 @@ import type { Theme } from "./layout.js";
 import { PAGE_CSS, escapeHtml, repoShortName, itemLogsUrl, formatUptime, formatRelativeTime, formatCountdown, htmlOpenTag, buildNav, THEME_SCRIPT, discordLabel, siteTitle } from "./layout.js";
 import { msUntilHour } from "../scheduler.js";
 import { isGitHubAppConfigured, getAppSlug } from "../github-app.js";
+import { WEBHOOK_SECRET } from "../config.js";
 
 interface RunningTaskInfo {
   jobName: string;
@@ -155,6 +156,8 @@ ${htmlOpenTag(theme)}
   <dl class="meta">
     <dt>GitHub Auth</dt>
     <dd>${githubAuthLabel}</dd>
+    <dt>Webhooks</dt>
+    <dd>${WEBHOOK_SECRET ? "Active" : "Not configured"}</dd>
     <dt>Discord</dt>
     <dd id="discord-status" class="${dc.cls}">${dc.text}</dd>
   </dl>

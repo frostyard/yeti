@@ -189,6 +189,76 @@ The login page will now show a "Sign in with GitHub" button. If `authToken` is a
 
 ---
 
+## Webhooks (Optional)
+
+Webhooks give Yeti near-real-time event delivery. Instead of polling every 5--10 minutes, jobs trigger immediately when issues are labeled or CI checks fail. The dashboard queue also updates instantly.
+
+Webhooks supplement polling --- they don't replace it. Polling continues as a safety net for missed events, restarts, and reaction tracking.
+
+### 1. Generate a webhook secret
+
+```bash
+openssl rand -hex 32
+```
+
+### 2. Add to config
+
+Add the secret to `~/.yeti/config.json`:
+
+```json
+{
+  "webhookSecret": "your-generated-secret"
+}
+```
+
+Or as an environment variable in `~/.yeti/env`:
+
+```bash
+YETI_WEBHOOK_SECRET=your-generated-secret
+```
+
+### 3. Enable webhooks in GitHub App settings
+
+In your GitHub App settings page (**Settings > Developer settings > GitHub Apps > your app**):
+
+1. Under **Webhook**, check **Active** and set the **Webhook URL** to any placeholder (Yeti will overwrite it on startup).
+2. Under **Subscribe to events**, check:
+    - **Issues**
+    - **Check runs**
+
+!!! note
+    Yeti auto-configures the webhook URL and secret on startup via the GitHub API. You only need to enable the webhook and subscribe to events manually --- these cannot be set via API.
+
+### 4. Restart Yeti
+
+```bash
+sudo systemctl restart yeti
+```
+
+You should see in the logs:
+
+```text
+[webhook] GitHub App webhook URL configured
+Webhooks: URL configured — ensure events are enabled in GitHub App settings
+```
+
+The dashboard's **Integrations** section will show `Webhooks: Active`.
+
+### What triggers what
+
+| Event | Action |
+| --- | --- |
+| Issue labeled `Refined` | Triggers issue-worker immediately |
+| Issue labeled `Needs Refinement` | Triggers issue-refiner immediately |
+| Issue labeled `Needs Plan Review` | Triggers plan-reviewer immediately |
+| Issue labeled `Ready` or `Priority` | Updates dashboard queue cache |
+| Issue unlabeled (any queue label) | Updates dashboard queue cache |
+| Check run failed/timed out (with PR) | Triggers ci-fixer immediately |
+
+Jobs that aren't enabled in `enabledJobs` are silently skipped. If a job is already running, the webhook event is skipped and polling catches it on the next cycle.
+
+---
+
 ## Troubleshooting
 
 **"GitHub App private key not found"** --- The path in `githubAppPrivateKeyPath` doesn't exist or isn't readable. Check the path and file permissions.

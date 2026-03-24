@@ -106,6 +106,27 @@ export function getAppSlug(): string | null {
   return appSlug;
 }
 
+/**
+ * Configure the GitHub App's webhook URL and secret.
+ * Uses JWT auth (App-level endpoint). Idempotent — safe to call every startup.
+ * Logs warning and continues on failure (polling still works without webhooks).
+ */
+export async function configureWebhook(externalUrl: string, secret: string): Promise<void> {
+  if (!isGitHubAppConfigured()) return;
+
+  const jwt = generateJWT();
+  try {
+    await githubApi("PATCH", "/app/hook/config", jwt, {
+      url: `${externalUrl}/webhooks/github`,
+      content_type: "json",
+      secret,
+    });
+    log.info("[webhook] GitHub App webhook URL configured");
+  } catch (err) {
+    log.warn(`[webhook] Failed to configure App webhook — ensure it is enabled in GitHub App settings: ${err}`);
+  }
+}
+
 // ── Internal ──
 
 /** Restore process to pre-init state so personal auth continues to work. */
@@ -181,7 +202,7 @@ async function refreshToken(): Promise<void> {
 }
 
 /** Direct GitHub API call with Bearer auth (for JWT-authenticated endpoints). */
-async function githubApi<T>(method: string, path: string, token: string): Promise<T> {
+async function githubApi<T>(method: string, path: string, token: string, body?: unknown): Promise<T> {
   const url = `https://api.github.com${path}`;
   const res = await fetch(url, {
     method,
@@ -189,11 +210,13 @@ async function githubApi<T>(method: string, path: string, token: string): Promis
       "Authorization": `Bearer ${token}`,
       "Accept": "application/vnd.github+json",
       "X-GitHub-Api-Version": "2022-11-28",
+      ...(body !== undefined ? { "Content-Type": "application/json" } : {}),
     },
+    ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
   });
   if (!res.ok) {
-    const body = await res.text();
-    throw new Error(`GitHub API ${method} ${path} failed (${res.status}): ${body}`);
+    const respBody = await res.text();
+    throw new Error(`GitHub API ${method} ${path} failed (${res.status}): ${respBody}`);
   }
   return await res.json() as T;
 }
