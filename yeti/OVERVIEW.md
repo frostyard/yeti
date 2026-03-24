@@ -64,7 +64,7 @@ deploy/
 
 **`main.ts`** — Wires everything together. Initializes the SQLite database,
 recovers orphaned tasks from a previous crash (cleans up dangling worktrees,
-marks tasks failed), prunes old logs, registers all 12 jobs with the scheduler
+marks tasks failed), prunes old logs, registers all 13 jobs with the scheduler
 (interval jobs staggered by 2 seconds to prevent thundering herd), starts the
 HTTP server, launches the **queue label scanner** (an infrastructure timer that
 runs `scanQueueLabels()` on a configurable interval to keep the dashboard queue
@@ -537,6 +537,7 @@ defaults.
 | `schedules.improvementIdentifierHour` | — | `3` (3 AM local time) |
 | `schedules.mkdocsUpdateHour` | — | `4` (4 AM local time) |
 | `schedules.issueAuditorHour` | — | `5` (5 AM local time) |
+| `schedules.promptEvaluatorHour` | — | `0` (midnight local time) |
 | `logRetentionDays` | — | `14` |
 | `logRetentionPerJob` | — | `20` |
 | `discordBotToken` | `YETI_DISCORD_BOT_TOKEN` | *(empty — Discord disabled if unset)* |
@@ -565,7 +566,7 @@ Controls which jobs are registered with the scheduler at startup.
 - **Field**: `enabledJobs` (string array)
 - **Default**: `[]` — no jobs run if the field is absent or empty
 - **Live-reloadable**: yes (changes take effect without restart)
-- **Available values**: `issue-worker`, `issue-refiner`, `plan-reviewer`, `ci-fixer`, `review-addresser`, `doc-maintainer`, `auto-merger`, `repo-standards`, `improvement-identifier`, `issue-auditor`, `triage-yeti-errors`, `mkdocs-update`
+- **Available values**: `issue-worker`, `issue-refiner`, `plan-reviewer`, `ci-fixer`, `review-addresser`, `doc-maintainer`, `auto-merger`, `repo-standards`, `improvement-identifier`, `issue-auditor`, `triage-yeti-errors`, `mkdocs-update`, `prompt-evaluator`
 
 **Migration note**: existing configs without `enabledJobs` will have no jobs start after upgrading. Add the desired job names to `enabledJobs` in `~/.yeti/config.json` before upgrading.
 
