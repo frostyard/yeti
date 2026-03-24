@@ -37,7 +37,7 @@ src/
 │   ├── repos.ts         Repos page HTML builder (per-repo active/completed items, add repo dialog)
 │   ├── queue.ts         Work queue page HTML builder
 │   ├── logs.ts          Log list, detail, and issue logs page HTML builders
-│   ├── config.ts        Config editor page HTML builder
+│   ├── config.ts        Config editor page HTML builder (tabbed: General, Scheduling, AI, Integrations, Security)
 │   ├── login.ts         Login page HTML builder
 │   └── layout.ts        Shared layout (header, theme, siteTitle, formatters)
 └── jobs/
@@ -112,7 +112,7 @@ initialized from the `pausedJobs` config array on startup.
 directly). Wraps `execFile("gh", ...)` with exponential-backoff retry on
 transient errors (400, 500, 502, 503, 504, ETIMEDOUT, ECONNRESET, ECONNREFUSED,
 connection reset, "Could not resolve to a", "TLS handshake timeout",
-"Something went wrong" — up to 3 attempts with 1s/2s/4s delays). Rate limit
+"Something went wrong", "stream error" — up to 3 attempts with 1s/2s/4s delays). Rate limit
 errors are not retried — they trip a **circuit breaker** that blocks all API
 calls for 60 seconds (throws `RateLimitError`). Includes GraphQL pagination for
 resolved review thread filtering. Uses a generic `TTLCache` for API response
@@ -246,7 +246,7 @@ Routes:
 - `GET /logs/:runId` — Individual run detail page with task list
 - `GET /logs/:runId/tail` — Live log tail (JSON, polls for new entries)
 - `GET /logs/issue` — Issue-specific logs page (`?repo=...&number=...`)
-- `GET /config` / `POST /config` — Config viewer/editor (HTML form)
+- `GET /config` / `POST /config` — Config viewer/editor (tabbed HTML form with General, Scheduling, AI Backends, Integrations, Security tabs; supports `?tab=` param for direct tab linking; progressive enhancement with JS tab switching and `<a>` fallback)
 - `GET /config/api` — JSON config (sensitive fields masked)
 - `POST /webhooks/github` — GitHub webhook endpoint (HMAC-SHA256 verified, no auth required — see `webhooks.ts`)
 
@@ -454,7 +454,8 @@ crash) have their worktrees cleaned up and are marked `failed`.
 
 The `gh` CLI wrapper retries up to 3 times with exponential backoff (1s, 2s,
 4s) on transient errors (400, 500, 502, 503, 504, timeouts, connection resets,
-"Could not resolve to a", "TLS handshake timeout", "Something went wrong").
+"Could not resolve to a", "TLS handshake timeout", "Something went wrong",
+"stream error" — HTTP/2 stream cancellations).
 Rate limit errors are handled separately: they trip a circuit breaker that
 blocks all GitHub API calls for 60 seconds, throwing `RateLimitError`
 immediately without retry. A notification is sent when the
