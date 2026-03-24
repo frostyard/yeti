@@ -144,6 +144,10 @@ These tools must be installed and authenticated on the host — they are **not**
 | `gh` CLI | `gh auth login` — must have access to all repos in `githubOwners` |
 | `claude` CLI | Follow [Claude CLI setup](https://docs.anthropic.com/en/docs/claude-cli) |
 
+### GitHub App (optional)
+
+By default, Yeti uses your personal `gh` CLI credentials. If you enable branch protection with required PR reviews, you'll need Yeti to operate as a separate identity so you can approve its PRs. Configure a [GitHub App](https://frostyard.github.io/yeti/getting-started/github-app/) to give Yeti a `[bot]` identity. Set `githubAppId`, `githubAppInstallationId`, and `githubAppPrivateKeyPath` in config — requires restart.
+
 ## Jobs
 
 Yeti runs 10 jobs on timers. Each job scans repos under the configured `githubOwners`, filtered by `allowedRepos` if set. Understanding what triggers each job is important — **most jobs do not require labels** and will discover work based on PR/issue state.

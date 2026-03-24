@@ -20,6 +20,9 @@ export function buildConfigPage(saved: boolean, theme: Theme): string {
     discordChannelId: "YETI_DISCORD_CHANNEL_ID",
     discordAllowedUsers: "YETI_DISCORD_ALLOWED_USERS",
     authToken: "YETI_AUTH_TOKEN",
+    githubAppId: "YETI_GITHUB_APP_ID",
+    githubAppInstallationId: "YETI_GITHUB_APP_INSTALLATION_ID",
+    githubAppPrivateKeyPath: "YETI_GITHUB_APP_PRIVATE_KEY_PATH",
   };
 
   function envNote(key: string): string {
@@ -108,6 +111,21 @@ ${htmlOpenTag(theme)}
     <label for="discordAllowedUsers">Discord Allowed Users (comma-separated IDs)</label>
     <input type="text" name="discordAllowedUsers" id="discordAllowedUsers" value="${escapeHtml(Array.isArray(cfg.discordAllowedUsers) ? (cfg.discordAllowedUsers as string[]).join(", ") : "")}"${isDisabled("discordAllowedUsers") ? " disabled" : ""}>
     ${envNote("discordAllowedUsers")}
+
+    <h2>GitHub App (optional)</h2>
+    <div class="field-note">Optional — gives Yeti a separate bot identity so humans can approve its PRs with branch protection. Edit these in <code>~/.yeti/config.json</code> and restart.</div>
+
+    <label>App ID</label>
+    <div class="readonly-value">${escapeHtml(String(cfg.githubAppId ?? "")) || "<em>Not configured</em>"}</div>
+    ${envNote("githubAppId")}
+
+    <label>Installation ID</label>
+    <div class="readonly-value">${escapeHtml(String(cfg.githubAppInstallationId ?? "")) || "<em>Not configured</em>"}</div>
+    ${envNote("githubAppInstallationId")}
+
+    <label>Private Key Path</label>
+    <div class="readonly-value">${escapeHtml(String(cfg.githubAppPrivateKeyPath ?? "")) || "<em>Not configured</em>"}</div>
+    ${envNote("githubAppPrivateKeyPath")}
 
     <h2>Intervals (minutes)</h2>
     ${Object.entries(intervals).map(([key, value]) =>

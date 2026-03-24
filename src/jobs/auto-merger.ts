@@ -20,11 +20,14 @@ export async function run(repos: Repo[]): Promise<void> {
 
           if (!isDependabot && !isYetiPR && !isDocPR) continue;
 
-          // Yeti PRs require an LGTM comment posted after the latest commit
+          // Yeti PRs require human approval: LGTM comment or GitHub review approval
           if (isYetiPR) {
             const lgtm = await gh.hasValidLGTM(repo.fullName, pr.number, pr.baseRefName);
             if (!lgtm) {
-              continue;
+              const reviewDecision = await gh.getPRReviewDecision(repo.fullName, pr.number);
+              if (reviewDecision !== "APPROVED") {
+                continue;
+              }
             }
           }
 

@@ -129,6 +129,7 @@ Most configuration changes take effect without restarting the service. When you 
 
 - `port` --- the HTTP server binds once at startup
 - `discordBotToken`, `discordChannelId` --- the Discord bot connects once at startup
+- `githubAppId`, `githubAppInstallationId`, `githubAppPrivateKeyPath` --- see [GitHub App Setup](github-app.md)
 
 ## Next steps
 

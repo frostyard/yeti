@@ -1,6 +1,7 @@
 import type { Theme } from "./layout.js";
 import { PAGE_CSS, escapeHtml, repoShortName, itemLogsUrl, formatUptime, formatRelativeTime, formatCountdown, htmlOpenTag, buildNav, THEME_SCRIPT, discordLabel, siteTitle } from "./layout.js";
 import { msUntilHour } from "../scheduler.js";
+import { isGitHubAppConfigured, getAppSlug } from "../github-app.js";
 
 interface RunningTaskInfo {
   jobName: string;
@@ -25,6 +26,9 @@ export function buildStatusPage(
   codexQueue?: { pending: number; active: number },
 ): string {
   const dc = discordLabel(discord);
+  const githubAuthLabel = isGitHubAppConfigured()
+    ? `App${getAppSlug() ? ` (${escapeHtml(getAppSlug()!)}[bot])` : ""}`
+    : "Personal (gh CLI)";
 
   // Build a map of job name → running task detail for the jobs table
   const taskByJob = new Map<string, RunningTaskInfo>();
@@ -148,6 +152,8 @@ ${htmlOpenTag(theme)}
   </dl>` : ""}
   <h2>Integrations</h2>
   <dl class="meta">
+    <dt>GitHub Auth</dt>
+    <dd>${githubAuthLabel}</dd>
     <dt>Discord</dt>
     <dd id="discord-status" class="${dc.cls}">${dc.text}</dd>
   </dl>

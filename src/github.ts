@@ -301,7 +301,22 @@ export async function getSelfLogin(): Promise<string> {
   return _selfLogin;
 }
 
-function gh(args: string[]): Promise<string> {
+/** Set the cached login directly (used by GitHub App auth to avoid GET /user which doesn't work with installation tokens). */
+export function setSelfLogin(login: string): void {
+  _selfLogin = login;
+}
+
+// ── Pre-call hook for token refresh ──
+
+let _preCallHook: (() => Promise<void>) | null = null;
+
+/** Register a hook called before every gh() invocation (used for GitHub App token refresh). */
+export function setGhPreCallHook(hook: () => Promise<void>): void {
+  _preCallHook = hook;
+}
+
+async function gh(args: string[]): Promise<string> {
+  if (_preCallHook) await _preCallHook();
   if (isRateLimited()) {
     return Promise.reject(new RateLimitError("Rate limited — skipping API call"));
   }
