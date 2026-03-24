@@ -30,6 +30,7 @@ beforeEach(() => {
   delete process.env["YETI_AUTH_TOKEN"];
   delete process.env["YETI_GITHUB_OWNERS"];
   delete process.env["YETI_SELF_REPO"];
+  delete process.env["YETI_LOG_LEVEL"];
   delete process.env["PORT"];
   fs.mkdirSync(tmpDir, { recursive: true });
 });
@@ -347,6 +348,75 @@ describe("config", () => {
 
     const display = mod.getConfigForDisplay();
     expect(display.githubAppClientSecret).toBe("****efgh");
+  });
+
+  it("logLevel defaults to debug when not set", async () => {
+    const mod = await import("./config.js");
+
+    fs.mkdirSync(path.dirname(mod.CONFIG_PATH), { recursive: true });
+    fs.writeFileSync(mod.CONFIG_PATH, JSON.stringify({}));
+
+    const display = mod.getConfigForDisplay();
+    expect(display.logLevel).toBe("debug");
+  });
+
+  it("logLevel loads from config.json", async () => {
+    const mod = await import("./config.js");
+
+    fs.mkdirSync(path.dirname(mod.CONFIG_PATH), { recursive: true });
+    fs.writeFileSync(mod.CONFIG_PATH, JSON.stringify({ logLevel: "warn" }));
+
+    const display = mod.getConfigForDisplay();
+    expect(display.logLevel).toBe("warn");
+  });
+
+  it("invalid logLevel in config.json falls back to debug", async () => {
+    const mod = await import("./config.js");
+
+    fs.mkdirSync(path.dirname(mod.CONFIG_PATH), { recursive: true });
+    fs.writeFileSync(mod.CONFIG_PATH, JSON.stringify({ logLevel: "bogus" }));
+
+    const display = mod.getConfigForDisplay();
+    expect(display.logLevel).toBe("debug");
+  });
+
+  it("YETI_LOG_LEVEL env var overrides config.json", async () => {
+    process.env["YETI_LOG_LEVEL"] = "error";
+
+    const mod = await import("./config.js");
+
+    fs.mkdirSync(path.dirname(mod.CONFIG_PATH), { recursive: true });
+    fs.writeFileSync(mod.CONFIG_PATH, JSON.stringify({ logLevel: "info" }));
+
+    const display = mod.getConfigForDisplay();
+    expect(display.logLevel).toBe("error");
+
+    delete process.env["YETI_LOG_LEVEL"];
+  });
+
+  it("invalid YETI_LOG_LEVEL falls back to valid config.json value", async () => {
+    process.env["YETI_LOG_LEVEL"] = "invalid";
+
+    const mod = await import("./config.js");
+
+    fs.mkdirSync(path.dirname(mod.CONFIG_PATH), { recursive: true });
+    fs.writeFileSync(mod.CONFIG_PATH, JSON.stringify({ logLevel: "warn" }));
+
+    const display = mod.getConfigForDisplay();
+    expect(display.logLevel).toBe("warn");
+
+    delete process.env["YETI_LOG_LEVEL"];
+  });
+
+  it("reloadConfig updates LOG_LEVEL binding", async () => {
+    const mod = await import("./config.js");
+
+    fs.mkdirSync(path.dirname(mod.CONFIG_PATH), { recursive: true });
+    fs.writeFileSync(mod.CONFIG_PATH, JSON.stringify({ logLevel: "error" }));
+
+    mod.reloadConfig();
+
+    expect(mod.LOG_LEVEL).toBe("error");
   });
 
   it("reviewLoop defaults to false and maxPlanRounds defaults to 3", async () => {

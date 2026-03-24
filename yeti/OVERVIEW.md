@@ -290,9 +290,13 @@ than `startsWith` so it still matches when the Yeti visible header is
 prepended). Used by issue-worker to implement multi-phase plans sequentially.
 
 **`log.ts`** — Timestamped console logging with four levels: `debug`, `info`,
-`warn`, `error`. Errors also trigger notifications via `notify.ts`. All log calls capture
-output into the `job_logs` table via `AsyncLocalStorage`-based run context, so
-logs are associated with the job run that produced them.
+`warn`, `error`. Each level (except `error`) is gated by the `LOG_LEVEL` config
+setting — messages below the configured threshold are suppressed from both
+console output and DB capture. `error()` always executes regardless of level
+(it triggers notifications). Errors also trigger notifications via `notify.ts`.
+All log calls capture output into the `job_logs` table via
+`AsyncLocalStorage`-based run context, so logs are associated with the job run
+that produced them.
 
 **`error-reporter.ts`** — On error: logs to console (+ Discord via notify), then (with a
 30-minute per-fingerprint cooldown) either comments on an existing
@@ -605,6 +609,7 @@ defaults.
 | `schedules.mkdocsUpdateHour` | — | `4` (4 AM local time) |
 | `schedules.issueAuditorHour` | — | `5` (5 AM local time) |
 | `schedules.promptEvaluatorHour` | — | `0` (midnight local time) |
+| `logLevel` | `YETI_LOG_LEVEL` | `"debug"` (debug, info, warn, error) |
 | `logRetentionDays` | — | `14` |
 | `logRetentionPerJob` | — | `20` |
 | `discordBotToken` | `YETI_DISCORD_BOT_TOKEN` | *(empty — Discord disabled if unset)* |

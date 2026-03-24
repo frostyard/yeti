@@ -1,6 +1,6 @@
 import type { Theme } from "./layout.js";
 import { PAGE_CSS, escapeHtml, htmlOpenTag, buildNav, THEME_SCRIPT, siteTitle } from "./layout.js";
-import { getConfigForDisplay } from "../config.js";
+import { getConfigForDisplay, LOG_LEVELS } from "../config.js";
 import * as config from "../config.js";
 import { isOAuthConfigured } from "../oauth.js";
 
@@ -15,8 +15,10 @@ const TAB_LABELS: Record<TabId, string> = {
   security: "Security",
 };
 
-function isEnvOverridden(envVar: string): boolean {
-  return process.env[envVar] !== undefined && process.env[envVar] !== "";
+function isEnvOverridden(envVar: string, validator?: (value: string) => boolean): boolean {
+  const val = process.env[envVar];
+  if (val === undefined || val === "") return false;
+  return validator ? validator(val) : true;
 }
 
 export function buildConfigPage(saved: boolean, theme: Theme, username?: string | null, activeTab?: string): string {
@@ -24,7 +26,12 @@ export function buildConfigPage(saved: boolean, theme: Theme, username?: string 
 
   const tab: TabId = VALID_TABS.includes(activeTab as TabId) ? (activeTab as TabId) : "general";
 
+  const envValidators: Record<string, (v: string) => boolean> = {
+    logLevel: (v) => (LOG_LEVELS as readonly string[]).includes(v),
+  };
+
   const envMap: Record<string, string> = {
+    logLevel: "YETI_LOG_LEVEL",
     allowedRepos: "YETI_ALLOWED_REPOS",
     includeForks: "YETI_INCLUDE_FORKS",
     githubOwners: "YETI_GITHUB_OWNERS",
@@ -45,15 +52,18 @@ export function buildConfigPage(saved: boolean, theme: Theme, username?: string 
 
   function envNote(key: string): string {
     const envVar = envMap[key];
-    if (envVar && isEnvOverridden(envVar)) {
+    if (envVar && isEnvOverridden(envVar, envValidators[key])) {
       return `<div class="env-note">Set via environment variable ${escapeHtml(envVar)}</div>`;
+    }
+    if (envVar && process.env[envVar] && envValidators[key] && !envValidators[key](process.env[envVar]!)) {
+      return `<div class="env-note" style="color:var(--warn,#b58900)">⚠ ${escapeHtml(envVar)} has invalid value "${escapeHtml(process.env[envVar]!)}" — ignored</div>`;
     }
     return "";
   }
 
   function isDisabled(key: string): boolean {
     const envVar = envMap[key];
-    return !!(envVar && isEnvOverridden(envVar));
+    return !!(envVar && isEnvOverridden(envVar, envValidators[key]));
   }
 
   const intervals = cfg.intervals as Record<string, number>;
@@ -105,6 +115,13 @@ ${htmlOpenTag(theme)}
 
     <label for="logRetentionPerJob">Min Logs Kept Per Job</label>
     <input type="number" name="logRetentionPerJob" id="logRetentionPerJob" value="${Number(cfg.logRetentionPerJob)}" min="0">
+
+    <label for="logLevel">Log Level</label>
+    <select name="logLevel" id="logLevel"${isDisabled("logLevel") ? " disabled" : ""}>
+      ${LOG_LEVELS.map(l => `<option value="${l}"${cfg.logLevel === l ? " selected" : ""}>${l}</option>`).join("")}
+    </select>
+    ${envNote("logLevel")}
+    <div class="field-note">Minimum log level for console and stored logs. Default: debug.</div>
 
     <label for="queueScanIntervalMs">Queue Scan Interval (minutes)</label>
     <input type="number" name="queueScanIntervalMs" id="queueScanIntervalMs" value="${queueScanMinutes}" min="1">

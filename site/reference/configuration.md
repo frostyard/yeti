@@ -19,6 +19,7 @@ Changes to live-reloadable fields take effect without restarting the service. Ot
 | `port` | `number` | `9384` | `PORT` | No | HTTP dashboard port |
 | `authToken` | `string` | `""` | `YETI_AUTH_TOKEN` | Yes | Dashboard auth token (empty = no auth) |
 | `allowedRepos` | `string[] \| null` | `null` | `YETI_ALLOWED_REPOS` (comma-sep) | Yes | Repo allow-list. `null` means all repos under `githubOwners` are scanned |
+| `logLevel` | `"debug" \| "info" \| "warn" \| "error"` | `"debug"` | `YETI_LOG_LEVEL` | Yes | Minimum log level for console and stored logs |
 | `logRetentionDays` | `number` | `14` | -- | Yes | Delete logs older than N days |
 | `logRetentionPerJob` | `number` | `20` | -- | Yes | Max log runs to keep per job |
 | `includeForks` | `boolean` | `false` | `YETI_INCLUDE_FORKS` | Yes | Include forked repositories when scanning for work |
@@ -200,6 +201,7 @@ A more complete configuration with intervals, schedules, and integrations:
   "jobAi": {
     "plan-reviewer": { "backend": "copilot" }
   },
+  "logLevel": "debug",
   "logRetentionDays": 14,
   "logRetentionPerJob": 20
 }

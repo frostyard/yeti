@@ -1,7 +1,7 @@
 import http from "node:http";
 import crypto from "node:crypto";
 import { queueStatus, copilotQueueStatus, codexQueueStatus, cancelCurrentTask } from "./claude.js";
-import { SERVER_PORT, getConfigForDisplay, writeConfig, type ConfigFile } from "./config.js";
+import { SERVER_PORT, getConfigForDisplay, writeConfig, LOG_LEVELS, type ConfigFile } from "./config.js";
 import * as config from "./config.js";
 import { getQueueSnapshot, enrichQueueItemsWithPRStatus, mergePR, removeQueueItem, listAllOrgRepos, listRepos, type QueueCategory } from "./github.js";
 import { getRecentJobRuns, getRecentWorkItems, getDistinctJobNames, getJobRun, getJobRunLogs, getJobRunLogsSince, getLatestRunIdsByJob, getRunningTasks, getTasksByRunId, getWorkItemsForRuns, searchRunsByItem, getRunsForIssue, getLogsForRuns, getRecentCompletedTasks } from "./db.js";
@@ -371,6 +371,12 @@ async function handleRequest(req: http.IncomingMessage, res: http.ServerResponse
     if (params["logRetentionPerJob"] !== undefined) {
       const v = parseInt(params["logRetentionPerJob"], 10);
       if (v >= 0) updates.logRetentionPerJob = v;
+    }
+    if (params["logLevel"] !== undefined) {
+      const v = params["logLevel"];
+      if ((LOG_LEVELS as readonly string[]).includes(v)) {
+        updates.logLevel = v as ConfigFile["logLevel"];
+      }
     }
     if (params["queueScanIntervalMs"] !== undefined) {
       const v = parseInt(params["queueScanIntervalMs"], 10);

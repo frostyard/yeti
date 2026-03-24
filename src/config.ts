@@ -36,6 +36,9 @@ export const LEGACY_LABELS = new Set([
   "yeti-error",
 ]);
 
+export const LOG_LEVELS = ["debug", "info", "warn", "error"] as const;
+export type LogLevel = (typeof LOG_LEVELS)[number];
+
 export interface Repo {
   owner: string;
   name: string;
@@ -75,6 +78,7 @@ export interface ConfigFile {
     mkdocsUpdateHour?: number;
     promptEvaluatorHour?: number;
   };
+  logLevel?: LogLevel;
   logRetentionDays?: number;
   logRetentionPerJob?: number;
   pausedJobs?: string[];
@@ -191,6 +195,14 @@ function loadConfig() {
     ),
   );
 
+  const envLogLevel = process.env["YETI_LOG_LEVEL"];
+  const rawLogLevel = envLogLevel && (LOG_LEVELS as readonly string[]).includes(envLogLevel)
+    ? envLogLevel as LogLevel
+    : (LOG_LEVELS as readonly string[]).includes(file.logLevel as string)
+      ? file.logLevel as LogLevel
+      : "debug";
+  const logLevel: LogLevel = rawLogLevel;
+
   const logRetentionDays = file.logRetentionDays ?? 14;
   const logRetentionPerJob = file.logRetentionPerJob ?? 20;
   const pausedJobs = file.pausedJobs ?? [];
@@ -226,7 +238,7 @@ function loadConfig() {
 
   const webhookSecret = process.env["YETI_WEBHOOK_SECRET"] ?? file.webhookSecret ?? "";
 
-  return { githubOwners, selfRepo, port, intervals, schedules, logRetentionDays, logRetentionPerJob, discordBotToken, discordChannelId, discordAllowedUsers, authToken, maxClaudeWorkers, claudeTimeoutMs, maxCopilotWorkers, copilotTimeoutMs, maxCodexWorkers, codexTimeoutMs, pausedJobs, skippedItems, prioritizedItems, allowedRepos, includeForks, enabledJobs, reviewLoop, maxPlanRounds, jobAi, queueScanIntervalMs, githubAppId, githubAppInstallationId, githubAppPrivateKeyPath, githubAppClientId, githubAppClientSecret, externalUrl, webhookSecret };
+  return { githubOwners, selfRepo, port, intervals, schedules, logLevel, logRetentionDays, logRetentionPerJob, discordBotToken, discordChannelId, discordAllowedUsers, authToken, maxClaudeWorkers, claudeTimeoutMs, maxCopilotWorkers, copilotTimeoutMs, maxCodexWorkers, codexTimeoutMs, pausedJobs, skippedItems, prioritizedItems, allowedRepos, includeForks, enabledJobs, reviewLoop, maxPlanRounds, jobAi, queueScanIntervalMs, githubAppId, githubAppInstallationId, githubAppPrivateKeyPath, githubAppClientId, githubAppClientSecret, externalUrl, webhookSecret };
 }
 
 const config = loadConfig();
@@ -236,6 +248,7 @@ export let SELF_REPO = config.selfRepo;
 export const SERVER_PORT = config.port; // immutable — requires restart
 export let INTERVALS = config.intervals;
 export let SCHEDULES = config.schedules;
+export let LOG_LEVEL: LogLevel = config.logLevel;
 export let LOG_RETENTION_DAYS = config.logRetentionDays;
 export let LOG_RETENTION_PER_JOB = config.logRetentionPerJob;
 export let AUTH_TOKEN = config.authToken;
@@ -302,6 +315,7 @@ export function reloadConfig(): void {
   SELF_REPO = fresh.selfRepo;
   INTERVALS = fresh.intervals;
   SCHEDULES = fresh.schedules;
+  LOG_LEVEL = fresh.logLevel;
   LOG_RETENTION_DAYS = fresh.logRetentionDays;
   LOG_RETENTION_PER_JOB = fresh.logRetentionPerJob;
   AUTH_TOKEN = fresh.authToken;

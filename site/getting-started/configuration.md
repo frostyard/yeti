@@ -123,6 +123,7 @@ Most configuration changes take effect without restarting the service. When you 
 - `maxCodexWorkers`, `codexTimeoutMs`
 - `jobAi`
 - `includeForks`
+- `logLevel`
 - `logRetentionDays`, `logRetentionPerJob`
 - `queueScanIntervalMs`
 - `discordAllowedUsers`
