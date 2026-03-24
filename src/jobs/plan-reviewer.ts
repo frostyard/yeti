@@ -1,4 +1,4 @@
-import { LABELS, JOB_AI, type Repo } from "../config.js";
+import { LABELS, JOB_AI, REVIEW_LOOP, MAX_PLAN_ROUNDS, type Repo } from "../config.js";
 import * as gh from "../github.js";
 import { isRateLimited } from "../github.js";
 import * as claude from "../claude.js";
@@ -14,8 +14,9 @@ function buildReviewPrompt(
   fullName: string,
   issue: gh.Issue,
   planBody: string,
+  reviewLoop: boolean,
 ): string {
-  return [
+  const lines = [
     `You are reviewing an implementation plan for ${fullName}#${issue.number}.`,
     ``,
     `**Issue: ${issue.title}**`,
@@ -35,10 +36,43 @@ function buildReviewPrompt(
     `If the plan is solid, say so briefly. If it has issues, list them clearly.`,
     `Read yeti/OVERVIEW.md if it exists for codebase context.`,
     `Do NOT make code changes. Only produce your review as text output.`,
-  ].join("\n");
+  ];
+
+  if (reviewLoop) {
+    lines.push(
+      ``,
+      `End your review with exactly one of these lines on its own line:`,
+      `VERDICT: APPROVED`,
+      `VERDICT: NEEDS REVISION`,
+      ``,
+      `Do not include both. Use APPROVED only if the plan is solid enough to implement as-is.`,
+    );
+  }
+
+  return lines.join("\n");
 }
 
-async function processIssue(repo: Repo, issue: gh.Issue, planComment: gh.IssueComment): Promise<void> {
+function parseVerdict(output: string): "approved" | "needs-revision" {
+  const lines = output.trim().split("\n");
+  for (let i = lines.length - 1; i >= 0; i--) {
+    const line = lines[i].trim();
+    if (/^VERDICT:\s*APPROVED$/i.test(line)) return "approved";
+    if (/^VERDICT:\s*NEEDS\s+REVISION$/i.test(line)) return "needs-revision";
+  }
+  return "needs-revision";
+}
+
+function stripVerdictLine(output: string): string {
+  return output.replace(/\n?VERDICT:\s*(APPROVED|NEEDS\s+REVISION)\s*$/im, "").trim();
+}
+
+function countPlanRounds(comments: gh.IssueComment[]): number {
+  return comments.filter(
+    (c) => c.body.includes(REVIEW_HEADER) && gh.isYetiComment(c.body),
+  ).length;
+}
+
+async function processIssue(repo: Repo, issue: gh.Issue, planComment: gh.IssueComment, comments: gh.IssueComment[]): Promise<void> {
   const fullName = repo.fullName;
   log.info(`[plan-reviewer] Reviewing plan for ${fullName}#${issue.number}: ${issue.title}`);
 
@@ -51,7 +85,7 @@ async function processIssue(repo: Repo, issue: gh.Issue, planComment: gh.IssueCo
     db.updateTaskWorktree(taskId, wtPath, branchName);
 
     const aiOptions = JOB_AI["plan-reviewer"];
-    const prompt = buildReviewPrompt(fullName, issue, planComment.body);
+    const prompt = buildReviewPrompt(fullName, issue, planComment.body, REVIEW_LOOP);
 
     const reviewOutput = await claude.resolveEnqueue(aiOptions)(
       () => claude.runAI(prompt, wtPath!, aiOptions),
@@ -64,16 +98,40 @@ async function processIssue(repo: Repo, issue: gh.Issue, planComment: gh.IssueCo
       return;
     }
 
-    await gh.commentOnIssue(fullName, issue.number, `${REVIEW_HEADER}\n\n${reviewOutput}`);
+    const commentBody = REVIEW_LOOP ? stripVerdictLine(reviewOutput) : reviewOutput;
+    await gh.commentOnIssue(fullName, issue.number, `${REVIEW_HEADER}\n\n${commentBody}`);
     log.info(`[plan-reviewer] Posted review for ${fullName}#${issue.number}`);
     notify(`[plan-reviewer] Review posted for ${fullName}#${issue.number}\n${gh.issueUrl(fullName, issue.number)}`);
 
     // Mark plan comment as processed
     await gh.addReaction(fullName, planComment.id, "+1");
 
-    // Transition labels: remove Needs Plan Review, add Ready
-    await gh.removeLabel(fullName, issue.number, LABELS.needsPlanReview);
-    await gh.addLabel(fullName, issue.number, LABELS.ready);
+    if (REVIEW_LOOP) {
+      const verdict = parseVerdict(reviewOutput);
+      if (verdict === "approved") {
+        await gh.removeLabel(fullName, issue.number, LABELS.needsPlanReview);
+        await gh.addLabel(fullName, issue.number, LABELS.ready);
+      } else {
+        // +1 for the review we just posted
+        const completedRounds = countPlanRounds(comments) + 1;
+        if (completedRounds >= MAX_PLAN_ROUNDS) {
+          await gh.commentOnIssue(
+            fullName,
+            issue.number,
+            `⚠️ Maximum plan review rounds (${MAX_PLAN_ROUNDS}) reached. The plan may still need work — please review manually.`,
+          );
+          await gh.removeLabel(fullName, issue.number, LABELS.needsPlanReview);
+          await gh.addLabel(fullName, issue.number, LABELS.ready);
+        } else {
+          await gh.removeLabel(fullName, issue.number, LABELS.needsPlanReview);
+          await gh.addLabel(fullName, issue.number, LABELS.needsRefinement);
+        }
+      }
+    } else {
+      // Default behavior: always transition to Ready
+      await gh.removeLabel(fullName, issue.number, LABELS.needsPlanReview);
+      await gh.addLabel(fullName, issue.number, LABELS.ready);
+    }
 
     db.recordTaskComplete(taskId);
   } catch (err) {
@@ -134,7 +192,7 @@ export async function run(repos: Repo[]): Promise<void> {
         });
 
         tasks.push(
-          processIssue(repo, issue, planComment).catch((err) =>
+          processIssue(repo, issue, planComment, comments).catch((err) =>
             reportError("plan-reviewer:process-issue", `${repo.fullName}#${issue.number}`, err),
           ),
         );
