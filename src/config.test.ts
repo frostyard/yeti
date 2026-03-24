@@ -349,6 +349,66 @@ describe("config", () => {
     expect(display.githubAppClientSecret).toBe("****efgh");
   });
 
+  it("reviewLoop defaults to false and maxPlanRounds defaults to 3", async () => {
+    const mod = await import("./config.js");
+
+    fs.mkdirSync(path.dirname(mod.CONFIG_PATH), { recursive: true });
+    fs.writeFileSync(mod.CONFIG_PATH, JSON.stringify({}));
+
+    const display = mod.getConfigForDisplay();
+    expect(display.reviewLoop).toBe(false);
+    expect(display.maxPlanRounds).toBe(3);
+  });
+
+  it("reloadConfig updates REVIEW_LOOP and MAX_PLAN_ROUNDS", async () => {
+    const mod = await import("./config.js");
+
+    fs.mkdirSync(path.dirname(mod.CONFIG_PATH), { recursive: true });
+    fs.writeFileSync(mod.CONFIG_PATH, JSON.stringify({ reviewLoop: true, maxPlanRounds: 5 }));
+
+    mod.reloadConfig();
+
+    expect(mod.REVIEW_LOOP).toBe(true);
+    expect(mod.MAX_PLAN_ROUNDS).toBe(5);
+  });
+
+  it("writeConfig persists reviewLoop and maxPlanRounds", async () => {
+    const { writeConfig, CONFIG_PATH: cp } = await import("./config.js");
+
+    fs.mkdirSync(path.dirname(cp), { recursive: true });
+    fs.writeFileSync(cp, JSON.stringify({}));
+
+    writeConfig({ reviewLoop: true, maxPlanRounds: 4 });
+
+    const written = JSON.parse(fs.readFileSync(cp, "utf-8"));
+    expect(written.reviewLoop).toBe(true);
+    expect(written.maxPlanRounds).toBe(4);
+  });
+
+  it("maxPlanRounds falls back to 3 for non-numeric values", async () => {
+    const mod = await import("./config.js");
+
+    fs.mkdirSync(path.dirname(mod.CONFIG_PATH), { recursive: true });
+    fs.writeFileSync(mod.CONFIG_PATH, JSON.stringify({ maxPlanRounds: "not-a-number" }));
+
+    const display = mod.getConfigForDisplay();
+    expect(display.maxPlanRounds).toBe(3);
+  });
+
+  it("maxPlanRounds clamps values below 1 and floors floats", async () => {
+    const mod = await import("./config.js");
+
+    fs.mkdirSync(path.dirname(mod.CONFIG_PATH), { recursive: true });
+    fs.writeFileSync(mod.CONFIG_PATH, JSON.stringify({ maxPlanRounds: 0 }));
+
+    let display = mod.getConfigForDisplay();
+    expect(display.maxPlanRounds).toBe(3); // falls back to default
+
+    fs.writeFileSync(mod.CONFIG_PATH, JSON.stringify({ maxPlanRounds: 2.7 }));
+    display = mod.getConfigForDisplay();
+    expect(display.maxPlanRounds).toBe(2); // floored
+  });
+
   it("offConfigChange removes listener", async () => {
     const mod = await import("./config.js");
 
