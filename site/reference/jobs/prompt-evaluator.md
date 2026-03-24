@@ -10,6 +10,13 @@
 | Backend | Claude (configurable via `jobAi`) |
 | Config key | `schedules.promptEvaluatorHour` |
 
+!!! warning "Cost considerations"
+    Each prompt-evaluator run makes **11 AI calls** (test-input generation, variant generation,
+    8 A/B test runs, and a judge call). Running daily, this adds ~330 AI invocations per month
+    purely for prompt self-improvement — not productive work. Consider scheduling it less
+    frequently (e.g. weekly) via `schedules.promptEvaluatorHour` if AI usage costs are a concern,
+    or disable it entirely if you don't need automated prompt improvement.
+
 ## What it does
 
 The prompt-evaluator is a self-improvement mechanism for Yeti's plan-producing prompts. It reads the source code of registered prompt functions, generates an improved variant via AI, A/B tests both the current and variant prompts against synthetic GitHub issues, has AI judge the outputs, and files a GitHub issue (labeled `prompt-improvement`) when the variant wins convincingly.
