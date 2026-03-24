@@ -236,7 +236,7 @@ ${htmlOpenTag(theme)}
           btn.textContent = 'Deprioritise';
           btn.className = 'prio-btn deprio';
           btn.disabled = false;
-          btn.setAttribute('onclick', "deprioritizeItem('" + repo + "'," + number + ",this)");
+          btn.onclick = function() { deprioritizeItem(repo, number, btn); };
         }
       }).catch(function() {
         btn.textContent = 'Error';
@@ -259,7 +259,7 @@ ${htmlOpenTag(theme)}
           btn.textContent = 'Prioritise';
           btn.className = 'prio-btn';
           btn.disabled = false;
-          btn.setAttribute('onclick', "prioritizeItem('" + repo + "'," + number + ",this)");
+          btn.onclick = function() { prioritizeItem(repo, number, btn); };
         }
       }).catch(function() {
         btn.textContent = 'Error';
