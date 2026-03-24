@@ -18,6 +18,7 @@ import { buildJobsPage, type JobInfo } from "./pages/jobs.js";
 import { buildLoginPage } from "./pages/login.js";
 import { buildReposPage } from "./pages/repos.js";
 import { isOAuthConfigured, getAuthorizationUrl, exchangeCodeForUser, createSessionCookie, verifySessionCookie } from "./oauth.js";
+import { verifyWebhookSignature, handleWebhookEvent } from "./webhooks.js";
 
 // Re-export for backwards compatibility with tests and other consumers
 export { formatUptime, formatRelativeTime } from "./pages/layout.js";
@@ -112,6 +113,24 @@ function readBody(req: http.IncomingMessage, maxBytes = 1024 * 1024): Promise<st
   });
 }
 
+function readRawBody(req: http.IncomingMessage, maxBytes = 1024 * 1024): Promise<Buffer> {
+  return new Promise((resolve, reject) => {
+    const chunks: Buffer[] = [];
+    let totalBytes = 0;
+    req.on("data", (chunk: Buffer) => {
+      totalBytes += chunk.length;
+      if (totalBytes > maxBytes) {
+        req.destroy();
+        reject(new Error("Request body too large"));
+        return;
+      }
+      chunks.push(chunk);
+    });
+    req.on("end", () => resolve(Buffer.concat(chunks)));
+    req.on("error", reject);
+  });
+}
+
 function parseFormBody(body: string): Record<string, string> {
   const params: Record<string, string> = {};
   for (const pair of body.split("&")) {
@@ -155,6 +174,39 @@ async function handleRequest(req: http.IncomingMessage, res: http.ServerResponse
   const theme = getTheme(req);
 
   // ── POST routes ──
+
+  // Webhook endpoint — HMAC auth only, no OAuth/token required
+  if (req.method === "POST" && req.url === "/webhooks/github") {
+    if (!config.WEBHOOK_SECRET) {
+      res.writeHead(404).end();
+      return;
+    }
+    const rawBody = await readRawBody(req);
+    const signature = req.headers["x-hub-signature-256"] as string | undefined;
+    if (!signature || !verifyWebhookSignature(config.WEBHOOK_SECRET, rawBody, signature)) {
+      res.writeHead(401, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ error: "invalid signature" }));
+      return;
+    }
+    const event = req.headers["x-github-event"] as string | undefined;
+    if (!event) {
+      res.writeHead(400, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ error: "missing X-GitHub-Event header" }));
+      return;
+    }
+    let payload: unknown;
+    try {
+      payload = JSON.parse(rawBody.toString("utf-8"));
+    } catch {
+      res.writeHead(400, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ error: "invalid JSON" }));
+      return;
+    }
+    const result = handleWebhookEvent(event, payload, scheduler);
+    res.writeHead(200, { "Content-Type": "application/json" });
+    res.end(JSON.stringify({ result: result.action }));
+    return;
+  }
 
   if (req.method === "POST" && req.url === "/login") {
     const body = await readBody(req);

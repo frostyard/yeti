@@ -96,7 +96,8 @@ if [[ ! -f "$CONFIG_FILE" ]]; then
   "githubAppPrivateKeyPath": "",
   "githubAppClientId": "",
   "githubAppClientSecret": "",
-  "externalUrl": ""
+  "externalUrl": "",
+  "webhookSecret": ""
 }
 CONF
   chmod 600 "$CONFIG_FILE"
@@ -138,6 +139,9 @@ if [[ ! -f "$ENV_FILE" ]]; then
 # YETI_GITHUB_APP_CLIENT_ID=
 # YETI_GITHUB_APP_CLIENT_SECRET=
 # YETI_EXTERNAL_URL=
+
+# Webhooks (optional — enables near-real-time job triggers)
+# YETI_WEBHOOK_SECRET=
 CONF
   chmod 600 "$ENV_FILE"
   log "Created $ENV_FILE — edit it to set environment overrides"

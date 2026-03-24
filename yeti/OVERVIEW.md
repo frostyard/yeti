@@ -1,7 +1,8 @@
 # Yeti — Overview
 
 Yeti is a self-hosted
-GitHub automation service. It polls GitHub repositories on configurable timers,
+GitHub automation service. It polls GitHub repositories on configurable timers
+(and optionally receives GitHub webhooks for near-real-time triggers),
 identifies work items via comment analysis, reactions, and PR state, and
 delegates tasks to the Claude CLI in isolated git worktrees. It runs as a
 Linux systemd service.

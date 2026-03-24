@@ -4,6 +4,7 @@ import http from "node:http";
 vi.mock("./config.js", () => ({
   SERVER_PORT: 0,
   AUTH_TOKEN: "",
+  WEBHOOK_SECRET: "",
   GITHUB_OWNERS: ["owner1"],
   GITHUB_APP_CLIENT_ID: "",
   GITHUB_APP_CLIENT_SECRET: "",
@@ -34,6 +35,11 @@ vi.mock("./config.js", () => ({
   ENABLED_JOBS: ["issue-worker", "ci-fixer"],
   ALLOWED_REPOS: ["repo1", "repo2"],
   JOB_AI: {},
+}));
+
+vi.mock("./webhooks.js", () => ({
+  verifyWebhookSignature: vi.fn().mockReturnValue(true),
+  handleWebhookEvent: vi.fn().mockReturnValue({ action: "ignored" }),
 }));
 
 vi.mock("./oauth.js", () => ({
@@ -1649,5 +1655,125 @@ describe("OAuth session auth", () => {
   it("GET /login remains public when OAuth is configured", async () => {
     const res = await request(server, "GET", "/login");
     expect(res.status).toBe(200);
+  });
+});
+
+describe("Webhook endpoint", () => {
+  let server: http.Server;
+
+  beforeEach(async () => {
+    const configMod = await import("./config.js");
+    (configMod as Record<string, unknown>).WEBHOOK_SECRET = "test-webhook-secret";
+    server = createServer(mockScheduler());
+    await new Promise<void>((resolve) => {
+      if (server.listening) resolve();
+      else server.on("listening", resolve);
+    });
+  });
+
+  afterEach(async () => {
+    const configMod = await import("./config.js");
+    (configMod as Record<string, unknown>).WEBHOOK_SECRET = "";
+    await new Promise<void>((resolve, reject) => {
+      server.close((err) => (err ? reject(err) : resolve()));
+    });
+  });
+
+  it("POST /webhooks/github returns 200 on valid webhook", async () => {
+    const res = await request(server, "POST", "/webhooks/github", {
+      headers: {
+        "x-hub-signature-256": "sha256=test",
+        "x-github-event": "ping",
+        "content-type": "application/json",
+      },
+      body: "{}",
+    });
+    expect(res.status).toBe(200);
+    const json = JSON.parse(res.body);
+    expect(json.result).toBeDefined();
+  });
+
+  it("POST /webhooks/github returns 401 on invalid signature", async () => {
+    const { verifyWebhookSignature } = await import("./webhooks.js");
+    (verifyWebhookSignature as ReturnType<typeof vi.fn>).mockReturnValueOnce(false);
+
+    const res = await request(server, "POST", "/webhooks/github", {
+      headers: {
+        "x-hub-signature-256": "sha256=invalid",
+        "x-github-event": "ping",
+        "content-type": "application/json",
+      },
+      body: "{}",
+    });
+    expect(res.status).toBe(401);
+    expect(JSON.parse(res.body).error).toBe("invalid signature");
+  });
+
+  it("POST /webhooks/github returns 400 when X-GitHub-Event header missing", async () => {
+    const res = await request(server, "POST", "/webhooks/github", {
+      headers: {
+        "x-hub-signature-256": "sha256=test",
+        "content-type": "application/json",
+      },
+      body: "{}",
+    });
+    expect(res.status).toBe(400);
+    expect(JSON.parse(res.body).error).toBe("missing X-GitHub-Event header");
+  });
+
+  it("POST /webhooks/github returns 400 on malformed JSON", async () => {
+    const res = await request(server, "POST", "/webhooks/github", {
+      headers: {
+        "x-hub-signature-256": "sha256=test",
+        "x-github-event": "push",
+        "content-type": "application/json",
+      },
+      body: "not json{{{",
+    });
+    expect(res.status).toBe(400);
+    expect(JSON.parse(res.body).error).toBe("invalid JSON");
+  });
+
+  it("POST /webhooks/github returns 401 when no signature provided", async () => {
+    const res = await request(server, "POST", "/webhooks/github", {
+      headers: {
+        "x-github-event": "ping",
+        "content-type": "application/json",
+      },
+      body: "{}",
+    });
+    expect(res.status).toBe(401);
+  });
+});
+
+describe("Webhook endpoint disabled", () => {
+  let server: http.Server;
+
+  beforeEach(async () => {
+    const configMod = await import("./config.js");
+    (configMod as Record<string, unknown>).WEBHOOK_SECRET = "";
+    server = createServer(mockScheduler());
+    await new Promise<void>((resolve) => {
+      if (server.listening) resolve();
+      else server.on("listening", resolve);
+    });
+  });
+
+  afterEach(async () => {
+    await new Promise<void>((resolve, reject) => {
+      server.close((err) => (err ? reject(err) : resolve()));
+    });
+  });
+
+  it("POST /webhooks/github returns 404 when webhook secret not configured", async () => {
+    const res = await request(server, "POST", "/webhooks/github", {
+      headers: {
+        "x-hub-signature-256": "sha256=test",
+        "x-github-event": "ping",
+        "content-type": "application/json",
+      },
+      body: "{}",
+    });
+    expect(res.status).toBe(404);
   });
 });

@@ -237,6 +237,19 @@ export function clearQueueCache(): void {
 
 const SCANNER_CATEGORIES: QueueCategory[] = ["needs-refinement", "needs-plan-review", "refined", "ready"];
 
+export function removeQueueCacheEntry(category: QueueCategory, repo: string, number: number): void {
+  queueCache.delete(`${category}:${repo}:${number}`);
+}
+
+export function updateQueueItemPriority(repo: string, number: number, prioritized: boolean): void {
+  const suffix = `:${repo}:${number}`;
+  for (const [key, entry] of queueCache) {
+    if (key.endsWith(suffix)) {
+      entry.item.prioritized = prioritized;
+    }
+  }
+}
+
 export function clearQueueCacheByCategories(categories: QueueCategory[]): void {
   const catSet = new Set(categories);
   for (const key of queueCache.keys()) {
@@ -247,7 +260,7 @@ export function clearQueueCacheByCategories(categories: QueueCategory[]): void {
 
 let scanning = false;
 
-const LABEL_TO_CATEGORY: Record<string, QueueCategory> = {
+export const LABEL_TO_CATEGORY: Record<string, QueueCategory> = {
   [LABELS.needsRefinement]: "needs-refinement",
   [LABELS.needsPlanReview]: "needs-plan-review",
   [LABELS.refined]: "refined",
