@@ -44,7 +44,6 @@ const BACKENDS: Record<AiBackend, BackendConfig> = {
 };
 
 // ── Bounded concurrent queue ──
-// Runs up to MAX_CLAUDE_WORKERS claude processes in parallel.
 
 type QueuedTask = {
   fn: () => Promise<unknown>;
@@ -53,151 +52,94 @@ type QueuedTask = {
   priority: boolean;
 };
 
-const queue: QueuedTask[] = [];
-let activeCount = 0;
+class BoundedQueue {
+  private readonly queue: QueuedTask[] = [];
+  private activeCount = 0;
 
-function drain(): void {
-  while (queue.length > 0 && activeCount < MAX_CLAUDE_WORKERS) {
-    const idx = queue.findIndex((t) => t.priority);
-    const task = idx >= 0 ? queue.splice(idx, 1)[0] : queue.shift()!;
-    activeCount++;
-    (async () => {
-      try {
-        const result = await task.fn();
-        task.resolve(result);
-      } catch (err) {
-        task.reject(err);
-      } finally {
-        activeCount--;
-        drain();
-      }
-    })();
+  constructor(
+    private readonly maxWorkers: () => number,
+    private readonly name: string,
+  ) {}
+
+  private drain(): void {
+    while (this.queue.length > 0 && this.activeCount < this.maxWorkers()) {
+      const idx = this.queue.findIndex((t) => t.priority);
+      const task = idx >= 0 ? this.queue.splice(idx, 1)[0] : this.queue.shift()!;
+      this.activeCount++;
+      (async () => {
+        try {
+          const result = await task.fn();
+          task.resolve(result);
+        } catch (err) {
+          task.reject(err);
+        } finally {
+          this.activeCount--;
+          this.drain();
+        }
+      })();
+    }
+  }
+
+  status(): { pending: number; active: number } {
+    return { pending: this.queue.length, active: this.activeCount };
+  }
+
+  enqueue<T>(fn: () => Promise<T>, priority = false): Promise<T> {
+    if (isShuttingDown()) {
+      return Promise.reject(new ShutdownError("Shutting down — task not started"));
+    }
+    return new Promise<T>((resolve, reject) => {
+      this.queue.push({ fn, resolve: resolve as (v: unknown) => void, reject, priority });
+      this.drain();
+    });
+  }
+
+  cancel(): void {
+    let count = 0;
+    while (this.queue.length > 0) {
+      const task = this.queue.shift()!;
+      task.reject(new ShutdownError("Shutting down — task cancelled"));
+      count++;
+    }
+    if (count > 0) log.info(`Cancelled ${count} queued ${this.name} task(s)`);
   }
 }
 
+const claudeQueue = new BoundedQueue(() => MAX_CLAUDE_WORKERS, "claude");
+const copilotQueue = new BoundedQueue(() => MAX_COPILOT_WORKERS, "copilot");
+const codexQueue = new BoundedQueue(() => MAX_CODEX_WORKERS, "codex");
+
 export function queueStatus(): { pending: number; active: number } {
-  return { pending: queue.length, active: activeCount };
+  return claudeQueue.status();
 }
 
 export function enqueue<T>(fn: () => Promise<T>, priority = false): Promise<T> {
-  if (isShuttingDown()) {
-    return Promise.reject(new ShutdownError("Shutting down — task not started"));
-  }
-  return new Promise<T>((resolve, reject) => {
-    queue.push({ fn, resolve: resolve as (v: unknown) => void, reject, priority });
-    drain();
-  });
+  return claudeQueue.enqueue(fn, priority);
 }
 
 export function cancelQueuedTasks(): void {
-  let count = 0;
-  while (queue.length > 0) {
-    const task = queue.shift()!;
-    task.reject(new ShutdownError("Shutting down — task cancelled"));
-    count++;
-  }
-  if (count > 0) log.info(`Cancelled ${count} queued task(s)`);
-  cancelCopilotQueuedTasks();
-  cancelCodexQueuedTasks();
-}
-
-// ── Copilot queue (separate from Claude queue) ──
-
-const copilotQueue: QueuedTask[] = [];
-let copilotActiveCount = 0;
-
-function drainCopilot(): void {
-  while (copilotQueue.length > 0 && copilotActiveCount < MAX_COPILOT_WORKERS) {
-    const idx = copilotQueue.findIndex((t) => t.priority);
-    const task = idx >= 0 ? copilotQueue.splice(idx, 1)[0] : copilotQueue.shift()!;
-    copilotActiveCount++;
-    (async () => {
-      try {
-        const result = await task.fn();
-        task.resolve(result);
-      } catch (err) {
-        task.reject(err);
-      } finally {
-        copilotActiveCount--;
-        drainCopilot();
-      }
-    })();
-  }
+  claudeQueue.cancel();
+  copilotQueue.cancel();
+  codexQueue.cancel();
 }
 
 export function copilotQueueStatus(): { pending: number; active: number } {
-  return { pending: copilotQueue.length, active: copilotActiveCount };
+  return copilotQueue.status();
 }
 
 export function enqueueCopilot<T>(fn: () => Promise<T>, priority = false): Promise<T> {
-  if (isShuttingDown()) {
-    return Promise.reject(new ShutdownError("Shutting down — task not started"));
-  }
-  return new Promise<T>((resolve, reject) => {
-    copilotQueue.push({ fn, resolve: resolve as (v: unknown) => void, reject, priority });
-    drainCopilot();
-  });
-}
-
-function cancelCopilotQueuedTasks(): void {
-  let count = 0;
-  while (copilotQueue.length > 0) {
-    const task = copilotQueue.shift()!;
-    task.reject(new ShutdownError("Shutting down — task cancelled"));
-    count++;
-  }
-  if (count > 0) log.info(`Cancelled ${count} queued copilot task(s)`);
-}
-
-// ── Codex queue (separate from Claude and Copilot queues) ──
-
-const codexQueue: QueuedTask[] = [];
-let codexActiveCount = 0;
-
-function drainCodex(): void {
-  while (codexQueue.length > 0 && codexActiveCount < MAX_CODEX_WORKERS) {
-    const idx = codexQueue.findIndex((t) => t.priority);
-    const task = idx >= 0 ? codexQueue.splice(idx, 1)[0] : codexQueue.shift()!;
-    codexActiveCount++;
-    (async () => {
-      try {
-        const result = await task.fn();
-        task.resolve(result);
-      } catch (err) {
-        task.reject(err);
-      } finally {
-        codexActiveCount--;
-        drainCodex();
-      }
-    })();
-  }
+  return copilotQueue.enqueue(fn, priority);
 }
 
 export function codexQueueStatus(): { pending: number; active: number } {
-  return { pending: codexQueue.length, active: codexActiveCount };
+  return codexQueue.status();
 }
 
 export function enqueueCodex<T>(fn: () => Promise<T>, priority = false): Promise<T> {
-  if (isShuttingDown()) {
-    return Promise.reject(new ShutdownError("Shutting down — task not started"));
-  }
   if (MAX_CODEX_WORKERS <= 0) {
     return Promise.reject(new Error("Codex backend is disabled (maxCodexWorkers is 0)"));
   }
-  return new Promise<T>((resolve, reject) => {
-    codexQueue.push({ fn, resolve: resolve as (v: unknown) => void, reject, priority });
-    drainCodex();
-  });
-}
-
-function cancelCodexQueuedTasks(): void {
-  let count = 0;
-  while (codexQueue.length > 0) {
-    const task = codexQueue.shift()!;
-    task.reject(new ShutdownError("Shutting down — task cancelled"));
-    count++;
-  }
-  if (count > 0) log.info(`Cancelled ${count} queued codex task(s)`);
+  return codexQueue.enqueue(fn, priority);
 }
 
 /** Select the correct enqueue function based on the AI backend in options. */
