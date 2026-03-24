@@ -1,5 +1,5 @@
 import { Client, GatewayIntentBits, type Message, type TextChannel } from "discord.js";
-import { DISCORD_BOT_TOKEN, DISCORD_CHANNEL_ID, DISCORD_ALLOWED_USERS, GITHUB_OWNERS, JOB_AI } from "./config.js";
+import { DISCORD_BOT_TOKEN, DISCORD_CHANNEL_ID, DISCORD_ALLOWED_USERS, GITHUB_OWNERS, JOB_AI, LABELS } from "./config.js";
 import * as log from "./log.js";
 import * as gh from "./github.js";
 import * as db from "./db.js";
@@ -284,7 +284,7 @@ async function handleCommand(command: string, args: string[], message: Message):
         await message.reply(`Unknown repo: **${args[0].split("#")[0]}**`);
         return;
       }
-      await gh.addLabel(ref.repo, ref.number, "Refined");
+      await gh.addLabel(ref.repo, ref.number, LABELS.refined);
       await message.reply(`Labeled **${ref.repo}#${ref.number}** as Refined`);
       break;
     }
