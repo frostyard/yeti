@@ -34,6 +34,12 @@ Three modes:
 
 - Creates a worktree on branch `yeti/plan-<N>-<hex4>`
 - Asks Claude for a fresh implementation plan
+- **Clarifying questions**: Before planning, Claude evaluates whether the issue
+  provides enough detail. If the issue is underspecified (ambiguous behavior,
+  unclear scope, missing acceptance criteria), Claude outputs a
+  `### Clarifying Questions` section with targeted questions instead of guessing.
+  The user responds as a comment on the issue, and the existing refinement loop
+  incorporates their answers into a focused plan on the next cycle.
 - Posts the plan as a comment prefixed with `## Implementation Plan`
 - If `plan-reviewer` is in `enabledJobs`: adds `Needs Plan Review` label (triggers adversarial review)
 - Otherwise: adds the `Ready` label (signals "Yeti is done, your turn")
