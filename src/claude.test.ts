@@ -40,7 +40,7 @@ vi.mock("node:fs", () => ({
   },
 }));
 
-import { enqueue, queueStatus, randomSuffix, datestamp, hasNewCommits, hasTreeDiff, generatePRDescription, generateDocsPRDescription, regeneratePRDescription, runClaude, cancelCurrentTask, cancelQueuedTasks, createWorktree, createWorktreeFromBranch, pushBranch, ensureClone, ClaudeTimeoutError, runAI, copilotQueueStatus, enqueueCopilot, codexQueueStatus, enqueueCodex, AiTimeoutError, resolveEnqueue } from "./claude.js";
+import { enqueue, queueStatus, randomSuffix, datestamp, hasNewCommits, hasTreeDiff, generatePRDescription, generateDocsPRDescription, regeneratePRDescription, cancelCurrentTask, cancelQueuedTasks, createWorktree, createWorktreeFromBranch, pushBranch, ensureClone, ClaudeTimeoutError, runAI, copilotQueueStatus, enqueueCopilot, codexQueueStatus, enqueueCodex, AiTimeoutError, resolveEnqueue } from "./claude.js";
 import { ShutdownError } from "./shutdown.js";
 import * as shutdown from "./shutdown.js";
 import fs from "node:fs";
@@ -230,7 +230,7 @@ describe("hasTreeDiff", () => {
   });
 });
 
-describe("runClaude", () => {
+describe("runAI", () => {
   afterEach(() => {
     mockShuttingDown = false;
   });
@@ -249,7 +249,7 @@ describe("runClaude", () => {
 
     mockSpawn.mockReturnValue(child as any);
 
-    const promise = runClaude("test prompt", "/tmp");
+    const promise = runAI("test prompt", "/tmp");
 
     stdoutEmitter.emit("data", Buffer.from("output text"));
     child.emit("close", 0, null);
@@ -274,12 +274,12 @@ describe("runClaude", () => {
 
     mockSpawn.mockReturnValue(child as any);
 
-    const promise = runClaude("test", "/tmp");
+    const promise = runAI("test", "/tmp");
     stdoutEmitter.emit("data", Buffer.from("partial output"));
     stderrEmitter.emit("data", Buffer.from("error msg"));
     child.emit("close", 1, null);
 
-    await expect(promise).rejects.toThrow("claude exited with code 1: error msg");
+    await expect(promise).rejects.toThrow("Claude exited with code 1: error msg");
   });
 
   it("rejects on spawn error", async () => {
@@ -296,10 +296,10 @@ describe("runClaude", () => {
 
     mockSpawn.mockReturnValue(child as any);
 
-    const promise = runClaude("test", "/tmp");
+    const promise = runAI("test", "/tmp");
     child.emit("error", new Error("spawn failed"));
 
-    await expect(promise).rejects.toThrow("Failed to spawn claude");
+    await expect(promise).rejects.toThrow("Failed to spawn Claude");
   });
 
   it("rejects with cancellation error when cancelCurrentTask is called", async () => {
@@ -318,7 +318,7 @@ describe("runClaude", () => {
 
     mockSpawn.mockReturnValue(child as any);
 
-    const promise = runClaude("test prompt", "/tmp");
+    const promise = runAI("test prompt", "/tmp");
 
     // Cancel while running
     const cancelled = cancelCurrentTask();
@@ -347,7 +347,7 @@ describe("runClaude", () => {
 
     mockSpawn.mockReturnValue(child as any);
 
-    const promise = runClaude("test", "/tmp");
+    const promise = runAI("test", "/tmp");
     child.emit("close", null, "SIGTERM");
 
     await expect(promise).rejects.toThrow("Task cancelled — shutting down");
@@ -369,11 +369,11 @@ describe("runClaude", () => {
 
     mockSpawn.mockReturnValue(child as any);
 
-    const promise = runClaude("test", "/tmp");
+    const promise = runAI("test", "/tmp");
     stderrEmitter.emit("data", Buffer.from("killed"));
     child.emit("close", null, "SIGKILL");
 
-    await expect(promise).rejects.toThrow("claude was killed by signal SIGKILL");
+    await expect(promise).rejects.toThrow("Claude was killed by signal SIGKILL");
   });
 
   it("rejects when killed by signal (not via cancelCurrentTask)", async () => {
@@ -390,12 +390,12 @@ describe("runClaude", () => {
 
     mockSpawn.mockReturnValue(child as any);
 
-    const promise = runClaude("test", "/tmp");
+    const promise = runAI("test", "/tmp");
     stdoutEmitter.emit("data", Buffer.from("partial"));
     stderrEmitter.emit("data", Buffer.from("some error"));
     child.emit("close", null, "SIGTERM");
 
-    await expect(promise).rejects.toThrow("claude was killed by signal SIGTERM");
+    await expect(promise).rejects.toThrow("Claude was killed by signal SIGTERM");
   });
 
   it("cancelCurrentTask returns false when no process is active", () => {
@@ -421,7 +421,7 @@ describe("runClaude", () => {
 
       mockSpawn.mockReturnValue(child as any);
 
-      const promise = runClaude("test prompt", "/tmp/test-cwd");
+      const promise = runAI("test prompt", "/tmp/test-cwd");
 
       // Emit some output before timeout
       stdoutEmitter.emit("data", Buffer.from("partial work output"));
@@ -465,7 +465,7 @@ describe("generatePRDescription", () => {
       return undefined as any;
     });
 
-    // Mock runClaude (via spawn)
+    // Mock runAI (via spawn)
     const child = new EventEmitter() as ChildProcess & EventEmitter;
     const stdoutEmitter = new EventEmitter();
     const stderrEmitter = new EventEmitter();
@@ -479,7 +479,7 @@ describe("generatePRDescription", () => {
       body: "Fix something",
     });
 
-    // Let the enqueue/runClaude call propagate
+    // Let the enqueue/runAI call propagate
     await vi.advanceTimersByTimeAsync(0);
 
     stdoutEmitter.emit("data", Buffer.from("## Summary\nFixed the thing"));
