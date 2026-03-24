@@ -139,7 +139,7 @@ describe("generateJWT", () => {
     const payload = JSON.parse(Buffer.from(parts[1], "base64url").toString());
 
     const now = Math.floor(Date.now() / 1000);
-    expect(payload.iss).toBe("12345");
+    expect(payload.iss).toBe(12345); // must be numeric, not string
     expect(payload.iat).toBe(now - 30);
     expect(payload.exp).toBe(now + 600);
 
