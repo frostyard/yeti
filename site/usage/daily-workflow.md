@@ -24,6 +24,8 @@ Within the next polling interval, Yeti posts an **## Implementation Plan** comme
 
 If `plan-reviewer` is enabled, Yeti also posts a **## Plan Review** --- an adversarial critique of its own plan. Think of it as a second opinion that arrives before you even ask.
 
+If `reviewLoop` is enabled, the reviewer can automatically send the plan back for re-refinement (up to `maxPlanRounds` times) before it reaches you. You may see multiple plan→review rounds in the comment history.
+
 Yeti adds the **Ready** label. The trail is yours now.
 
 ### 4. You review the plan

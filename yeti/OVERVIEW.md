@@ -372,7 +372,7 @@ not labels. Six labels are used:
 ```
 Issues:
   Needs Refinement label →  (refiner posts plan)         →  Needs Plan Review added (if plan-reviewer enabled) or Ready added
-  Needs Plan Review label → (plan-reviewer critiques)    →  Needs Plan Review removed, Ready added
+  Needs Plan Review label → (plan-reviewer critiques)    →  Ready added (default) or Needs Refinement (if reviewLoop + needs-revision + under maxPlanRounds)
   Unreacted feedback     →  (refiner refines plan)       →  Needs Plan Review or Ready label re-added
   Open PR + follow-up Q  →  (refiner posts response)     →  👍 reactions added (no label changes)
   Refined label          →  (worker creates PR)          →  Refined removed, Ready removed, In Review added
@@ -629,6 +629,8 @@ defaults.
 | `allowedRepos` | `YETI_ALLOWED_REPOS` | `null` (all repos) |
 | `prioritizedItems` | — | `[]` (array of `{repo, number}` processed first) |
 | `queueScanIntervalMs` | — | `300000` (5 min — how often the dashboard queue refreshes from GitHub labels; infrastructure, always runs) |
+| `reviewLoop` | — | `false` (when true, plan-reviewer can send plans back to issue-refiner for re-refinement) |
+| `maxPlanRounds` | — | `3` (max plan→review cycles before falling through to human review; minimum 1) |
 
 ### enabledJobs
 
