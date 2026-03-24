@@ -528,6 +528,30 @@ describe("HTTP server", () => {
     expect(res.body).toContain("Minimum log level");
   });
 
+  it("GET /config does not disable logLevel dropdown when YETI_LOG_LEVEL is invalid", async () => {
+    process.env["YETI_LOG_LEVEL"] = "banana";
+    try {
+      const res = await request(server, "GET", "/config");
+      expect(res.status).toBe(200);
+      expect(res.body).not.toContain('name="logLevel" id="logLevel" disabled');
+      expect(res.body).toContain("invalid value");
+    } finally {
+      delete process.env["YETI_LOG_LEVEL"];
+    }
+  });
+
+  it("GET /config disables logLevel dropdown when YETI_LOG_LEVEL is valid", async () => {
+    process.env["YETI_LOG_LEVEL"] = "warn";
+    try {
+      const res = await request(server, "GET", "/config");
+      expect(res.status).toBe(200);
+      expect(res.body).toContain('name="logLevel" id="logLevel" disabled');
+      expect(res.body).toContain("Set via environment variable YETI_LOG_LEVEL");
+    } finally {
+      delete process.env["YETI_LOG_LEVEL"];
+    }
+  });
+
   it("POST /config with valid logLevel persists it", async () => {
     const { writeConfig: wc } = await import("./config.js");
     await request(server, "POST", "/config", {

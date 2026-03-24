@@ -15,14 +15,20 @@ const TAB_LABELS: Record<TabId, string> = {
   security: "Security",
 };
 
-function isEnvOverridden(envVar: string): boolean {
-  return process.env[envVar] !== undefined && process.env[envVar] !== "";
+function isEnvOverridden(envVar: string, validator?: (value: string) => boolean): boolean {
+  const val = process.env[envVar];
+  if (val === undefined || val === "") return false;
+  return validator ? validator(val) : true;
 }
 
 export function buildConfigPage(saved: boolean, theme: Theme, username?: string | null, activeTab?: string): string {
   const cfg = getConfigForDisplay();
 
   const tab: TabId = VALID_TABS.includes(activeTab as TabId) ? (activeTab as TabId) : "general";
+
+  const envValidators: Record<string, (v: string) => boolean> = {
+    logLevel: (v) => (LOG_LEVELS as readonly string[]).includes(v),
+  };
 
   const envMap: Record<string, string> = {
     logLevel: "YETI_LOG_LEVEL",
@@ -46,15 +52,18 @@ export function buildConfigPage(saved: boolean, theme: Theme, username?: string 
 
   function envNote(key: string): string {
     const envVar = envMap[key];
-    if (envVar && isEnvOverridden(envVar)) {
+    if (envVar && isEnvOverridden(envVar, envValidators[key])) {
       return `<div class="env-note">Set via environment variable ${escapeHtml(envVar)}</div>`;
+    }
+    if (envVar && process.env[envVar] && envValidators[key] && !envValidators[key](process.env[envVar]!)) {
+      return `<div class="env-note" style="color:var(--warn,#b58900)">⚠ ${escapeHtml(envVar)} has invalid value "${escapeHtml(process.env[envVar]!)}" — ignored</div>`;
     }
     return "";
   }
 
   function isDisabled(key: string): boolean {
     const envVar = envMap[key];
-    return !!(envVar && isEnvOverridden(envVar));
+    return !!(envVar && isEnvOverridden(envVar, envValidators[key]));
   }
 
   const intervals = cfg.intervals as Record<string, number>;
