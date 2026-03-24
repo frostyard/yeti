@@ -94,4 +94,6 @@ systemctl status yeti-updater.timer
 
 Yeti is running, but it will not do anything useful until you configure which jobs to enable and which repositories to watch.
 
+If you use branch protection rules that require PR reviews, set up a [GitHub App](github-app.md) so Yeti gets a separate bot identity and its PRs can be approved by you.
+
 [Configure Yeti](configuration.md){ .md-button .md-button--primary }
