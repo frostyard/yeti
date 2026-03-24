@@ -140,13 +140,43 @@ interface Judgment {
   reasoning: string;
 }
 
+function isScoreValue(value: unknown): value is number {
+  return (
+    typeof value === "number" &&
+    Number.isFinite(value) &&
+    value >= 1 &&
+    value <= 5
+  );
+}
+
+function isScores(obj: unknown): obj is Scores {
+  if (!obj || typeof obj !== "object") return false;
+  const maybe = obj as Partial<Scores>;
+  return (
+    isScoreValue(maybe.specificity) &&
+    isScoreValue(maybe.actionability) &&
+    isScoreValue(maybe.scopeAwareness) &&
+    isScoreValue(maybe.uncertainty)
+  );
+}
+
 export function parseJudgment(output: string): Judgment | null {
   const raw = extractJson(output);
   if (!raw) return null;
   try {
-    const parsed = JSON.parse(raw) as Partial<Judgment>;
-    if (!parsed.winner || !parsed.scores) return null;
-    return parsed as Judgment;
+    const parsed = JSON.parse(raw) as Record<string, unknown>;
+    if (
+      parsed.winner !== "current" &&
+      parsed.winner !== "variant" &&
+      parsed.winner !== "tie"
+    ) {
+      return null;
+    }
+    if (typeof parsed.reasoning !== "string") return null;
+    const scores = parsed.scores as { current?: unknown; variant?: unknown } | undefined;
+    if (!scores || typeof scores !== "object") return null;
+    if (!isScores(scores.current) || !isScores(scores.variant)) return null;
+    return parsed as unknown as Judgment;
   } catch {
     return null;
   }
@@ -319,7 +349,7 @@ function buildJudgePrompt(testCase: TestCase, currentOutput: string, variantOutp
 
 // ── Main job ──
 
-const FOOTER = "\n\n---\n*Automated evaluation by yeti prompt-evaluator*";
+const REQUIRED_TEST_CASES = 4;
 const WIN_THRESHOLD = 3; // variant must win at least 3 of 4 test cases
 
 async function evaluatePrompt(entry: PromptEntry, repo: Repo): Promise<void> {
@@ -328,9 +358,9 @@ async function evaluatePrompt(entry: PromptEntry, repo: Repo): Promise<void> {
   let wtPath: string | undefined;
 
   try {
-    const branchName = `yeti/prompt-eval-${claude.randomSuffix()}`;
-    wtPath = await claude.createWorktree(repo, branchName, "prompt-evaluator");
-    db.updateTaskWorktree(taskId, wtPath, branchName);
+    // Use detached worktree — this job only reads files, never pushes
+    wtPath = await claude.createWorktreeFromBranch(repo, repo.defaultBranch, "prompt-evaluator");
+    db.updateTaskWorktree(taskId, wtPath, repo.defaultBranch);
 
     // Read prompt source from the worktree
     const sourceFile = path.join(wtPath, entry.file);
@@ -343,9 +373,9 @@ async function evaluatePrompt(entry: PromptEntry, repo: Repo): Promise<void> {
     log.info(`[prompt-evaluator] Generating test inputs for ${entry.name}`);
     const testInputPrompt = buildTestInputPrompt(promptSource, entry.purpose);
     const testInputOutput = await enqueue(() => claude.runAI(testInputPrompt, wtPath!, aiOptions));
-    const testCases = parseTestInputs(testInputOutput);
-    if (testCases.length === 0) {
-      log.warn(`[prompt-evaluator] Failed to generate test inputs for ${entry.name}`);
+    const testCases = parseTestInputs(testInputOutput).slice(0, REQUIRED_TEST_CASES);
+    if (testCases.length < REQUIRED_TEST_CASES) {
+      log.warn(`[prompt-evaluator] Need ${REQUIRED_TEST_CASES} test inputs for ${entry.name}, got ${testCases.length}`);
       db.recordTaskComplete(taskId);
       return;
     }
@@ -370,8 +400,8 @@ async function evaluatePrompt(entry: PromptEntry, repo: Repo): Promise<void> {
       const currentPromptText = buildSimulatedPrompt(promptSource, entry, testCase);
       const currentOutput = await enqueue(() => claude.runAI(currentPromptText, wtPath!, aiOptions));
 
-      // Run variant prompt with test data
-      const variantPromptText = buildSimulatedVariantPrompt(variant.variant, testCase);
+      // Run variant prompt with test data (use the same simulation scaffolding)
+      const variantPromptText = buildSimulatedPrompt(variant.variant, entry, testCase);
       const variantOut = await enqueue(() => claude.runAI(variantPromptText, wtPath!, aiOptions));
 
       comparisons.push({ testCase, currentOutput, variantOutput: variantOut });
@@ -391,12 +421,19 @@ async function evaluatePrompt(entry: PromptEntry, repo: Repo): Promise<void> {
     }
 
     // Step 6: Report
+    if (results.length < REQUIRED_TEST_CASES) {
+      log.warn(`[prompt-evaluator] Only ${results.length}/${REQUIRED_TEST_CASES} judgments parsed for ${entry.name} — skipping`);
+      db.recordTaskComplete(taskId);
+      return;
+    }
+
     const variantWins = results.filter((r) => r.judgment.winner === "variant").length;
     log.info(`[prompt-evaluator] ${entry.name}: variant wins ${variantWins}/${results.length} test cases`);
 
     if (variantWins >= WIN_THRESHOLD) {
-      // Check for existing evaluation issue
-      const existing = await gh.searchIssues(SELF_REPO, `[prompt-evaluator] ${entry.functionName}`);
+      // Build expected issue title and check for existing evaluation issue
+      const title = `[prompt-evaluator] Improvement found: ${entry.name}`;
+      const existing = (await gh.searchIssues(SELF_REPO, title)).filter((r) => r.title === title);
       if (existing.length > 0) {
         log.info(`[prompt-evaluator] Skipping — similar issue already exists: #${existing[0].number}`);
       } else {
@@ -438,24 +475,13 @@ function buildSimulatedPrompt(promptSource: string, entry: PromptEntry, testCase
   ].join("\n");
 }
 
-function buildSimulatedVariantPrompt(variantText: string, testCase: TestCase): string {
-  return [
-    `You are analyzing a GitHub issue for a repository.`,
-    `Issue: ${testCase.title}`,
-    ``,
-    testCase.body,
-    ``,
-    variantText,
-  ].join("\n");
-}
-
 // ── Entry point ──
 
 export async function run(repos: Repo[]): Promise<void> {
-  // Use the first repo as a representative codebase to read prompt sources from
-  const repo = repos[0];
+  // Use SELF_REPO as the source codebase for prompt sources
+  const repo = repos.find((r) => r.fullName === SELF_REPO);
   if (!repo) {
-    log.warn("[prompt-evaluator] No repos available");
+    log.warn(`[prompt-evaluator] SELF_REPO '${SELF_REPO}' not found in provided repos (count=${repos.length})`);
     return;
   }
 

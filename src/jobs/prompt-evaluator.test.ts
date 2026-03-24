@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { mockRepo, mockIssue } from "../test-helpers.js";
+import { mockRepo } from "../test-helpers.js";
 
 vi.mock("../config.js", () => ({
   WORK_DIR: "/home/testuser/.yeti",
@@ -36,12 +36,11 @@ const { mockFs, mockGh, mockClaude, mockDb } = vi.hoisted(() => ({
     issueUrl: (fullName: string, number: number) => `https://github.com/${fullName}/issues/${number}`,
   },
   mockClaude: {
-    createWorktree: vi.fn(),
+    createWorktreeFromBranch: vi.fn(),
     removeWorktree: vi.fn(),
     enqueue: vi.fn(),
     runAI: vi.fn(),
     resolveEnqueue: vi.fn(),
-    randomSuffix: vi.fn().mockReturnValue("ab12"),
   },
   mockDb: {
     recordTaskStart: vi.fn().mockReturnValue(1),
@@ -85,7 +84,7 @@ const sampleJudgment = JSON.stringify({
 });
 
 describe("prompt-evaluator", () => {
-  const repo = mockRepo();
+  const repo = mockRepo({ fullName: "frostyard/yeti" });
 
   beforeEach(() => {
     vi.clearAllMocks();
@@ -99,7 +98,7 @@ describe("prompt-evaluator", () => {
     mockGh.listOpenIssues.mockResolvedValue([]);
     mockGh.createIssue.mockResolvedValue(99);
     mockGh.searchIssues.mockResolvedValue([]);
-    mockClaude.createWorktree.mockResolvedValue("/tmp/worktree");
+    mockClaude.createWorktreeFromBranch.mockResolvedValue("/tmp/worktree");
     mockClaude.enqueue.mockImplementation((fn: () => Promise<string>) => fn());
     mockClaude.resolveEnqueue.mockReturnValue(mockClaude.enqueue);
     mockClaude.removeWorktree.mockResolvedValue(undefined);
@@ -316,6 +315,41 @@ describe("parseJudgment", () => {
   it("returns null for missing winner field", () => {
     const noWinner = JSON.stringify({ scores: {}, reasoning: "test" });
     expect(parseJudgment(noWinner)).toBeNull();
+  });
+
+  it("returns null for invalid score values", () => {
+    const badScores = JSON.stringify({
+      scores: {
+        current: { specificity: "high", actionability: 3, scopeAwareness: 3, uncertainty: 3 },
+        variant: { specificity: 4, actionability: 4, scopeAwareness: 4, uncertainty: 4 },
+      },
+      winner: "variant",
+      reasoning: "test",
+    });
+    expect(parseJudgment(badScores)).toBeNull();
+  });
+
+  it("returns null for out-of-range scores", () => {
+    const outOfRange = JSON.stringify({
+      scores: {
+        current: { specificity: 0, actionability: 3, scopeAwareness: 3, uncertainty: 3 },
+        variant: { specificity: 4, actionability: 4, scopeAwareness: 6, uncertainty: 4 },
+      },
+      winner: "variant",
+      reasoning: "test",
+    });
+    expect(parseJudgment(outOfRange)).toBeNull();
+  });
+
+  it("returns null for missing reasoning", () => {
+    const noReasoning = JSON.stringify({
+      scores: {
+        current: { specificity: 3, actionability: 3, scopeAwareness: 3, uncertainty: 3 },
+        variant: { specificity: 4, actionability: 4, scopeAwareness: 4, uncertainty: 4 },
+      },
+      winner: "variant",
+    });
+    expect(parseJudgment(noReasoning)).toBeNull();
   });
 });
 

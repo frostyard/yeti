@@ -286,7 +286,7 @@ See [Jobs](jobs.md) for detailed behavior of each.
 | `improvement-identifier` | Daily at 3 AM | Scheduled | Analyzes codebase via Claude, implements improvements as PRs |
 | `mkdocs-update` | Daily at 4 AM | Scheduled | Updates MkDocs documentation from recent source code changes |
 | `issue-auditor` | Daily at 5 AM | Scheduled | Reconciles issue states, manages Ready and In Review labels |
-| `prompt-evaluator` | Weekly (midnight) | Scheduled | A/B tests plan-producing prompts against AI-generated variants, files issues for improvements |
+| `prompt-evaluator` | Daily at midnight | Scheduled | A/B tests plan-producing prompts against AI-generated variants, files issues for improvements |
 
 ## Key Patterns
 

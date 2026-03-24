@@ -57,7 +57,7 @@ Each job exports a `run()` function. Jobs discover work via comment analysis, re
 
 When plan-reviewer is enabled, the workflow is human-in-the-loop: issue-refiner produces a plan → plan-reviewer critiques it → both land on the issue as comments with `Ready` label → a human reads the plan and critique, then either adds `Refined` to approve or posts feedback to trigger another refinement cycle. The adversarial review is for the human, not for automatic AI-to-AI refinement.
 
-The `prompt-evaluator` job is a self-improvement mechanism: it reads the source of plan-producing prompts, generates improved variants via AI, A/B tests both against synthetic and real issues, has AI judge the outputs, and files GitHub issues (labeled `prompt-improvement`) when the variant wins. Humans review and approve before any prompt change is applied.
+The `prompt-evaluator` job is a self-improvement mechanism: it reads the source of plan-producing prompts, generates improved variants via AI, A/B tests both against AI-generated realistic and adversarial synthetic issues, has AI judge the outputs, and files GitHub issues (labeled `prompt-improvement`) when the variant wins. Humans review and approve before any prompt change is applied.
 
 Jobs must be listed in the `enabledJobs` config array to run. An empty or missing `enabledJobs` means no jobs start.
 
