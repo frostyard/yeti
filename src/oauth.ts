@@ -82,44 +82,34 @@ export async function exchangeCodeForUser(code: string): Promise<OAuthResult> {
     return null;
   }
 
-  // Step 3: Check org membership (OR logic across GITHUB_OWNERS)
-  let hadDefinitiveNoMember = false;
-  let hadTransientError = false;
-  for (const owner of GITHUB_OWNERS) {
-    try {
-      const memberRes = await fetch(
-        `https://api.github.com/orgs/${encodeURIComponent(owner)}/members/${encodeURIComponent(login)}`,
-        {
-          headers: {
-            Authorization: `Bearer ${accessToken}`,
-            Accept: "application/json",
-          },
-        },
-      );
-      if (memberRes.status === 204) {
+  // Step 3: Check org membership via user's own org list.
+  // GET /user/orgs lists the authenticated user's orgs (requires read:org scope).
+  // This avoids the circular permission issue with GET /orgs/{org}/members/{username},
+  // which requires the requester to already be an org member.
+  const allowedOwners = new Set(GITHUB_OWNERS.map(o => o.toLowerCase()));
+  try {
+    const orgsRes = await fetch("https://api.github.com/user/orgs?per_page=100", {
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        Accept: "application/json",
+      },
+    });
+    if (!orgsRes.ok) {
+      log.warn(`OAuth org list fetch failed: HTTP ${orgsRes.status}`);
+      return null; // Transient error — don't blame the user
+    }
+    const orgs = (await orgsRes.json()) as Array<{ login?: string }>;
+    for (const org of orgs) {
+      if (org.login && allowedOwners.has(org.login.toLowerCase())) {
         return { login };
       }
-      if (memberRes.status === 404 || memberRes.status === 302) {
-        // 404 = not a member or not an org; 302 = requester is not an org member
-        hadDefinitiveNoMember = true;
-      } else {
-        // 5xx, 403, etc. — transient or unexpected
-        log.warn(`OAuth org check for ${owner} returned HTTP ${memberRes.status}`);
-        hadTransientError = true;
-      }
-    } catch (err) {
-      log.warn(`OAuth org check for ${owner} failed: ${err}`);
-      hadTransientError = true;
     }
+  } catch (err) {
+    log.warn(`OAuth org list fetch failed: ${err}`);
+    return null; // Transient error — don't blame the user
   }
 
-  if (hadTransientError && !hadDefinitiveNoMember) {
-    // All owners failed with errors — don't blame the user
-    log.warn(`OAuth org membership check failed for ${login} due to transient errors`);
-    return null;
-  }
-
-  log.warn(`OAuth user ${login} is not a member of any configured org`);
+  log.warn(`OAuth user ${login} is not a member of any configured org (${GITHUB_OWNERS.join(", ")})`);
   return { error: "not_org_member" };
 }
 
