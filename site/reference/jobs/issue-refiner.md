@@ -44,10 +44,11 @@ The refiner processes an issue when any of these conditions are met:
 1. Creates an isolated git worktree for the repository
 2. Reads the issue body, all comments, and any referenced images
 3. Instructs Claude to read `yeti/OVERVIEW.md` and linked docs for codebase context
-4. Claude produces the plan (text only, no code changes)
-5. Posts an `## Implementation Plan` comment on the issue
-6. Transitions labels: removes `Needs Refinement`, adds `Needs Plan Review` or `Ready`
-7. For `[ci-unrelated]` issues: also adds `Refined` to skip human approval
+4. Claude evaluates whether the issue provides enough detail for a confident plan -- if underspecified, it outputs a `### Clarifying Questions` section with specific questions and instructs the user to respond as a comment
+5. Claude produces the plan (text only, no code changes) for aspects that are sufficiently clear
+6. Posts an `## Implementation Plan` comment on the issue
+7. Transitions labels: removes `Needs Refinement`, adds `Needs Plan Review` or `Ready`
+8. For `[ci-unrelated]` issues: also adds `Refined` to skip human approval
 
 ### Refinement (Feedback Loop)
 

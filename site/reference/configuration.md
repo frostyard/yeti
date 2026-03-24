@@ -78,6 +78,7 @@ All schedule fields live inside the `schedules` object, are specified as hour of
 | `improvementIdentifierHour` | `3` (3 AM) | improvement-identifier run hour |
 | `mkdocsUpdateHour` | `4` (4 AM) | mkdocs-update run hour |
 | `issueAuditorHour` | `5` (5 AM) | issue-auditor run hour |
+| `promptEvaluatorHour` | `0` (Midnight) | prompt-evaluator run hour |
 
 ---
 
@@ -147,7 +148,8 @@ A more complete configuration with intervals, schedules, and integrations:
     "repo-standards",
     "improvement-identifier",
     "issue-auditor",
-    "mkdocs-update"
+    "mkdocs-update",
+    "prompt-evaluator"
   ],
   "intervals": {
     "issueWorkerMs": 300000,
@@ -159,7 +161,8 @@ A more complete configuration with intervals, schedules, and integrations:
     "repoStandardsHour": 2,
     "improvementIdentifierHour": 3,
     "mkdocsUpdateHour": 4,
-    "issueAuditorHour": 5
+    "issueAuditorHour": 5,
+    "promptEvaluatorHour": 0
   },
   "jobAi": {
     "plan-reviewer": { "backend": "copilot" }
