@@ -63,7 +63,18 @@ function parseVerdict(output: string): "approved" | "needs-revision" {
 }
 
 function stripVerdictLine(output: string): string {
-  return output.replace(/\n?VERDICT:\s*(APPROVED|NEEDS\s+REVISION)\s*$/im, "").trim();
+  const lines = output.split("\n");
+  for (let i = lines.length - 1; i >= 0; i--) {
+    const line = lines[i].trim();
+    if (/^VERDICT:\s*(APPROVED|NEEDS\s+REVISION)\s*$/i.test(line)) {
+      lines.splice(i, 1);
+      while (lines.length > 0 && lines[lines.length - 1].trim() === "") {
+        lines.pop();
+      }
+      break;
+    }
+  }
+  return lines.join("\n").trim();
 }
 
 function countPlanRounds(comments: gh.IssueComment[]): number {
