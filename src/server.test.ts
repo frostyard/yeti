@@ -383,15 +383,16 @@ describe("HTTP server", () => {
   it("GET /config?tab=scheduling renders scheduling tab active", async () => {
     const res = await request(server, "GET", "/config?tab=scheduling");
     expect(res.status).toBe(200);
-    expect(res.body).toContain('class="tab-panel" id="tab-scheduling"');
-    expect(res.body).toContain('class="tab-panel tab-panel-hidden" id="tab-general"');
+    expect(res.body).toContain('id="tab-scheduling"');
+    expect(res.body).toContain('aria-hidden="false"');
+    expect(res.body).toMatch(/tab-panel tab-panel-hidden[^"]*"[^>]*id="tab-general"/);
   });
 
   it("GET /config?tab=invalid falls back to general", async () => {
     const res = await request(server, "GET", "/config?tab=invalid");
     expect(res.status).toBe(200);
-    expect(res.body).toContain('class="tab-panel" id="tab-general"');
-    expect(res.body).toContain('class="tab-panel tab-panel-hidden" id="tab-scheduling"');
+    expect(res.body).toMatch(/class="tab-panel"[^>]*id="tab-general"/);
+    expect(res.body).toMatch(/tab-panel-hidden[^"]*"[^>]*id="tab-scheduling"/);
   });
 
   it("all form fields present regardless of active tab", async () => {
@@ -406,7 +407,7 @@ describe("HTTP server", () => {
   it("tab bar buttons have type=button", async () => {
     const res = await request(server, "GET", "/config");
     // All tab buttons must have type="button" to prevent form submission
-    const tabBarMatch = res.body.match(/<div class="tab-bar">([\s\S]*?)<\/div>/);
+    const tabBarMatch = res.body.match(/<div class="tab-bar"[^>]*>([\s\S]*?)<\/div>/);
     expect(tabBarMatch).toBeTruthy();
     const buttons = tabBarMatch![1].match(/<button[^>]*>/g) ?? [];
     expect(buttons.length).toBeGreaterThan(0);

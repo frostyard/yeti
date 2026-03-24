@@ -61,15 +61,16 @@ export function buildConfigPage(saved: boolean, theme: Theme, username?: string 
   const authDisabled = !config.AUTH_TOKEN && !isOAuthConfigured();
   const queueScanMinutes = Math.round(Number(cfg.queueScanIntervalMs ?? 300000) / 60000);
 
-  function panelClass(id: TabId): string {
-    return id === tab ? "tab-panel" : "tab-panel tab-panel-hidden";
+  function panelAttrs(id: TabId): string {
+    const hidden = id !== tab;
+    return `class="${hidden ? "tab-panel tab-panel-hidden" : "tab-panel"}" role="tabpanel" aria-labelledby="config-tab-${id}" aria-hidden="${hidden}"`;
   }
 
-  const tabBar = `<div class="tab-bar">${VALID_TABS.map(id =>
-    `<a href="/config?tab=${id}"><button type="button" class="${id === tab ? "active" : ""}" data-tab="${id}" onclick="switchTab('${id}');return false">${TAB_LABELS[id]}</button></a>`
+  const tabBar = `<div class="tab-bar" role="tablist" aria-label="Configuration sections">${VALID_TABS.map(id =>
+    `<button type="button" class="${id === tab ? "active" : ""}" role="tab" id="config-tab-${id}" aria-selected="${id === tab ? "true" : "false"}" aria-controls="tab-${id}" tabindex="${id === tab ? "0" : "-1"}" data-tab="${id}" onclick="switchTab('${id}')">${TAB_LABELS[id]}</button>`
   ).join("")}</div>`;
 
-  const tabScript = `<script>function switchTab(id){document.querySelectorAll('.tab-panel').forEach(function(p){p.classList.add('tab-panel-hidden')});var el=document.getElementById('tab-'+id);if(el)el.classList.remove('tab-panel-hidden');document.querySelectorAll('.tab-bar button').forEach(function(b){b.classList.remove('active')});var btn=document.querySelector('.tab-bar button[data-tab=\"'+id+'\"]');if(btn)btn.classList.add('active');var h=document.querySelector('input[name=\"_tab\"]');if(h)h.value=id}</script>`;
+  const tabScript = `<script>function switchTab(id){document.querySelectorAll('.tab-panel').forEach(function(p){p.classList.add('tab-panel-hidden');p.setAttribute('aria-hidden','true')});var el=document.getElementById('tab-'+id);if(el){el.classList.remove('tab-panel-hidden');el.setAttribute('aria-hidden','false')}document.querySelectorAll('.tab-bar button').forEach(function(b){b.classList.remove('active');b.setAttribute('aria-selected','false');b.setAttribute('tabindex','-1')});var btn=document.querySelector('.tab-bar button[data-tab=\"'+id+'\"]');if(btn){btn.classList.add('active');btn.setAttribute('aria-selected','true');btn.setAttribute('tabindex','0');btn.focus()}var h=document.querySelector('input[name=\"_tab\"]');if(h)h.value=id}</script>`;
 
   return `<!DOCTYPE html>
 ${htmlOpenTag(theme)}
@@ -86,10 +87,10 @@ ${htmlOpenTag(theme)}
   ${saved ? '<div class="banner">Configuration saved and applied.</div>' : ""}
   ${authDisabled ? '<div class="warning-banner">Authentication is disabled. Set an auth token to protect this interface.</div>' : ""}
   ${tabBar}
-  <form method="POST" action="/config" class="config-form" novalidate>
+  <form method="POST" action="/config" class="config-form">
     <input type="hidden" name="_tab" value="${tab}">
 
-    <div class="${panelClass("general")}" id="tab-general">
+    <div ${panelAttrs("general")} id="tab-general">
     <h2>General</h2>
     <label for="githubOwners">GitHub Owners (comma-separated)</label>
     <input type="text" name="githubOwners" id="githubOwners" value="${escapeHtml(Array.isArray(cfg.githubOwners) ? (cfg.githubOwners as string[]).join(", ") : "")}"${isDisabled("githubOwners") ? " disabled" : ""}>
@@ -130,7 +131,7 @@ ${htmlOpenTag(theme)}
     <div class="field-note">Read-only — requires restart to change</div>
     </div>
 
-    <div class="${panelClass("scheduling")}" id="tab-scheduling">
+    <div ${panelAttrs("scheduling")} id="tab-scheduling">
     <h2>Intervals (minutes)</h2>
     ${Object.entries(intervals).map(([key, value]) =>
       `<label for="${escapeHtml(key)}">${escapeHtml(key.replace(/Ms$/, ""))}</label>
@@ -144,7 +145,7 @@ ${htmlOpenTag(theme)}
     ).join("\n    ")}
     </div>
 
-    <div class="${panelClass("ai")}" id="tab-ai">
+    <div ${panelAttrs("ai")} id="tab-ai">
     <h2>AI Backends</h2>
     <label for="maxCopilotWorkers">Max Copilot Workers</label>
     <input type="number" name="maxCopilotWorkers" id="maxCopilotWorkers" value="${Number(cfg.maxCopilotWorkers ?? 1)}" min="0">
@@ -181,7 +182,7 @@ ${htmlOpenTag(theme)}
     </table>
     </div>
 
-    <div class="${panelClass("integrations")}" id="tab-integrations">
+    <div ${panelAttrs("integrations")} id="tab-integrations">
     <h2>Discord</h2>
     <label for="discordBotToken">Discord Bot Token</label>
     <input type="password" name="discordBotToken" id="discordBotToken" placeholder="${escapeHtml(String(cfg.discordBotToken ?? ""))}"${isDisabled("discordBotToken") ? " disabled" : ""}>
@@ -235,7 +236,7 @@ ${htmlOpenTag(theme)}
     ${envNote("webhookSecret")}
     </div>
 
-    <div class="${panelClass("security")}" id="tab-security">
+    <div ${panelAttrs("security")} id="tab-security">
     <h2>Authentication</h2>
     <label for="authToken">Auth Token</label>
     <input type="password" name="authToken" id="authToken" placeholder="${escapeHtml(String(cfg.authToken ?? ""))}"${isDisabled("authToken") ? " disabled" : ""}>
