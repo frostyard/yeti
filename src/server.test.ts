@@ -360,8 +360,64 @@ describe("HTTP server", () => {
       body: "selfRepo=new%2Frepo&logRetentionDays=30&interval_issueWorkerMs=10&schedule_docMaintainerHour=3&authToken=",
     });
     expect(res.status).toBe(303);
-    expect(res.headers.location).toBe("/config?saved=1");
+    expect(res.headers.location).toBe("/config?saved=1&tab=general");
     expect(wc).toHaveBeenCalled();
+  });
+
+  it("POST /config preserves tab in redirect", async () => {
+    const res = await request(server, "POST", "/config", {
+      body: "_tab=ai&selfRepo=org%2Frepo",
+    });
+    expect(res.status).toBe(303);
+    expect(res.headers.location).toBe("/config?saved=1&tab=ai");
+  });
+
+  it("POST /config sanitizes invalid _tab in redirect", async () => {
+    const res = await request(server, "POST", "/config", {
+      body: "_tab=evil&selfRepo=org%2Frepo",
+    });
+    expect(res.status).toBe(303);
+    expect(res.headers.location).toBe("/config?saved=1&tab=general");
+  });
+
+  it("GET /config?tab=scheduling renders scheduling tab active", async () => {
+    const res = await request(server, "GET", "/config?tab=scheduling");
+    expect(res.status).toBe(200);
+    expect(res.body).toContain('class="tab-panel" id="tab-scheduling"');
+    expect(res.body).toContain('class="tab-panel tab-panel-hidden" id="tab-general"');
+  });
+
+  it("GET /config?tab=invalid falls back to general", async () => {
+    const res = await request(server, "GET", "/config?tab=invalid");
+    expect(res.status).toBe(200);
+    expect(res.body).toContain('class="tab-panel" id="tab-general"');
+    expect(res.body).toContain('class="tab-panel tab-panel-hidden" id="tab-scheduling"');
+  });
+
+  it("all form fields present regardless of active tab", async () => {
+    const res = await request(server, "GET", "/config?tab=security");
+    expect(res.status).toBe(200);
+    expect(res.body).toContain('name="enabledJobs"');
+    expect(res.body).toContain('name="maxCopilotWorkers"');
+    expect(res.body).toContain('name="discordChannelId"');
+    expect(res.body).toContain('name="authToken"');
+  });
+
+  it("tab bar buttons have type=button", async () => {
+    const res = await request(server, "GET", "/config");
+    // All tab buttons must have type="button" to prevent form submission
+    const tabBarMatch = res.body.match(/<div class="tab-bar">([\s\S]*?)<\/div>/);
+    expect(tabBarMatch).toBeTruthy();
+    const buttons = tabBarMatch![1].match(/<button[^>]*>/g) ?? [];
+    expect(buttons.length).toBeGreaterThan(0);
+    for (const btn of buttons) {
+      expect(btn).toContain('type="button"');
+    }
+  });
+
+  it("hidden _tab input is present with correct value", async () => {
+    const res = await request(server, "GET", "/config?tab=integrations");
+    expect(res.body).toContain('name="_tab" value="integrations"');
   });
 
   it("POST /config parses comma-separated enabledJobs", async () => {
