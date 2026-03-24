@@ -62,21 +62,27 @@ const { privateKey: testPrivateKey, publicKey: testPublicKey } = crypto.generate
   privateKeyEncoding: { type: "pkcs8", format: "pem" },
 });
 
-/** Helper: configure mockExecFile to handle typical init flow */
-function setupExecMock(tokenOverrides?: { token?: string; expires_at?: string }) {
-  const token = tokenOverrides?.token ?? "ghs_test123";
-  const expiresAt = tokenOverrides?.expires_at ?? new Date(Date.now() + 3600000).toISOString();
+/** Helper: mock fetch() for GitHub API calls and execFile for gh CLI commands */
+function setupMocks(overrides?: { token?: string; expires_at?: string; slug?: string }) {
+  const token = overrides?.token ?? "ghs_test123";
+  const expiresAt = overrides?.expires_at ?? new Date(Date.now() + 3600000).toISOString();
+  const slug = overrides?.slug ?? "yeti";
 
-  mockExecFile.mockImplementation((_cmd, args, _opts, cb) => {
-    const callback = cb as (err: Error | null, stdout: string, stderr: string) => void;
-    const argsArr = args as string[];
-    if (argsArr.some(a => a.includes("access_tokens"))) {
-      callback(null, JSON.stringify({ token, expires_at: expiresAt }), "");
-    } else if (argsArr.some(a => a === "/app")) {
-      callback(null, JSON.stringify({ slug: "yeti" }), "");
-    } else {
-      callback(null, "", "");
+  // Mock fetch for GitHub API calls (JWT-authenticated)
+  vi.stubGlobal("fetch", vi.fn(async (url: string) => {
+    if (typeof url === "string" && url.includes("/app/installations/")) {
+      return new Response(JSON.stringify({ token, expires_at: expiresAt }), { status: 200 });
     }
+    if (typeof url === "string" && url.endsWith("/app")) {
+      return new Response(JSON.stringify({ slug }), { status: 200 });
+    }
+    return new Response("Not found", { status: 404 });
+  }));
+
+  // Mock execFile for gh CLI commands (setup-git, auth status)
+  mockExecFile.mockImplementation((_cmd, _args, _opts, cb) => {
+    const callback = cb as (err: Error | null, stdout: string, stderr: string) => void;
+    callback(null, "", "");
     return undefined as never;
   });
 }
@@ -96,6 +102,7 @@ beforeEach(() => {
 
 afterEach(() => {
   vi.restoreAllMocks();
+  vi.unstubAllGlobals();
   delete process.env["GH_TOKEN"];
 });
 
@@ -165,7 +172,7 @@ describe("initGitHubApp", () => {
 
   it("warns if PEM file permissions are not 0600", async () => {
     mockFs.statSync.mockReturnValue({ mode: 0o100644 } as ReturnType<typeof fs.statSync>);
-    setupExecMock();
+    setupMocks();
 
     await initGitHubApp();
 
@@ -175,7 +182,7 @@ describe("initGitHubApp", () => {
   });
 
   it("sets process.env.GH_TOKEN to the installation token", async () => {
-    setupExecMock({ token: "ghs_installation_token" });
+    setupMocks({ token: "ghs_installation_token" });
 
     await initGitHubApp();
 
@@ -184,20 +191,11 @@ describe("initGitHubApp", () => {
 
   it("runs gh auth setup-git after obtaining token", async () => {
     const calls: string[][] = [];
+    setupMocks();
     mockExecFile.mockImplementation((_cmd, args, _opts, cb) => {
       const callback = cb as (err: Error | null, stdout: string, stderr: string) => void;
-      const argsArr = args as string[];
-      calls.push(argsArr);
-      if (argsArr.some(a => a.includes("access_tokens"))) {
-        callback(null, JSON.stringify({
-          token: "ghs_test",
-          expires_at: new Date(Date.now() + 3600000).toISOString(),
-        }), "");
-      } else if (argsArr.some(a => a === "/app")) {
-        callback(null, JSON.stringify({ slug: "yeti" }), "");
-      } else {
-        callback(null, "", "");
-      }
+      calls.push(args as string[]);
+      callback(null, "", "");
       return undefined as never;
     });
 
@@ -212,19 +210,12 @@ describe("initGitHubApp", () => {
     expect(process.env["GH_TOKEN"]).toBeUndefined();
   });
 
-  it("restores previous GH_TOKEN on failure", async () => {
+  it("restores previous GH_TOKEN on token acquisition failure", async () => {
     process.env["GH_TOKEN"] = "previous-token";
 
-    mockExecFile.mockImplementation((_cmd, args, _opts, cb) => {
-      const callback = cb as (err: Error | null, stdout: string, stderr: string) => void;
-      const argsArr = args as string[];
-      if (argsArr.some(a => a.includes("access_tokens"))) {
-        callback(new Error("API error"), "", "API error");
-      } else {
-        callback(null, "", "");
-      }
-      return undefined as never;
-    });
+    vi.stubGlobal("fetch", vi.fn(async () => {
+      return new Response("Unauthorized", { status: 401 });
+    }));
 
     await expect(initGitHubApp()).rejects.toThrow();
     expect(process.env["GH_TOKEN"]).toBe("previous-token");
@@ -232,18 +223,12 @@ describe("initGitHubApp", () => {
 
   it("restores previous GH_TOKEN when setup-git fails", async () => {
     process.env["GH_TOKEN"] = "personal-pat";
+    setupMocks();
 
     mockExecFile.mockImplementation((_cmd, args, _opts, cb) => {
       const callback = cb as (err: Error | null, stdout: string, stderr: string) => void;
       const argsArr = args as string[];
-      if (argsArr.some(a => a.includes("access_tokens"))) {
-        callback(null, JSON.stringify({
-          token: "ghs_app_token",
-          expires_at: new Date(Date.now() + 3600000).toISOString(),
-        }), "");
-      } else if (argsArr.some(a => a === "/app")) {
-        callback(null, JSON.stringify({ slug: "yeti" }), "");
-      } else if (argsArr.includes("setup-git")) {
+      if (argsArr.includes("setup-git")) {
         callback(new Error("setup-git failed"), "", "setup-git failed");
       } else {
         callback(null, "", "");
@@ -252,24 +237,17 @@ describe("initGitHubApp", () => {
     });
 
     await expect(initGitHubApp()).rejects.toThrow("setup-git failed");
-    // Must restore the personal token, not delete it
     expect(process.env["GH_TOKEN"]).toBe("personal-pat");
   });
 
   it("removes GH_TOKEN on setup-git failure when no previous token existed", async () => {
     delete process.env["GH_TOKEN"];
+    setupMocks();
 
     mockExecFile.mockImplementation((_cmd, args, _opts, cb) => {
       const callback = cb as (err: Error | null, stdout: string, stderr: string) => void;
       const argsArr = args as string[];
-      if (argsArr.some(a => a.includes("access_tokens"))) {
-        callback(null, JSON.stringify({
-          token: "ghs_app_token",
-          expires_at: new Date(Date.now() + 3600000).toISOString(),
-        }), "");
-      } else if (argsArr.some(a => a === "/app")) {
-        callback(null, JSON.stringify({ slug: "yeti" }), "");
-      } else if (argsArr.includes("setup-git")) {
+      if (argsArr.includes("setup-git")) {
         callback(new Error("setup-git failed"), "", "setup-git failed");
       } else {
         callback(null, "", "");
@@ -282,20 +260,21 @@ describe("initGitHubApp", () => {
   });
 
   it("fails when app slug cannot be determined", async () => {
-    mockExecFile.mockImplementation((_cmd, args, _opts, cb) => {
-      const callback = cb as (err: Error | null, stdout: string, stderr: string) => void;
-      const argsArr = args as string[];
-      if (argsArr.some(a => a.includes("access_tokens"))) {
-        callback(null, JSON.stringify({
+    vi.stubGlobal("fetch", vi.fn(async (url: string) => {
+      if (typeof url === "string" && url.endsWith("/app")) {
+        return new Response("Not found", { status: 404 });
+      }
+      if (typeof url === "string" && url.includes("/app/installations/")) {
+        return new Response(JSON.stringify({
           token: "ghs_test",
           expires_at: new Date(Date.now() + 3600000).toISOString(),
-        }), "");
-      } else if (argsArr.some(a => a === "/app")) {
-        // Simulate /app failure
-        callback(new Error("not found"), "", "not found");
-      } else {
-        callback(null, "", "");
+        }), { status: 200 });
       }
+      return new Response("Not found", { status: 404 });
+    }));
+    mockExecFile.mockImplementation((_cmd, _args, _opts, cb) => {
+      const callback = cb as (err: Error | null, stdout: string, stderr: string) => void;
+      callback(null, "", "");
       return undefined as never;
     });
 
@@ -305,37 +284,69 @@ describe("initGitHubApp", () => {
 
   it("fetches app slug and sets bot login on first init", async () => {
     const { setSelfLogin } = await import("./github.js");
-    setupExecMock();
+    setupMocks();
 
     await initGitHubApp();
 
     expect(getAppSlug()).toBe("yeti");
     expect(setSelfLogin).toHaveBeenCalledWith("yeti[bot]");
   });
+
+  it("uses Bearer auth for GitHub API calls", async () => {
+    const fetchCalls: { url: string; options: RequestInit }[] = [];
+    vi.stubGlobal("fetch", vi.fn(async (url: string, options: RequestInit) => {
+      fetchCalls.push({ url, options });
+      if (url.includes("/app/installations/")) {
+        return new Response(JSON.stringify({
+          token: "ghs_test",
+          expires_at: new Date(Date.now() + 3600000).toISOString(),
+        }), { status: 200 });
+      }
+      if (url.endsWith("/app")) {
+        return new Response(JSON.stringify({ slug: "yeti" }), { status: 200 });
+      }
+      return new Response("Not found", { status: 404 });
+    }));
+    mockExecFile.mockImplementation((_cmd, _args, _opts, cb) => {
+      const callback = cb as (err: Error | null, stdout: string, stderr: string) => void;
+      callback(null, "", "");
+      return undefined as never;
+    });
+
+    await initGitHubApp();
+
+    // Verify all API calls used Bearer auth
+    for (const call of fetchCalls) {
+      const authHeader = (call.options.headers as Record<string, string>)["Authorization"];
+      expect(authHeader).toMatch(/^Bearer /);
+    }
+  });
 });
 
 describe("ensureGitHubAppToken", () => {
   it("is a no-op when not configured", async () => {
     mockConfig.appId = "";
-    mockExecFile.mockClear();
+    const mockFetch = vi.fn();
+    vi.stubGlobal("fetch", mockFetch);
     await ensureGitHubAppToken();
-    expect(mockExecFile).not.toHaveBeenCalled();
+    expect(mockFetch).not.toHaveBeenCalled();
   });
 
   it("is a no-op when token is still fresh", async () => {
-    setupExecMock();
+    setupMocks();
     await initGitHubApp();
 
-    mockExecFile.mockClear();
+    const mockFetch = vi.fn();
+    vi.stubGlobal("fetch", mockFetch);
     await ensureGitHubAppToken();
 
     // No new API calls — token has 55+ minutes remaining
-    expect(mockExecFile).not.toHaveBeenCalled();
+    expect(mockFetch).not.toHaveBeenCalled();
   });
 
   it("refreshes when token is within 5 minutes of expiry", async () => {
     // Init with a token that expires in 4 minutes (within 5-min buffer)
-    setupExecMock({
+    setupMocks({
       token: "ghs_token_1",
       expires_at: new Date(Date.now() + 4 * 60 * 1000).toISOString(),
     });
@@ -344,7 +355,7 @@ describe("ensureGitHubAppToken", () => {
     expect(process.env["GH_TOKEN"]).toBe("ghs_token_1");
 
     // Set up mock to return a new token on refresh
-    setupExecMock({ token: "ghs_token_2" });
+    setupMocks({ token: "ghs_token_2" });
 
     await ensureGitHubAppToken();
     expect(process.env["GH_TOKEN"]).toBe("ghs_token_2");
@@ -352,31 +363,24 @@ describe("ensureGitHubAppToken", () => {
 
   it("deduplicates concurrent refresh calls", async () => {
     // Init with a near-expiry token
-    setupExecMock({
+    setupMocks({
       token: "ghs_expiring",
       expires_at: new Date(Date.now() + 60000).toISOString(),
     });
     await initGitHubApp();
 
-    // Set up a delayed mock for the refresh
+    // Set up a mock that counts calls
     let apiCallCount = 0;
-    mockExecFile.mockImplementation((_cmd, args, _opts, cb) => {
-      const callback = cb as (err: Error | null, stdout: string, stderr: string) => void;
-      const argsArr = args as string[];
-      if (argsArr.some(a => a.includes("access_tokens"))) {
+    vi.stubGlobal("fetch", vi.fn(async (url: string) => {
+      if (typeof url === "string" && url.includes("/app/installations/")) {
         apiCallCount++;
-        // Resolve immediately
-        callback(null, JSON.stringify({
+        return new Response(JSON.stringify({
           token: "ghs_dedup",
           expires_at: new Date(Date.now() + 3600000).toISOString(),
-        }), "");
-      } else if (argsArr.some(a => a === "/app")) {
-        callback(null, JSON.stringify({ slug: "yeti" }), "");
-      } else {
-        callback(null, "", "");
+        }), { status: 200 });
       }
-      return undefined as never;
-    });
+      return new Response("Not found", { status: 404 });
+    }));
 
     // Fire two concurrent ensure calls
     await Promise.all([ensureGitHubAppToken(), ensureGitHubAppToken()]);
