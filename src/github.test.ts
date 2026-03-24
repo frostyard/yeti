@@ -259,6 +259,27 @@ describe("gh retry logic", () => {
     expect(attempt).toBe(3);
   });
 
+  it("retries on HTTP/2 stream error", async () => {
+    let attempt = 0;
+    mockExecFile.mockImplementation((_cmd: string, _args: string[], _opts: any, cb: any) => {
+      attempt++;
+      if (attempt < 3) {
+        const msg = "failed to update https://github.com/frostyard/yeti/issues/145: stream error: stream ID 5; CANCEL; received from peer\nfailed to update 1 issue";
+        cb(new Error(msg), "", msg);
+      } else {
+        cb(null, "[]", "");
+      }
+    });
+
+    const promise = listRepos();
+
+    await vi.advanceTimersByTimeAsync(1000);
+    await vi.advanceTimersByTimeAsync(2000);
+
+    await promise;
+    expect(attempt).toBe(3);
+  });
+
   it("rejects immediately on non-transient errors", async () => {
     mockExecFile.mockImplementation((_cmd: string, _args: string[], _opts: any, cb: any) => {
       cb(new Error("permission denied"), "", "permission denied");
