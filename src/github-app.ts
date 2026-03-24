@@ -126,7 +126,7 @@ export function generateJWT(): string {
   const now = Math.floor(Date.now() / 1000);
   const header = { alg: "RS256", typ: "JWT" };
   const payload = {
-    iss: GITHUB_APP_ID,
+    iss: Number(GITHUB_APP_ID), // GitHub requires iss to be numeric, not a string
     iat: now - 30, // 30s backdate for clock drift
     exp: now + 10 * 60, // 10 min
   };
