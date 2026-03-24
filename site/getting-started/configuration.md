@@ -67,11 +67,13 @@ Whether to include forked repositories when scanning for work. Defaults to `fals
 
 ### `authToken`
 
-A token to protect the web dashboard. When set, all dashboard requests require this token as a query parameter or header. Leave empty to allow unauthenticated access (suitable for private networks).
+A token to protect the web dashboard. When set, all dashboard requests require this token as a query parameter or via the login form. Leave empty to allow unauthenticated access (suitable for private networks).
 
 ```json
 "authToken": "your-secret-token"
 ```
+
+Alternatively (or additionally), you can enable GitHub OAuth sign-in --- see [GitHub App Setup](github-app.md#oauth-for-dashboard-optional).
 
 ### `discordBotToken` and `discordChannelId`
 
@@ -130,6 +132,7 @@ Most configuration changes take effect without restarting the service. When you 
 - `port` --- the HTTP server binds once at startup
 - `discordBotToken`, `discordChannelId` --- the Discord bot connects once at startup
 - `githubAppId`, `githubAppInstallationId`, `githubAppPrivateKeyPath` --- see [GitHub App Setup](github-app.md)
+- `githubAppClientId`, `githubAppClientSecret`, `externalUrl` --- see [GitHub App Setup --- OAuth](github-app.md#oauth-for-dashboard-optional)
 
 ## Next steps
 

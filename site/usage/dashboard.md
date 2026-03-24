@@ -4,13 +4,17 @@ Yeti's web dashboard gives you a real-time view of everything the daemon is doin
 
 ## Authentication
 
-If you set `authToken` in your config, the dashboard requires authentication. Pass your token as a query parameter:
+The dashboard supports two authentication methods, which can be used independently or together:
+
+**Token auth** --- Set `authToken` in your config. Pass the token as a query parameter or use the login form:
 
 ```
 http://localhost:9384?token=your-secret-token
 ```
 
-Without an `authToken` configured, the dashboard is open to anyone who can reach the port. This is fine on private networks or behind a reverse proxy with its own auth layer.
+**GitHub OAuth** --- Configure your GitHub App's OAuth credentials (`githubAppClientId`, `githubAppClientSecret`, `externalUrl`) to enable "Sign in with GitHub" on the login page. Users must be members of at least one organization in `githubOwners`. See [GitHub App Setup --- OAuth](../getting-started/github-app.md#oauth-for-dashboard-optional) for details.
+
+When both methods are configured, the login page shows both options. Without either configured, the dashboard is open to anyone who can reach the port --- fine on private networks or behind a reverse proxy with its own auth layer.
 
 ## Main page
 
