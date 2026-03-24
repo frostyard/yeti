@@ -53,12 +53,19 @@ The refiner processes an issue when any of these conditions are met:
 ### Refinement (Feedback Loop)
 
 1. Detects unreacted human comments after the most recent plan
-2. Feeds the existing plan and new feedback to Claude
+2. Feeds the existing plan and new feedback to Claude with instructions to:
+    - Address each feedback item individually (never silently drop feedback; explain disagreements)
+    - Preserve plan sections not affected by the feedback to avoid regressions
+    - Stay within the original issue scope (out-of-scope suggestions go in a separate `### Out of Scope` section)
+    - Output a `### Clarifying Questions` section if any feedback is ambiguous or contradictory, rather than guessing
+    - Include a testing approach for verifying the changes
 3. Claude produces an updated plan
 4. **Edits the existing plan comment** in-place (does not create a new comment)
 5. If Claude includes a `### Note` section, it is posted as a separate comment
 6. Reacts with thumbsup to each addressed feedback comment
 7. Re-adds `Needs Plan Review` or `Ready`
+
+When no specific feedback is provided (e.g., a re-plan via label), the refiner asks Claude to re-evaluate the plan for missing files, edge cases, implementation order, and testing sufficiency.
 
 ### Follow-Up Response
 
