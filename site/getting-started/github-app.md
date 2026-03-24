@@ -35,6 +35,12 @@ A GitHub App gives Yeti a separate bot identity (e.g., `yeti[bot]`). PRs created
    | **Checks** | Read-only |
    | **Metadata** | Read-only (required, auto-selected) |
 
+   If you plan to use [OAuth for the dashboard](#oauth-for-dashboard-optional), also set under **Organization permissions**:
+
+   | Permission | Access |
+   |---|---|
+   | **Members** | Read-only |
+
 4. Under **Where can this app be installed?**, select **Only on this account**.
 
 5. Click **Create GitHub App**.
@@ -132,11 +138,23 @@ In your GitHub App settings page (**Settings > Developer settings > GitHub Apps 
 
 1. Under **Callback URL**, add your Yeti external URL with the `/auth/callback` path, e.g., `https://yeti.example.com/auth/callback`.
 
-### 2. Generate a client secret
+### 2. Add organization member read permission
+
+OAuth login verifies that the user is a member of your org. This requires the App to have the **Members** permission:
+
+1. In your App settings, go to **Permissions > Organization permissions**.
+2. Set **Members** to **Read-only** and save.
+3. Go to your org's **Settings > Integrations > GitHub Apps**, click **Configure** next to the App.
+4. GitHub will show a banner asking you to **review and accept** the updated permissions. **You must accept** --- the permission won't take effect until you do.
+
+!!! warning "Permission changes require acceptance"
+    Whenever you update a GitHub App's permissions, the installation owner must explicitly accept the change. GitHub sends an email notification and shows a banner on the installation page. Until accepted, API calls that need the new permission will silently fail with 404 errors.
+
+### 3. Generate a client secret
 
 On the same App settings page, scroll to **Client secrets** and click **Generate a new client secret**. Copy the value immediately --- it won't be shown again.
 
-### 3. Configure Yeti
+### 4. Configure Yeti
 
 Add the three OAuth fields to `~/.yeti/config.json`:
 
@@ -161,7 +179,7 @@ The **Client ID** is shown on your GitHub App's settings page (different from th
 !!! warning "Org membership required"
     OAuth login checks that the user is a member of at least one organization listed in `githubOwners`. If `githubOwners` contains only personal usernames (not orgs), OAuth login will be denied for all users. You need at least one actual GitHub organization in `githubOwners`.
 
-### 4. Restart Yeti
+### 5. Restart Yeti
 
 ```bash
 sudo systemctl restart yeti
@@ -183,7 +201,7 @@ The login page will now show a "Sign in with GitHub" button. If `authToken` is a
 
 **PRs still showing your personal username** --- The App config requires a restart. Run `sudo systemctl restart yeti` after changing the config.
 
-**OAuth: "not an org member" error** --- OAuth checks org membership via the GitHub API, which only works for organizations (not personal usernames). Ensure at least one entry in `githubOwners` is an actual GitHub organization, and that the user is a member of it.
+**OAuth: "not an org member" error** --- Three things to check: (1) The App must have **Organization > Members: Read** permission, and the permission change must be **accepted** on the installation page (check for a banner at your org's GitHub Apps settings). (2) At least one entry in `githubOwners` must be an actual GitHub organization, not a personal username. (3) The user must actually be a member of that org.
 
 **OAuth: callback URL mismatch** --- The callback URL in your GitHub App settings must exactly match `{externalUrl}/auth/callback`. Check for trailing slashes, `http` vs `https`, and port mismatches.
 
