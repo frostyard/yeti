@@ -90,6 +90,8 @@ if [[ ! -f "$CONFIG_FILE" ]]; then
   "allowedRepos": [],
   "includeForks": false,
   "enabledJobs": [],
+  "reviewLoop": false,
+  "maxPlanRounds": 3,
   "queueScanIntervalMs": 300000,
   "githubAppId": "",
   "githubAppInstallationId": "",
