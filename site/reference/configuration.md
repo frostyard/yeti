@@ -44,6 +44,16 @@ Changes to live-reloadable fields take effect without restarting the service. Ot
 | `discordChannelId` | `string` | `""` | `YETI_DISCORD_CHANNEL_ID` | No | Discord channel for notifications |
 | `discordAllowedUsers` | `string[]` | `[]` | `YETI_DISCORD_ALLOWED_USERS` (comma-sep) | Yes | Discord user IDs allowed to run commands |
 
+## GitHub App Authentication
+
+All three fields must be set to enable GitHub App auth. These fields require a restart --- they are read once at startup. See [GitHub App Setup](../getting-started/github-app.md) for a step-by-step guide.
+
+| Field | Type | Default | Env Var | Live Reload | Description |
+|-------|------|---------|---------|:-----------:|-------------|
+| `githubAppId` | `string` | `""` | `YETI_GITHUB_APP_ID` | No | GitHub App ID (numeric string) |
+| `githubAppInstallationId` | `string` | `""` | `YETI_GITHUB_APP_INSTALLATION_ID` | No | Installation ID for the App on your org |
+| `githubAppPrivateKeyPath` | `string` | `""` | `YETI_GITHUB_APP_PRIVATE_KEY_PATH` | No | Absolute path to the App's `.pem` private key file |
+
 ## Job Control
 
 | Field | Type | Default | Env Var | Live Reload | Description |
@@ -131,6 +141,9 @@ A more complete configuration with intervals, schedules, and integrations:
   "discordBotToken": "discord-bot-token",
   "discordChannelId": "1234567890",
   "discordAllowedUsers": ["user-id-1", "user-id-2"],
+  "githubAppId": "123456",
+  "githubAppInstallationId": "78901234",
+  "githubAppPrivateKeyPath": "/home/yeti/.yeti/github-app.pem",
   "maxClaudeWorkers": 2,
   "claudeTimeoutMs": 1200000,
   "maxCopilotWorkers": 1,

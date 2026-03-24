@@ -40,6 +40,7 @@ src/
 ├── scheduler.ts         # Job scheduling engine
 ├── claude.ts            # AI backend dispatch and worktree management
 ├── github.ts            # GitHub API via gh CLI
+├── github-app.ts        # Optional GitHub App authentication
 ├── config.ts            # Configuration loading and live reload
 ├── db.ts                # SQLite database
 ├── server.ts            # HTTP dashboard
@@ -57,9 +58,13 @@ src/
 │   ├── improvement-identifier.ts
 │   ├── issue-auditor.ts
 │   ├── repo-standards.ts
-│   └── triage-yeti-errors.ts
+│   ├── triage-yeti-errors.ts
+│   ├── mkdocs-update.ts
+│   └── prompt-evaluator.ts
 ├── pages/               # Dashboard HTML builders
 └── test-helpers.ts      # Test factories
+scripts/
+└── ab-agent-test.sh     # A/B test harness comparing AI backends
 ```
 
 ---
