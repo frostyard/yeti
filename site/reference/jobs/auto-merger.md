@@ -56,6 +56,10 @@ All categories share these requirements:
 - PR must be in `MERGEABLE` state (no conflicts)
 - PR must not be skipped via `skippedItems` config
 
+### Branch Protection Handling
+
+If a merge fails because the target repository has branch protection rules that prohibit the merge, the auto-merger skips that PR and continues with the remaining queue. This prevents a single protected repository from blocking merges in other repositories.
+
 ### Post-Merge Cleanup
 
 After merging a `yeti/issue-*` PR:

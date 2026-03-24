@@ -59,6 +59,7 @@ Before filing an issue, the evaluator searches for existing open issues with the
 When the variant wins, the filed issue includes:
 
 - The rationale for the proposed change
+- The full variant prompt text in a collapsible section, so reviewers can see the exact proposed change
 - Per-test-case results with scores, winner, and reasoning
 - Collapsible sections showing the full current and variant outputs
 - The `prompt-improvement` label for easy filtering
