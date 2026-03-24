@@ -156,10 +156,18 @@ The page live-updates every 10 seconds, so you can leave it open to monitor job 
 
 ## Config page
 
-The config page (`/config`) lets you view and edit Yeti's configuration directly from the browser.
+The config page (`/config`) lets you view and edit Yeti's configuration directly from the browser. Settings are organized into tabs:
 
-- **View** --- All current configuration values are displayed. Sensitive fields like tokens are masked.
-- **Edit** --- Modify `config.json` in-place. Changes are saved to disk and trigger a live reload --- no restart needed for most fields.
+| Tab | Contents |
+|-----|----------|
+| **General** | GitHub owners, allowed repos, forks, log level, plan review loop, server port |
+| **Scheduling** | Job intervals and daily schedule hours |
+| **AI Backends** | Worker concurrency, timeouts, and per-job backend/model overrides |
+| **Integrations** | Discord bot, GitHub App, and OAuth settings |
+| **Security** | Auth token and webhook secret |
+
+- **View** --- All current configuration values are displayed. Sensitive fields like tokens are masked. Fields overridden by environment variables are shown as disabled with a note.
+- **Edit** --- Modify `config.json` in-place. Changes are saved to disk and trigger a live reload --- no restart needed for most fields. The active tab is preserved across saves.
 
 See the [Configuration](../getting-started/configuration.md) guide for details on which fields reload live and which require a restart.
 
