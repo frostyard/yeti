@@ -87,8 +87,8 @@ describe("exchangeCodeForUser", () => {
           json: () => Promise.resolve({ login: "testuser" }),
         })
         .mockResolvedValueOnce({
-          status: 204,
           ok: true,
+          json: () => Promise.resolve([{ login: "test-org" }, { login: "other-org" }]),
         }),
     );
 
@@ -101,8 +101,8 @@ describe("exchangeCodeForUser", () => {
     expect(fetchMock.mock.calls[0][0]).toBe("https://github.com/login/oauth/access_token");
     // User identity
     expect(fetchMock.mock.calls[1][0]).toBe("https://api.github.com/user");
-    // Org membership check
-    expect(fetchMock.mock.calls[2][0]).toBe("https://api.github.com/orgs/test-org/members/testuser");
+    // Org list
+    expect(fetchMock.mock.calls[2][0]).toBe("https://api.github.com/user/orgs?per_page=100");
   });
 
   it("returns null when token exchange fails", async () => {
@@ -149,7 +149,7 @@ describe("exchangeCodeForUser", () => {
     expect(result).toBeNull();
   });
 
-  it("returns not_org_member error when user is not a member of any org", async () => {
+  it("returns not_org_member error when user is not a member of any configured org", async () => {
     vi.stubGlobal(
       "fetch",
       vi.fn()
@@ -161,16 +161,18 @@ describe("exchangeCodeForUser", () => {
           ok: true,
           json: () => Promise.resolve({ login: "outsider" }),
         })
-        // Both org checks return 404
-        .mockResolvedValueOnce({ status: 404, ok: false })
-        .mockResolvedValueOnce({ status: 404, ok: false }),
+        // User's orgs don't include any configured owner
+        .mockResolvedValueOnce({
+          ok: true,
+          json: () => Promise.resolve([{ login: "unrelated-org" }]),
+        }),
     );
 
     const result = await exchangeCodeForUser("test-code");
     expect(result).toEqual({ error: "not_org_member" });
   });
 
-  it("tolerates non-org entries in GITHUB_OWNERS (404) but returns not_org_member", async () => {
+  it("returns not_org_member when user has no orgs", async () => {
     vi.stubGlobal(
       "fetch",
       vi.fn()
@@ -182,17 +184,17 @@ describe("exchangeCodeForUser", () => {
           ok: true,
           json: () => Promise.resolve({ login: "testuser" }),
         })
-        // First owner (test-org) returns 404 (not an org or not a member)
-        .mockResolvedValueOnce({ status: 404, ok: false })
-        // Second owner (personal-user) also returns 404
-        .mockResolvedValueOnce({ status: 404, ok: false }),
+        .mockResolvedValueOnce({
+          ok: true,
+          json: () => Promise.resolve([]),
+        }),
     );
 
     const result = await exchangeCodeForUser("test-code");
     expect(result).toEqual({ error: "not_org_member" });
   });
 
-  it("succeeds if second org matches (OR logic)", async () => {
+  it("matches org names case-insensitively", async () => {
     vi.stubGlobal(
       "fetch",
       vi.fn()
@@ -204,14 +206,36 @@ describe("exchangeCodeForUser", () => {
           ok: true,
           json: () => Promise.resolve({ login: "testuser" }),
         })
-        // First owner fails
-        .mockResolvedValueOnce({ status: 404, ok: false })
-        // Second owner succeeds
-        .mockResolvedValueOnce({ status: 204, ok: true }),
+        .mockResolvedValueOnce({
+          ok: true,
+          json: () => Promise.resolve([{ login: "Test-Org" }]),
+        }),
     );
 
     const result = await exchangeCodeForUser("test-code");
     expect(result).toEqual({ login: "testuser" });
+  });
+
+  it("returns null on transient error fetching org list", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn()
+        .mockResolvedValueOnce({
+          ok: true,
+          json: () => Promise.resolve({ access_token: "ghu_test" }),
+        })
+        .mockResolvedValueOnce({
+          ok: true,
+          json: () => Promise.resolve({ login: "testuser" }),
+        })
+        .mockResolvedValueOnce({
+          ok: false,
+          status: 500,
+        }),
+    );
+
+    const result = await exchangeCodeForUser("test-code");
+    expect(result).toBeNull();
   });
 
   it("handles network error gracefully", async () => {
