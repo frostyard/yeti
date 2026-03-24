@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { mockRepo, mockIssue } from "../test-helpers.js";
 
-vi.mock("../config.js", () => ({
+const mockConfig = vi.hoisted(() => ({
   LABELS: {
     refined: "Refined",
     ready: "Ready",
@@ -9,9 +9,13 @@ vi.mock("../config.js", () => ({
     needsPlanReview: "Needs Plan Review",
     needsRefinement: "Needs Refinement",
   },
-  JOB_AI: { "plan-reviewer": { backend: "copilot" } },
+  JOB_AI: { "plan-reviewer": { backend: "copilot" } } as Record<string, { backend?: string; model?: string }>,
   ENABLED_JOBS: ["plan-reviewer"],
+  REVIEW_LOOP: false,
+  MAX_PLAN_ROUNDS: 3,
 }));
+
+vi.mock("../config.js", () => mockConfig);
 
 vi.mock("../log.js", () => ({
   info: vi.fn(),
@@ -76,6 +80,8 @@ describe("plan-reviewer", () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    mockConfig.REVIEW_LOOP = false;
+    mockConfig.MAX_PLAN_ROUNDS = 3;
     mockClaude.createWorktree.mockResolvedValue("/tmp/worktree");
     mockClaude.enqueueCopilot.mockImplementation((fn: () => Promise<string>) => fn());
     mockClaude.enqueueCodex.mockImplementation((fn: () => Promise<string>) => fn());
@@ -290,5 +296,144 @@ describe("plan-reviewer", () => {
     );
     expect(mockGh.commentOnIssue).not.toHaveBeenCalled();
     expect(mockClaude.removeWorktree).toHaveBeenCalled();
+  });
+
+  describe("review loop enabled", () => {
+    beforeEach(() => {
+      mockConfig.REVIEW_LOOP = true;
+    });
+
+    function setupIssueWithReview(reviewOutput: string, existingReviewComments = 0) {
+      const issue = mockIssue({
+        body: "Add feature X",
+        labels: [{ name: "Needs Plan Review" }],
+      });
+      mockGh.listOpenIssues.mockResolvedValueOnce([issue]);
+
+      const comments: Array<{ id: number; body: string; login: string }> = [
+        { id: 501, body: planCommentBody, login: "yeti-bot" },
+      ];
+      // Add existing review comments to simulate prior rounds
+      for (let i = 0; i < existingReviewComments; i++) {
+        comments.push({
+          id: 600 + i,
+          body: "<!-- yeti-automated -->## Plan Review\n\nPrior review",
+          login: "yeti-bot",
+        });
+      }
+      mockGh.getIssueComments.mockResolvedValue(comments);
+      mockGh.getCommentReactions.mockResolvedValue([]);
+      mockClaude.runAI.mockResolvedValue(reviewOutput);
+
+      return issue;
+    }
+
+    it("adds verdict instruction to prompt when review loop is enabled", async () => {
+      setupIssueWithReview("Plan looks good.\nVERDICT: APPROVED");
+
+      await run([repo]);
+
+      expect(mockClaude.runAI).toHaveBeenCalledWith(
+        expect.stringContaining("VERDICT: APPROVED"),
+        "/tmp/worktree",
+        { backend: "copilot" },
+      );
+    });
+
+    it("does not add verdict instruction when review loop is disabled", async () => {
+      mockConfig.REVIEW_LOOP = false;
+      const issue = mockIssue({
+        body: "Add feature X",
+        labels: [{ name: "Needs Plan Review" }],
+      });
+      mockGh.listOpenIssues.mockResolvedValueOnce([issue]);
+      mockGh.getIssueComments.mockResolvedValue([
+        { id: 501, body: planCommentBody, login: "yeti-bot" },
+      ]);
+      mockGh.getCommentReactions.mockResolvedValue([]);
+
+      await run([repo]);
+
+      expect(mockClaude.runAI).toHaveBeenCalledWith(
+        expect.not.stringContaining("VERDICT"),
+        "/tmp/worktree",
+        { backend: "copilot" },
+      );
+    });
+
+    it("approves: adds Ready label when verdict is APPROVED", async () => {
+      const issue = setupIssueWithReview("Plan is solid.\nVERDICT: APPROVED");
+
+      await run([repo]);
+
+      expect(mockGh.removeLabel).toHaveBeenCalledWith(repo.fullName, issue.number, "Needs Plan Review");
+      expect(mockGh.addLabel).toHaveBeenCalledWith(repo.fullName, issue.number, "Ready");
+      expect(mockGh.addLabel).not.toHaveBeenCalledWith(repo.fullName, issue.number, "Needs Refinement");
+    });
+
+    it("strips verdict line from posted comment", async () => {
+      setupIssueWithReview("Plan is solid.\nVERDICT: APPROVED");
+
+      await run([repo]);
+
+      expect(mockGh.commentOnIssue).toHaveBeenCalledWith(
+        repo.fullName,
+        1,
+        expect.not.stringContaining("VERDICT"),
+      );
+      expect(mockGh.commentOnIssue).toHaveBeenCalledWith(
+        repo.fullName,
+        1,
+        expect.stringContaining("Plan is solid."),
+      );
+    });
+
+    it("needs revision under max rounds: adds Needs Refinement", async () => {
+      const issue = setupIssueWithReview("Issues found.\nVERDICT: NEEDS REVISION", 0);
+
+      await run([repo]);
+
+      expect(mockGh.removeLabel).toHaveBeenCalledWith(repo.fullName, issue.number, "Needs Plan Review");
+      expect(mockGh.addLabel).toHaveBeenCalledWith(repo.fullName, issue.number, "Needs Refinement");
+      expect(mockGh.addLabel).not.toHaveBeenCalledWith(repo.fullName, issue.number, "Ready");
+    });
+
+    it("needs revision at max rounds: posts warning and adds Ready", async () => {
+      mockConfig.MAX_PLAN_ROUNDS = 3;
+      // 2 existing reviews + current = 3 = MAX_PLAN_ROUNDS
+      const issue = setupIssueWithReview("Still has issues.\nVERDICT: NEEDS REVISION", 2);
+
+      await run([repo]);
+
+      // Should post the max-rounds warning comment
+      expect(mockGh.commentOnIssue).toHaveBeenCalledWith(
+        repo.fullName,
+        issue.number,
+        expect.stringContaining("Maximum plan review rounds (3) reached"),
+      );
+      expect(mockGh.removeLabel).toHaveBeenCalledWith(repo.fullName, issue.number, "Needs Plan Review");
+      expect(mockGh.addLabel).toHaveBeenCalledWith(repo.fullName, issue.number, "Ready");
+      expect(mockGh.addLabel).not.toHaveBeenCalledWith(repo.fullName, issue.number, "Needs Refinement");
+    });
+
+    it("defaults to needs-revision when no verdict line in output", async () => {
+      const issue = setupIssueWithReview("The plan has some issues but no explicit verdict.");
+
+      await run([repo]);
+
+      expect(mockGh.addLabel).toHaveBeenCalledWith(repo.fullName, issue.number, "Needs Refinement");
+      expect(mockGh.addLabel).not.toHaveBeenCalledWith(repo.fullName, issue.number, "Ready");
+    });
+
+    it("verdict parsing is case-insensitive and uses last verdict line", async () => {
+      // Earlier mention of APPROVED, but last verdict is NEEDS REVISION
+      const issue = setupIssueWithReview(
+        "I mentioned VERDICT: APPROVED above but changed my mind.\nverdict: needs revision",
+      );
+
+      await run([repo]);
+
+      expect(mockGh.addLabel).toHaveBeenCalledWith(repo.fullName, issue.number, "Needs Refinement");
+    });
   });
 });

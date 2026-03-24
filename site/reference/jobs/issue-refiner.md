@@ -50,6 +50,9 @@ The refiner processes an issue when any of these conditions are met:
 7. Transitions labels: removes `Needs Refinement`, adds `Needs Plan Review` or `Ready`
 8. For `[ci-unrelated]` issues: also adds `Refined` to skip human approval
 
+!!! note "Review loop re-entry"
+    When `reviewLoop` is enabled, plan-reviewer can re-add `Needs Refinement` to trigger another refinement cycle. The issue-refiner handles this the same way as human-initiated re-refinement — it reads prior comments (including the review) and updates the plan.
+
 ### Refinement (Feedback Loop)
 
 1. Detects unreacted human comments after the most recent plan

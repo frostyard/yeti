@@ -14,7 +14,9 @@
 
 The plan-reviewer provides an adversarial critique of implementation plans. It reads the plan and the original issue, then posts a review highlighting gaps, risks, edge cases, missing test coverage, and over-engineering concerns.
 
-The review is written **for the human**, not for automatic AI refinement. When plan-reviewer is enabled, the workflow becomes human-in-the-loop: issue-refiner produces a plan, plan-reviewer critiques it, both land on the issue as comments with the `Ready` label, and a human reads both before deciding to approve or request changes.
+By default, the review is written **for the human**, not for automatic AI refinement. When plan-reviewer is enabled, the workflow becomes human-in-the-loop: issue-refiner produces a plan, plan-reviewer critiques it, both land on the issue as comments with the `Ready` label, and a human reads both before deciding to approve or request changes.
+
+When `reviewLoop` is enabled in config, the reviewer can also send plans back to the issue-refiner for automatic re-refinement. See [Review Loop](#review-loop) below.
 
 ## Trigger
 
@@ -26,7 +28,8 @@ Issues with the `Needs Plan Review` label that have an unreviewed plan comment (
 |-------|--------|
 | `Needs Plan Review` | Requires |
 | `Needs Plan Review` | Removes (after posting review) |
-| `Ready` | Sets (after posting review) |
+| `Ready` | Sets (after posting review, or when max rounds reached) |
+| `Needs Refinement` | Sets (review loop only, when verdict is "needs revision" and under max rounds) |
 
 ## How it works
 
@@ -38,7 +41,17 @@ Issues with the `Needs Plan Review` label that have an unreviewed plan comment (
 6. Runs the AI (Claude or Copilot, based on `jobAi` config) to critique the plan
 7. Posts a `## Plan Review` comment on the issue
 8. Reacts with thumbsup to the plan comment (marks it as reviewed)
-9. Removes `Needs Plan Review`, adds `Ready`
+9. Removes `Needs Plan Review`, adds `Ready` (default mode) **or** follows review loop logic (see below)
+
+### Review Loop
+
+When `reviewLoop: true` is set in config, the plan-reviewer asks the AI to end its review with a verdict line (`VERDICT: APPROVED` or `VERDICT: NEEDS REVISION`). The verdict line is stripped from the posted comment.
+
+- **APPROVED:** Removes `Needs Plan Review`, adds `Ready` (same as default mode).
+- **NEEDS REVISION:** Checks how many review rounds have completed. If under `maxPlanRounds`, removes `Needs Plan Review` and adds `Needs Refinement` — sending the issue back to issue-refiner for another cycle. If at the limit, posts a warning comment and adds `Ready` so a human can take over.
+- **No verdict found:** Defaults to "needs revision" behavior.
+
+The round count is based on existing `## Plan Review` comments posted by Yeti on the issue.
 
 ### Review Focus Areas
 

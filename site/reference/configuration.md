@@ -74,6 +74,13 @@ Optional. Enables "Sign in with GitHub" on the dashboard login page. All three f
 | `skippedItems` | `{repo, number}[]` | `[]` | -- | Yes | Issues/PRs to skip during processing |
 | `prioritizedItems` | `{repo, number}[]` | `[]` | -- | Yes | High-priority items processed first |
 
+## Plan Review Loop
+
+| Field | Type | Default | Env Var | Live Reload | Description |
+|-------|------|---------|---------|:-----------:|-------------|
+| `reviewLoop` | `boolean` | `false` | -- | Yes | Enable iterative plan refinement. When true, plan-reviewer can send plans back to issue-refiner instead of always marking Ready. |
+| `maxPlanRounds` | `number` | `3` | -- | Yes | Maximum plan→review cycles before falling through to human review. Minimum 1. |
+
 ## Intervals
 
 All interval fields live inside the `intervals` object, are specified in milliseconds, and are live-reloadable.

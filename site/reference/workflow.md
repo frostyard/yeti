@@ -133,12 +133,19 @@ For `[ci-unrelated]` issues, the refiner also auto-adds `Refined` to skip human 
 
 When enabled, the plan-reviewer acts as an adversarial critic. It reads the plan and the issue, then posts a `## Plan Review` comment highlighting gaps, risks, edge cases, and over-engineering concerns.
 
-The review is written for the **human**, not for automatic AI refinement. The intent is to give you a second opinion before you approve the plan.
+**Default mode (`reviewLoop: false`):** The review is written for the **human**, not for automatic AI refinement. The intent is to give you a second opinion before you approve the plan.
 
-**Label transitions:**
+**Review loop mode (`reviewLoop: true`):** The reviewer includes a verdict (APPROVED or NEEDS REVISION). If the plan needs revision and the round count is under `maxPlanRounds`, the issue is sent back to issue-refiner for automatic re-refinement. If max rounds are reached, the issue falls through to human review with a warning comment.
+
+**Label transitions (default):**
 
 - Removes `Needs Plan Review`
 - Adds `Ready`
+
+**Label transitions (review loop, needs revision, under max rounds):**
+
+- Removes `Needs Plan Review`
+- Adds `Needs Refinement` (triggers issue-refiner again)
 
 ### 4. Human Review (Ready state)
 

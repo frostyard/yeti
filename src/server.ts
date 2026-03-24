@@ -397,6 +397,11 @@ async function handleRequest(req: http.IncomingMessage, res: http.ServerResponse
       updates.allowedRepos = params["allowedRepos"].split(",").map(s => s.trim()).filter(Boolean);
     }
     updates.includeForks = params["includeForks"] === "true";
+    updates.reviewLoop = params["reviewLoop"] === "true";
+    if (params["maxPlanRounds"] !== undefined) {
+      const v = parseInt(params["maxPlanRounds"], 10);
+      if (Number.isFinite(v) && v >= 1) updates.maxPlanRounds = v;
+    }
     // Intervals
     const intervalUpdates: Record<string, number> = {};
     for (const [key, value] of Object.entries(params)) {

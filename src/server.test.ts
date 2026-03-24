@@ -549,6 +549,34 @@ describe("HTTP server", () => {
     expect(args.logLevel).toBeUndefined();
   });
 
+  it("POST /config parses reviewLoop and maxPlanRounds", async () => {
+    const { writeConfig: wc } = await import("./config.js");
+    await request(server, "POST", "/config", {
+      body: "reviewLoop=true&maxPlanRounds=5",
+    });
+    expect(wc).toHaveBeenCalledWith(
+      expect.objectContaining({ reviewLoop: true, maxPlanRounds: 5 }),
+    );
+  });
+
+  it("POST /config sets reviewLoop to false when checkbox absent", async () => {
+    const { writeConfig: wc } = await import("./config.js");
+    await request(server, "POST", "/config", {
+      body: "selfRepo=org%2Frepo",
+    });
+    expect(wc).toHaveBeenCalledWith(
+      expect.objectContaining({ reviewLoop: false }),
+    );
+  });
+
+  it("GET /config renders reviewLoop and maxPlanRounds fields", async () => {
+    const res = await request(server, "GET", "/config");
+    expect(res.status).toBe(200);
+    expect(res.body).toContain('name="reviewLoop"');
+    expect(res.body).toContain('name="maxPlanRounds"');
+    expect(res.body).toContain("plan review loop");
+  });
+
   it("GET /login redirects to / when auth disabled", async () => {
     const res = await request(server, "GET", "/login");
     expect(res.status).toBe(303);

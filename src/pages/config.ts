@@ -133,6 +133,14 @@ ${htmlOpenTag(theme)}
     ${envNote("includeForks")}
     <div class="field-note">When enabled, forked repos in the org are discovered alongside source repos. Default: off.</div>
 
+    <h2>Plan Review Loop</h2>
+    <label><input type="checkbox" name="reviewLoop" value="true" ${cfg.reviewLoop ? "checked" : ""}> Enable plan review loop (reviewer can send plans back for re-refinement)</label>
+    <div class="field-note">When enabled, the plan-reviewer can reject a plan and add Needs Refinement to trigger another refinement cycle. Default: off.</div>
+
+    <label for="maxPlanRounds">Max Plan Review Rounds</label>
+    <input type="number" name="maxPlanRounds" id="maxPlanRounds" value="${Number(cfg.maxPlanRounds ?? 3)}" min="1">
+    <div class="field-note">Maximum plan&rarr;review cycles before falling through to human review (default: 3)</div>
+
     <h2>Server</h2>
     <label for="port">Port</label>
     <input type="number" name="port" id="port" value="${Number(cfg.port)}" disabled>
