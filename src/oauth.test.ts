@@ -85,6 +85,7 @@ describe("exchangeCodeForUser", () => {
         .mockResolvedValueOnce({
           ok: true,
           json: () => Promise.resolve({ login: "testuser" }),
+          headers: new Headers({ "x-oauth-scopes": "read:org" }),
         })
         .mockResolvedValueOnce({
           ok: true,
@@ -160,6 +161,7 @@ describe("exchangeCodeForUser", () => {
         .mockResolvedValueOnce({
           ok: true,
           json: () => Promise.resolve({ login: "outsider" }),
+          headers: new Headers({ "x-oauth-scopes": "read:org" }),
         })
         // User's orgs don't include any configured owner
         .mockResolvedValueOnce({
@@ -183,6 +185,7 @@ describe("exchangeCodeForUser", () => {
         .mockResolvedValueOnce({
           ok: true,
           json: () => Promise.resolve({ login: "testuser" }),
+          headers: new Headers({ "x-oauth-scopes": "read:org" }),
         })
         .mockResolvedValueOnce({
           ok: true,
@@ -205,6 +208,7 @@ describe("exchangeCodeForUser", () => {
         .mockResolvedValueOnce({
           ok: true,
           json: () => Promise.resolve({ login: "testuser" }),
+          headers: new Headers({ "x-oauth-scopes": "read:org" }),
         })
         .mockResolvedValueOnce({
           ok: true,
@@ -227,6 +231,7 @@ describe("exchangeCodeForUser", () => {
         .mockResolvedValueOnce({
           ok: true,
           json: () => Promise.resolve({ login: "testuser" }),
+          headers: new Headers({ "x-oauth-scopes": "read:org" }),
         })
         .mockResolvedValueOnce({
           ok: false,
