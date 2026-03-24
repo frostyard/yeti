@@ -54,6 +54,16 @@ All three fields must be set to enable GitHub App auth. These fields require a r
 | `githubAppInstallationId` | `string` | `""` | `YETI_GITHUB_APP_INSTALLATION_ID` | No | Installation ID for the App on your org |
 | `githubAppPrivateKeyPath` | `string` | `""` | `YETI_GITHUB_APP_PRIVATE_KEY_PATH` | No | Absolute path to the App's `.pem` private key file |
 
+## GitHub OAuth (Dashboard Sign-In)
+
+Optional. Enables "Sign in with GitHub" on the dashboard login page. All three fields must be set to activate OAuth. These fields require a restart. See [GitHub App Setup — OAuth](../getting-started/github-app.md#oauth-for-dashboard-optional) for setup steps.
+
+| Field | Type | Default | Env Var | Live Reload | Description |
+|-------|------|---------|---------|:-----------:|-------------|
+| `githubAppClientId` | `string` | `""` | `YETI_GITHUB_APP_CLIENT_ID` | No | OAuth client ID from the GitHub App |
+| `githubAppClientSecret` | `string` | `""` | `YETI_GITHUB_APP_CLIENT_SECRET` | No | OAuth client secret (sensitive — masked in API/dashboard) |
+| `externalUrl` | `string` | `""` | `YETI_EXTERNAL_URL` | No | Public URL for OAuth callback, e.g., `https://yeti.example.com` |
+
 ## Job Control
 
 | Field | Type | Default | Env Var | Live Reload | Description |
@@ -144,6 +154,9 @@ A more complete configuration with intervals, schedules, and integrations:
   "githubAppId": "123456",
   "githubAppInstallationId": "78901234",
   "githubAppPrivateKeyPath": "/home/yeti/.yeti/github-app.pem",
+  "githubAppClientId": "Iv1.abc123...",
+  "githubAppClientSecret": "your-client-secret",
+  "externalUrl": "https://yeti.example.com",
   "maxClaudeWorkers": 2,
   "claudeTimeoutMs": 1200000,
   "maxCopilotWorkers": 1,

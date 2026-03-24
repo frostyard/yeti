@@ -15,6 +15,7 @@ src/
 ├── scheduler.ts         Interval/schedule-based job runner with skip-if-busy
 ├── github.ts            gh CLI wrapper with transient-error retry
 ├── github-app.ts        Optional GitHub App auth (JWT, installation tokens, GH_TOKEN injection)
+├── oauth.ts             Optional GitHub OAuth for dashboard sign-in (stateless sessions, org membership)
 ├── claude.ts            Multi-backend AI dispatch (Claude + Copilot + Codex), BoundedQueue class, worktree helpers
 ├── db.ts                SQLite task tracking (better-sqlite3)
 ├── server.ts            HTTP server — dashboard, health, status, manual triggers
@@ -162,6 +163,19 @@ Token refresh is lazy with a 5-minute pre-expiry buffer and in-flight dedup.
 before each job tick. If no App config is set, all functions are no-ops and
 Yeti continues using personal `gh` CLI auth.
 
+**`oauth.ts`** — Optional GitHub OAuth for dashboard sign-in. When
+`githubAppClientId`, `githubAppClientSecret`, and `externalUrl` are all
+configured, enables "Sign in with GitHub" on the login page. Handles the
+full OAuth flow: generates authorization URLs with `read:org` scope,
+exchanges authorization codes for user access tokens via direct GitHub API
+calls (not `gh` CLI), fetches user identity, and checks org membership
+against `GITHUB_OWNERS` (OR logic — any org match is sufficient; personal
+usernames in `githubOwners` are silently skipped since the `/orgs/` endpoint
+404s for them). Sessions use HMAC-signed cookies (derived key from
+`githubAppClientSecret`, 24h expiry) — no server-side session store. The
+user access token is used only during the callback and is not persisted.
+Zero external dependencies (Node.js `crypto` and `fetch()` only).
+
 **`claude.ts`** — Two concerns: (1) **multi-backend AI dispatch** with three
 bounded concurrent queues — one per backend (Claude, Copilot, Codex), each
 implemented as a `BoundedQueue` instance with configurable concurrency
@@ -206,7 +220,10 @@ Routes:
 - `GET /jobs` — Jobs page: all jobs with descriptions, enabled/disabled state, AI backend/model, schedule, Run/Pause controls
 - `GET /health` — JSON health check
 - `GET /status` — JSON with jobs (including `jobSchedules` with per-job `nextRunIn` countdowns), `jobAi` (per-job backend/model config for live dashboard updates), uptime, queue, integrations
-- `GET /login` / `POST /login` — Token-based authentication
+- `GET /login` / `POST /login` — Token-based authentication (also shows "Sign in with GitHub" when OAuth is configured)
+- `GET /auth/github` — Initiate GitHub OAuth flow (redirect to GitHub)
+- `GET /auth/callback` — OAuth callback (exchange code, set session cookie)
+- `GET /auth/logout` — Clear session cookie, redirect to login
 - `POST /trigger/:job` — Manual job trigger (returns 200/409/404)
 - `POST /pause/:job` — Toggle pause/resume for a job
 - `POST /cancel` — Cancel current Claude task
@@ -223,10 +240,10 @@ Routes:
 - `GET /config` / `POST /config` — Config viewer/editor (HTML form)
 - `GET /config/api` — JSON config (sensitive fields masked)
 
-Supports dark/light/system themes. When `authToken` is configured, mutating
-endpoints and config views require authentication via
-`Authorization: Bearer <token>` header or `yeti_token` cookie.
-Token comparison uses `crypto.timingSafeEqual`.
+Supports dark/light/system themes. Auth is enabled when `authToken` is set
+or OAuth is configured (either or both). Accepts `Authorization: Bearer
+<token>` header, `yeti_token` cookie (token auth), or `yeti_session` cookie
+(OAuth). Token comparison uses `crypto.timingSafeEqual`.
 
 **`plan-parser.ts`** — Parses structured implementation plan comments into
 discrete phases for multi-PR workflows. Looks for `### PR N:` or `### Phase N:`

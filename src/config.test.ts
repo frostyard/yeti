@@ -258,6 +258,97 @@ describe("config", () => {
     expect(mod.GITHUB_APP_ID).toBe(initialId);
   });
 
+  it("OAuth config fields are loaded from config.json", async () => {
+    const mod = await import("./config.js");
+
+    fs.mkdirSync(path.dirname(mod.CONFIG_PATH), { recursive: true });
+    fs.writeFileSync(
+      mod.CONFIG_PATH,
+      JSON.stringify({
+        githubAppClientId: "Iv1.abc123",
+        githubAppClientSecret: "secret-xyz",
+        externalUrl: "https://yeti.example.com",
+      }),
+    );
+
+    const display = mod.getConfigForDisplay();
+    expect(display.githubAppClientId).toBe("Iv1.abc123");
+    expect(display.githubAppClientSecret).toBe("****-xyz"); // masked
+    expect(display.externalUrl).toBe("https://yeti.example.com");
+  });
+
+  it("OAuth config fields default to empty strings", async () => {
+    const mod = await import("./config.js");
+
+    fs.mkdirSync(path.dirname(mod.CONFIG_PATH), { recursive: true });
+    fs.writeFileSync(mod.CONFIG_PATH, JSON.stringify({}));
+
+    const display = mod.getConfigForDisplay();
+    expect(display.githubAppClientId).toBe("");
+    expect(display.githubAppClientSecret).toBe("Not configured");
+    expect(display.externalUrl).toBe("");
+  });
+
+  it("externalUrl trailing slashes are stripped", async () => {
+    const mod = await import("./config.js");
+
+    fs.mkdirSync(path.dirname(mod.CONFIG_PATH), { recursive: true });
+    fs.writeFileSync(
+      mod.CONFIG_PATH,
+      JSON.stringify({ externalUrl: "https://yeti.example.com///" }),
+    );
+
+    const display = mod.getConfigForDisplay();
+    expect(display.externalUrl).toBe("https://yeti.example.com");
+  });
+
+  it("externalUrl is cleared when invalid protocol and client ID/secret set", async () => {
+    const mod = await import("./config.js");
+
+    fs.mkdirSync(path.dirname(mod.CONFIG_PATH), { recursive: true });
+    fs.writeFileSync(
+      mod.CONFIG_PATH,
+      JSON.stringify({
+        githubAppClientId: "Iv1.abc123",
+        githubAppClientSecret: "secret-xyz",
+        externalUrl: "ftp://invalid.example.com",
+      }),
+    );
+
+    const display = mod.getConfigForDisplay();
+    expect(display.externalUrl).toBe("");
+  });
+
+  it("OAuth config fields are not updated by reloadConfig (immutable)", async () => {
+    const mod = await import("./config.js");
+
+    fs.mkdirSync(path.dirname(mod.CONFIG_PATH), { recursive: true });
+    fs.writeFileSync(mod.CONFIG_PATH, JSON.stringify({}));
+
+    const initialClientId = mod.GITHUB_APP_CLIENT_ID;
+
+    fs.writeFileSync(
+      mod.CONFIG_PATH,
+      JSON.stringify({ githubAppClientId: "changed-id" }),
+    );
+    mod.reloadConfig();
+
+    expect(mod.GITHUB_APP_CLIENT_ID).toBe(initialClientId);
+  });
+
+  it("githubAppClientSecret is in SENSITIVE_KEYS and masked in display", async () => {
+    const mod = await import("./config.js");
+
+    fs.mkdirSync(path.dirname(mod.CONFIG_PATH), { recursive: true });
+    fs.writeFileSync(
+      mod.CONFIG_PATH,
+      JSON.stringify({ githubAppClientSecret: "abcdefgh" }),
+    );
+
+    const display = mod.getConfigForDisplay();
+    expect(display.githubAppClientSecret).toBe("****efgh");
+  });
+
   it("offConfigChange removes listener", async () => {
     const mod = await import("./config.js");
 

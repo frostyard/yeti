@@ -6,12 +6,13 @@ Yeti exposes an HTTP server (default port `9384`) that serves both the web dashb
 
 ## Authentication
 
-When `authToken` is configured, most routes require authentication. Auth is provided via either:
+When `authToken` is configured or GitHub OAuth is enabled, most routes require authentication. Auth is provided via any of:
 
-- **Header:** `Authorization: Bearer <token>`
-- **Cookie:** `yeti_token` (set automatically by the login page)
+- **Header:** `Authorization: Bearer <token>` (when `authToken` is set)
+- **Cookie:** `yeti_token` (set by the token login form, when `authToken` is set)
+- **Cookie:** `yeti_session` (set by GitHub OAuth sign-in, when OAuth is configured)
 
-The `/health`, `/status`, `/login`, and `POST /login` routes are accessible without authentication.
+The `/health`, `/status`, `/login`, `POST /login`, and `/auth/*` routes are accessible without authentication.
 
 ---
 
@@ -25,6 +26,9 @@ The `/health`, `/status`, `/login`, and `POST /login` routes are accessible with
 | `GET` | `/status` | System status with job states, uptime, queue stats, and integration status (JSON) |
 | `GET` | `/login` | Login page (HTML). Redirects to `/` if auth is disabled |
 | `POST` | `/login` | Submit auth token via form. Sets `yeti_token` cookie on success |
+| `GET` | `/auth/github` | Redirect to GitHub OAuth authorization page. Sets a CSRF state cookie |
+| `GET` | `/auth/callback` | OAuth callback. Exchanges code for user identity, checks org membership, sets `yeti_session` cookie |
+| `GET` | `/auth/logout` | Clears session cookie and redirects to `/login` |
 
 ### Dashboard (Auth Required)
 

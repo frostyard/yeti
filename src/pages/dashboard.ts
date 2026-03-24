@@ -24,6 +24,7 @@ export function buildStatusPage(
   scheduleInfo?: Map<string, { intervalMs: number; scheduledHour?: number }>,
   copilotQueue?: { pending: number; active: number },
   codexQueue?: { pending: number; active: number },
+  username?: string | null,
 ): string {
   const dc = discordLabel(discord);
   const githubAuthLabel = isGitHubAppConfigured()
@@ -117,7 +118,7 @@ ${htmlOpenTag(theme)}
 </head>
 <body>
   <h1>yeti</h1>
-  ${buildNav(theme)}
+  ${buildNav(theme, username)}
   ${THEME_SCRIPT}
   <dl class="meta">
     <dt>Version</dt>

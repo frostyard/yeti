@@ -17,6 +17,7 @@ import { buildConfigPage } from "./pages/config.js";
 import { buildJobsPage, type JobInfo } from "./pages/jobs.js";
 import { buildLoginPage } from "./pages/login.js";
 import { buildReposPage } from "./pages/repos.js";
+import { isOAuthConfigured, getAuthorizationUrl, exchangeCodeForUser, createSessionCookie, verifySessionCookie } from "./oauth.js";
 
 // Re-export for backwards compatibility with tests and other consumers
 export { formatUptime, formatRelativeTime } from "./pages/layout.js";
@@ -44,21 +45,41 @@ function parseCookies(header: string | undefined): Record<string, string> {
   return cookies;
 }
 
-function requireAuth(req: http.IncomingMessage, res: http.ServerResponse): boolean {
+function isAuthEnabled(): boolean {
+  return !!(config.AUTH_TOKEN || isOAuthConfigured());
+}
+
+/** Returns false if unauthorized (response already sent), or { username } if authorized. */
+function requireAuth(req: http.IncomingMessage, res: http.ServerResponse): false | { username: string | null } {
+  if (!isAuthEnabled()) return { username: null };
+
   const token = config.AUTH_TOKEN;
-  if (!token) return true; // auth disabled
 
   // Check Authorization header
-  const authHeader = req.headers.authorization;
-  if (authHeader?.startsWith("Bearer ")) {
-    const provided = authHeader.slice(7);
-    if (safeCompare(provided, token)) return true;
+  if (token) {
+    const authHeader = req.headers.authorization;
+    if (authHeader?.startsWith("Bearer ")) {
+      const provided = authHeader.slice(7);
+      if (safeCompare(provided, token)) return { username: null };
+    }
   }
 
-  // Check cookie
-  const cookies = parseCookies(req.headers.cookie);
-  const cookieToken = cookies["yeti_token"];
-  if (cookieToken && safeCompare(cookieToken, token)) return true;
+  // Check token cookie
+  if (token) {
+    const cookies = parseCookies(req.headers.cookie);
+    const cookieToken = cookies["yeti_token"];
+    if (cookieToken && safeCompare(cookieToken, token)) return { username: null };
+  }
+
+  // Check OAuth session cookie
+  if (isOAuthConfigured()) {
+    const cookies = parseCookies(req.headers.cookie);
+    const sessionCookie = cookies["yeti_session"];
+    if (sessionCookie) {
+      const session = verifySessionCookie(sessionCookie);
+      if (session) return { username: session.login };
+    }
+  }
 
   // Auth failed
   res.writeHead(401, { "Content-Type": "text/html" });
@@ -143,7 +164,12 @@ async function handleRequest(req: http.IncomingMessage, res: http.ServerResponse
 
     if (!authToken || !safeCompare(token, authToken)) {
       res.writeHead(200, { "Content-Type": "text/html" });
-      res.end(buildLoginPage(true, theme));
+      res.end(buildLoginPage({
+        tokenError: true,
+        theme,
+        hasToken: !!config.AUTH_TOKEN,
+        hasOAuth: isOAuthConfigured(),
+      }));
       return;
     }
 
@@ -406,14 +432,116 @@ async function handleRequest(req: http.IncomingMessage, res: http.ServerResponse
     return;
   }
 
-  if (req.url === "/login") {
-    if (!config.AUTH_TOKEN) {
+  if (req.url === "/login" || req.url?.startsWith("/login?")) {
+    if (!isAuthEnabled()) {
       res.writeHead(303, { Location: "/" });
       res.end();
       return;
     }
+    const urlObj = new URL(req.url, "http://localhost");
+    const error = urlObj.searchParams.get("error") ?? undefined;
     res.writeHead(200, { "Content-Type": "text/html" });
-    res.end(buildLoginPage(false, theme));
+    res.end(buildLoginPage({
+      tokenError: false,
+      theme,
+      hasToken: !!config.AUTH_TOKEN,
+      hasOAuth: isOAuthConfigured(),
+      oauthError: error,
+    }));
+    return;
+  }
+
+  // ── OAuth routes (public) ──
+
+  if (req.url === "/auth/github") {
+    if (!isOAuthConfigured()) {
+      res.writeHead(302, { Location: "/login" });
+      res.end();
+      return;
+    }
+    const state = crypto.randomBytes(20).toString("hex");
+    const isSecure = config.EXTERNAL_URL.startsWith("https://");
+    const stateCookie = `yeti_oauth_state=${state}; HttpOnly; SameSite=Lax; Path=/auth/callback; Max-Age=300${isSecure ? "; Secure" : ""}`;
+    res.writeHead(302, {
+      Location: getAuthorizationUrl(state),
+      "Set-Cookie": stateCookie,
+    });
+    res.end();
+    return;
+  }
+
+  if (req.url?.startsWith("/auth/callback")) {
+    if (!isOAuthConfigured()) {
+      res.writeHead(302, { Location: "/login" });
+      res.end();
+      return;
+    }
+    const isSecure = config.EXTERNAL_URL.startsWith("https://");
+    const clearStateCookie = `yeti_oauth_state=; HttpOnly; SameSite=Lax; Path=/auth/callback; Max-Age=0${isSecure ? "; Secure" : ""}`;
+
+    const urlObj = new URL(req.url, "http://localhost");
+
+    // Check if user denied consent
+    if (urlObj.searchParams.get("error") === "access_denied") {
+      res.writeHead(302, { Location: "/login?error=oauth_denied", "Set-Cookie": clearStateCookie });
+      res.end();
+      return;
+    }
+
+    const code = urlObj.searchParams.get("code");
+    const state = urlObj.searchParams.get("state");
+
+    if (!code) {
+      res.writeHead(302, { Location: "/login?error=oauth_error", "Set-Cookie": clearStateCookie });
+      res.end();
+      return;
+    }
+
+    // Verify state matches cookie
+    const cookies = parseCookies(req.headers.cookie);
+    const cookieState = cookies["yeti_oauth_state"];
+    if (!cookieState || !state || cookieState !== state) {
+      res.writeHead(302, { Location: "/login?error=oauth_error", "Set-Cookie": clearStateCookie });
+      res.end();
+      return;
+    }
+
+    // Exchange code for user
+    const result = await exchangeCodeForUser(code);
+
+    if (!result || "error" in result) {
+      const errorType = result && "error" in result && result.error === "not_org_member"
+        ? "not_org_member"
+        : "oauth_error";
+      res.writeHead(302, { Location: `/login?error=${errorType}`, "Set-Cookie": clearStateCookie });
+      res.end();
+      return;
+    }
+
+    const user = result;
+
+    // Set session cookie
+    const sessionValue = createSessionCookie(user.login);
+    const sessionCookie = `yeti_session=${sessionValue}; HttpOnly; SameSite=Strict; Path=/${isSecure ? "; Secure" : ""}; Max-Age=86400`;
+    res.writeHead(302, {
+      Location: "/",
+      "Set-Cookie": [clearStateCookie, sessionCookie],
+    });
+    res.end();
+    return;
+  }
+
+  if (req.url === "/auth/logout") {
+    if (!isOAuthConfigured()) {
+      res.writeHead(302, { Location: "/login" });
+      res.end();
+      return;
+    }
+    const isSecure = config.EXTERNAL_URL.startsWith("https://");
+    const clearSessionCookie = `yeti_session=; HttpOnly; SameSite=Strict; Path=/; Max-Age=0${isSecure ? "; Secure" : ""}`;
+    const clearTokenCookie = `yeti_token=; HttpOnly; SameSite=Strict; Path=/; Max-Age=0${isSecure ? "; Secure" : ""}`;
+    res.writeHead(302, { Location: "/login", "Set-Cookie": [clearSessionCookie, clearTokenCookie] });
+    res.end();
     return;
   }
 
@@ -478,7 +606,8 @@ async function handleRequest(req: http.IncomingMessage, res: http.ServerResponse
   }
 
   if (req.url === "/") {
-    if (!requireAuth(req, res)) return;
+    const auth = requireAuth(req, res);
+    if (!auth) return;
     const uptimeMs = Date.now() - new Date(startedAt).getTime();
     const jobs: Record<string, boolean> = {};
     for (const [name, running] of scheduler.jobStates()) {
@@ -507,6 +636,7 @@ async function handleRequest(req: http.IncomingMessage, res: http.ServerResponse
       schedInfo,
       copilotQueueStatus(),
       codexQueueStatus(),
+      auth.username,
     );
     res.writeHead(200, { "Content-Type": "text/html" });
     res.end(html);
@@ -514,7 +644,8 @@ async function handleRequest(req: http.IncomingMessage, res: http.ServerResponse
   }
 
   if (req.url === "/repos") {
-    if (!requireAuth(req, res)) return;
+    const auth = requireAuth(req, res);
+    if (!auth) return;
     const ALL_CATEGORIES: QueueCategory[] = ["ready", "needs-refinement", "refined", "needs-review-addressing", "auto-mergeable", "needs-triage", "needs-plan-review"];
     const repos = await listRepos();
     const allOrgRepos = await listAllOrgRepos();
@@ -530,6 +661,7 @@ async function handleRequest(req: http.IncomingMessage, res: http.ServerResponse
       availableRepos,
       allowedReposIsNull: config.ALLOWED_REPOS === null,
       theme,
+      username: auth.username,
     });
     res.writeHead(200, { "Content-Type": "text/html" });
     res.end(html);
@@ -537,7 +669,8 @@ async function handleRequest(req: http.IncomingMessage, res: http.ServerResponse
   }
 
   if (req.url === "/jobs") {
-    if (!requireAuth(req, res)) return;
+    const auth = requireAuth(req, res);
+    if (!auth) return;
     const jobs: Record<string, boolean> = {};
     for (const [name, running] of scheduler.jobStates()) {
       jobs[name] = running;
@@ -549,6 +682,7 @@ async function handleRequest(req: http.IncomingMessage, res: http.ServerResponse
     const html = buildJobsPage(
       allJobs, enabledSet, config.JOB_AI,
       jobs, latestRuns, theme, paused, schedInfo,
+      auth.username,
     );
     res.writeHead(200, { "Content-Type": "text/html" });
     res.end(html);
@@ -556,11 +690,12 @@ async function handleRequest(req: http.IncomingMessage, res: http.ServerResponse
   }
 
   if (req.url === "/config" || req.url?.startsWith("/config?")) {
-    if (!requireAuth(req, res)) return;
+    const auth = requireAuth(req, res);
+    if (!auth) return;
     const urlObj = new URL(req.url, "http://localhost");
     const saved = urlObj.searchParams.get("saved") === "1";
     res.writeHead(200, { "Content-Type": "text/html" });
-    res.end(buildConfigPage(saved, theme));
+    res.end(buildConfigPage(saved, theme, auth.username));
     return;
   }
 
@@ -573,7 +708,8 @@ async function handleRequest(req: http.IncomingMessage, res: http.ServerResponse
 
   // GET /logs or GET /logs?job=... or GET /logs?search=...
   if (req.url === "/logs" || req.url?.startsWith("/logs?")) {
-    if (!requireAuth(req, res)) return;
+    const auth = requireAuth(req, res);
+    if (!auth) return;
     const urlObj = new URL(req.url, `http://localhost`);
     const jobFilter = urlObj.searchParams.get("job");
     const search = urlObj.searchParams.get("search") ?? undefined;
@@ -583,7 +719,7 @@ async function handleRequest(req: http.IncomingMessage, res: http.ServerResponse
     const jobNames = getDistinctJobNames();
     const workItems = getWorkItemsForRuns(runs.map((r) => r.run_id));
     const recentItems = search ? [] : getRecentWorkItems();
-    const html = buildLogsListPage(runs, jobNames, jobFilter, theme, workItems, search, recentItems);
+    const html = buildLogsListPage(runs, jobNames, jobFilter, theme, workItems, search, recentItems, auth.username);
     res.writeHead(200, { "Content-Type": "text/html" });
     res.end(html);
     return;
@@ -591,7 +727,8 @@ async function handleRequest(req: http.IncomingMessage, res: http.ServerResponse
 
   // GET /logs/issue?repo=...&number=...
   if (req.url?.startsWith("/logs/issue?") || req.url === "/logs/issue") {
-    if (!requireAuth(req, res)) return;
+    const auth = requireAuth(req, res);
+    if (!auth) return;
     const urlObj = new URL(req.url, "http://localhost");
     const repoParam = urlObj.searchParams.get("repo");
     const numberParam = urlObj.searchParams.get("number");
@@ -605,7 +742,7 @@ async function handleRequest(req: http.IncomingMessage, res: http.ServerResponse
     const runIds = runs.map(r => r.run_id);
     const logsByRun = getLogsForRuns(runIds);
     const workItems = getWorkItemsForRuns(runIds);
-    const html = buildIssueLogsPage(repoParam, num, runs, logsByRun, workItems, theme);
+    const html = buildIssueLogsPage(repoParam, num, runs, logsByRun, workItems, theme, auth.username);
     res.writeHead(200, { "Content-Type": "text/html" });
     res.end(html);
     return;
@@ -637,7 +774,8 @@ async function handleRequest(req: http.IncomingMessage, res: http.ServerResponse
 
   // GET /logs/:runId
   if (req.url?.startsWith("/logs/")) {
-    if (!requireAuth(req, res)) return;
+    const auth = requireAuth(req, res);
+    if (!auth) return;
     const runId = decodeURIComponent(req.url.slice("/logs/".length));
     const run = getJobRun(runId);
     if (!run) {
@@ -647,18 +785,19 @@ async function handleRequest(req: http.IncomingMessage, res: http.ServerResponse
     }
     const logs = getJobRunLogs(runId);
     const tasks = getTasksByRunId(runId);
-    const html = buildLogDetailPage(run, logs, theme, tasks);
+    const html = buildLogDetailPage(run, logs, theme, tasks, auth.username);
     res.writeHead(200, { "Content-Type": "text/html" });
     res.end(html);
     return;
   }
 
   if (req.url === "/queue") {
-    if (!requireAuth(req, res)) return;
+    const auth = requireAuth(req, res);
+    if (!auth) return;
     const myAttention = getQueueSnapshot(MY_ATTENTION_CATEGORIES);
     const yetiAttention = getQueueSnapshot(YETI_ATTENTION_CATEGORIES);
     await enrichQueueItemsWithPRStatus(myAttention.items);
-    const html = buildQueuePage(myAttention, yetiAttention, theme, config.SKIPPED_ITEMS as Array<{ repo: string; number: number }>);
+    const html = buildQueuePage(myAttention, yetiAttention, theme, config.SKIPPED_ITEMS as Array<{ repo: string; number: number }>, auth.username);
     res.writeHead(200, { "Content-Type": "text/html" });
     res.end(html);
     return;

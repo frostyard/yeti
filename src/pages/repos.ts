@@ -80,10 +80,11 @@ export interface ReposPageData {
   availableRepos: Repo[];
   allowedReposIsNull: boolean;
   theme: Theme;
+  username?: string | null;
 }
 
 export function buildReposPage(data: ReposPageData): string {
-  const { repos, queueItems, recentTasks, availableRepos, allowedReposIsNull, theme } = data;
+  const { repos, queueItems, recentTasks, availableRepos, allowedReposIsNull, theme, username } = data;
 
   // Group queue items by repo
   const activeByRepo = new Map<string, QueueItem[]>();
@@ -204,7 +205,7 @@ ${htmlOpenTag(theme)}
   </style>
 </head>
 <body>
-  ${buildNav(theme)}
+  ${buildNav(theme, username)}
   ${THEME_SCRIPT}
   <h1>Repos</h1>
   ${summaryHtml}

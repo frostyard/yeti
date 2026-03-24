@@ -192,6 +192,37 @@ ls ~/.yeti/worktrees/*/*/
 
 ---
 
+## OAuth / GitHub sign-in
+
+**"Sign in with GitHub" button doesn't appear:**
+
+- All three config fields must be set: `githubAppClientId`, `githubAppClientSecret`, and `externalUrl`.
+- These fields require a restart --- changing them via the dashboard config editor won't take effect until you restart Yeti.
+
+**Callback URL mismatch error from GitHub:**
+
+- The callback URL registered in your GitHub App settings must exactly match `{externalUrl}/auth/callback`.
+- Check for protocol mismatch (`http` vs `https`), trailing slashes, and port numbers.
+
+**"Not an org member" error after signing in:**
+
+- OAuth checks that the GitHub user belongs to at least one organization in `githubOwners`.
+- The GitHub API's org membership endpoint only works for actual organizations, not personal usernames. If `githubOwners` contains only personal usernames, all OAuth logins will be denied.
+- The user must be a **member** of the org (not just a collaborator on individual repos).
+
+**`externalUrl` misconfiguration:**
+
+- Must start with `http://` or `https://`. Trailing slashes are stripped automatically.
+- Must match the URL users actually access (what's in the browser address bar), not an internal hostname.
+- If behind a reverse proxy, use the public-facing URL, not `localhost`.
+
+**Session expired / forced re-login:**
+
+- Sessions last 24 hours. After that, users must sign in again.
+- Changing `githubAppClientSecret` invalidates all existing sessions.
+
+---
+
 ## Getting more information
 
 - **Dashboard logs:** `/logs` with filtering by job name, status, and search text.

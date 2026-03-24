@@ -124,6 +124,7 @@ export function buildQueuePage(
   yetiAttention: { items: QueueItem[]; oldestFetchAt: number | null },
   theme: Theme,
   skippedItems: Array<{ repo: string; number: number }> = [],
+  username?: string | null,
 ): string {
   const oldestFetch = [myAttention.oldestFetchAt, yetiAttention.oldestFetchAt]
     .filter((t): t is number => t !== null);
@@ -150,7 +151,7 @@ ${htmlOpenTag(theme)}
   </style>
 </head>
 <body>
-  ${buildNav(theme)}
+  ${buildNav(theme, username)}
   ${THEME_SCRIPT}
   <h1>Queue</h1>
   ${buildQueueSection("Needs My Attention", myAttention, false)}
