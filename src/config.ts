@@ -83,6 +83,8 @@ export interface ConfigFile {
   allowedRepos?: string[];
   includeForks?: boolean;
   enabledJobs?: string[];
+  reviewLoop?: boolean;
+  maxPlanRounds?: number;
   queueScanIntervalMs?: number;
   githubAppId?: string;
   githubAppInstallationId?: string;
@@ -200,6 +202,11 @@ function loadConfig() {
   const includeForks = process.env["YETI_INCLUDE_FORKS"] === "true"
     || (process.env["YETI_INCLUDE_FORKS"] === undefined && (file.includeForks ?? false));
   const enabledJobs = file.enabledJobs ?? [];
+  const reviewLoop = file.reviewLoop ?? false;
+  const parsedMaxPlanRounds = file.maxPlanRounds ?? 3;
+  const maxPlanRounds = Number.isFinite(parsedMaxPlanRounds) && parsedMaxPlanRounds >= 1
+    ? Math.floor(parsedMaxPlanRounds)
+    : 3;
   const jobAi = file.jobAi ?? {};
   const queueScanIntervalMs = file.queueScanIntervalMs ?? 5 * 60 * 1000;
 
@@ -219,7 +226,7 @@ function loadConfig() {
 
   const webhookSecret = process.env["YETI_WEBHOOK_SECRET"] ?? file.webhookSecret ?? "";
 
-  return { githubOwners, selfRepo, port, intervals, schedules, logRetentionDays, logRetentionPerJob, discordBotToken, discordChannelId, discordAllowedUsers, authToken, maxClaudeWorkers, claudeTimeoutMs, maxCopilotWorkers, copilotTimeoutMs, maxCodexWorkers, codexTimeoutMs, pausedJobs, skippedItems, prioritizedItems, allowedRepos, includeForks, enabledJobs, jobAi, queueScanIntervalMs, githubAppId, githubAppInstallationId, githubAppPrivateKeyPath, githubAppClientId, githubAppClientSecret, externalUrl, webhookSecret };
+  return { githubOwners, selfRepo, port, intervals, schedules, logRetentionDays, logRetentionPerJob, discordBotToken, discordChannelId, discordAllowedUsers, authToken, maxClaudeWorkers, claudeTimeoutMs, maxCopilotWorkers, copilotTimeoutMs, maxCodexWorkers, codexTimeoutMs, pausedJobs, skippedItems, prioritizedItems, allowedRepos, includeForks, enabledJobs, reviewLoop, maxPlanRounds, jobAi, queueScanIntervalMs, githubAppId, githubAppInstallationId, githubAppPrivateKeyPath, githubAppClientId, githubAppClientSecret, externalUrl, webhookSecret };
 }
 
 const config = loadConfig();
@@ -240,6 +247,8 @@ export let PRIORITIZED_ITEMS: ReadonlyArray<{ repo: string; number: number }> = 
 export let ALLOWED_REPOS: readonly string[] | null = config.allowedRepos;
 export let INCLUDE_FORKS = config.includeForks;
 export let ENABLED_JOBS: readonly string[] = config.enabledJobs;
+export let REVIEW_LOOP = config.reviewLoop;
+export let MAX_PLAN_ROUNDS = config.maxPlanRounds;
 export let MAX_COPILOT_WORKERS = config.maxCopilotWorkers;
 export let COPILOT_TIMEOUT_MS = config.copilotTimeoutMs;
 export let MAX_CODEX_WORKERS = config.maxCodexWorkers;
@@ -304,6 +313,8 @@ export function reloadConfig(): void {
   ALLOWED_REPOS = fresh.allowedRepos;
   INCLUDE_FORKS = fresh.includeForks;
   ENABLED_JOBS = fresh.enabledJobs;
+  REVIEW_LOOP = fresh.reviewLoop;
+  MAX_PLAN_ROUNDS = fresh.maxPlanRounds;
   MAX_COPILOT_WORKERS = fresh.maxCopilotWorkers;
   COPILOT_TIMEOUT_MS = fresh.copilotTimeoutMs;
   MAX_CODEX_WORKERS = fresh.maxCodexWorkers;
