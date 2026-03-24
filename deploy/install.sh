@@ -79,7 +79,8 @@ if [[ ! -f "$CONFIG_FILE" ]]; then
     "repoStandardsHour": 2,
     "improvementIdentifierHour": 3,
     "issueAuditorHour": 5,
-    "mkdocsUpdateHour": 4
+    "mkdocsUpdateHour": 4,
+    "promptEvaluatorHour": 0
   },
   "logRetentionDays": 14,
   "logRetentionPerJob": 20,
