@@ -5,6 +5,9 @@ vi.mock("./config.js", () => ({
   SERVER_PORT: 0,
   AUTH_TOKEN: "",
   GITHUB_OWNERS: ["owner1"],
+  GITHUB_APP_CLIENT_ID: "",
+  GITHUB_APP_CLIENT_SECRET: "",
+  EXTERNAL_URL: "",
   LABELS: {
     refined: "Refined",
     ready: "Ready",
@@ -31,6 +34,14 @@ vi.mock("./config.js", () => ({
   ENABLED_JOBS: ["issue-worker", "ci-fixer"],
   ALLOWED_REPOS: ["repo1", "repo2"],
   JOB_AI: {},
+}));
+
+vi.mock("./oauth.js", () => ({
+  isOAuthConfigured: vi.fn().mockReturnValue(false),
+  getAuthorizationUrl: vi.fn().mockReturnValue("https://github.com/login/oauth/authorize?test=1"),
+  exchangeCodeForUser: vi.fn().mockResolvedValue(null),
+  createSessionCookie: vi.fn().mockReturnValue("mock-session-cookie"),
+  verifySessionCookie: vi.fn().mockReturnValue(null),
 }));
 
 vi.mock("./log.js", () => ({
@@ -1410,5 +1421,233 @@ describe("Issue logs page", () => {
     const html = buildLogDetailPage(run, logs, "system" as Theme, tasks as any);
     expect(html).toContain("/logs/issue?repo=org%2Frepo&number=99");
     expect(html).not.toContain("github.com/org/repo/issues/99");
+  });
+});
+
+describe("OAuth routes", () => {
+  let server: http.Server;
+
+  beforeEach(async () => {
+    server = createServer(mockScheduler());
+    await new Promise<void>((resolve) => {
+      if (server.listening) resolve();
+      else server.on("listening", resolve);
+    });
+  });
+
+  afterEach(async () => {
+    await new Promise<void>((resolve, reject) => {
+      server.close((err) => (err ? reject(err) : resolve()));
+    });
+  });
+
+  it("GET /auth/github redirects to /login when OAuth not configured", async () => {
+    const res = await request(server, "GET", "/auth/github");
+    expect(res.status).toBe(302);
+    expect(res.headers.location).toBe("/login");
+  });
+
+  it("GET /auth/callback redirects to /login when OAuth not configured", async () => {
+    const res = await request(server, "GET", "/auth/callback?code=test&state=test");
+    expect(res.status).toBe(302);
+    expect(res.headers.location).toBe("/login");
+  });
+
+  it("GET /auth/logout redirects to /login when OAuth not configured", async () => {
+    const res = await request(server, "GET", "/auth/logout");
+    expect(res.status).toBe(302);
+    expect(res.headers.location).toBe("/login");
+  });
+});
+
+describe("OAuth routes with OAuth configured", () => {
+  let server: http.Server;
+
+  beforeEach(async () => {
+    const oauthMod = await import("./oauth.js");
+    (oauthMod.isOAuthConfigured as ReturnType<typeof vi.fn>).mockReturnValue(true);
+    const configMod = await import("./config.js");
+    (configMod as Record<string, unknown>).EXTERNAL_URL = "https://yeti.example.com";
+    server = createServer(mockScheduler());
+    await new Promise<void>((resolve) => {
+      if (server.listening) resolve();
+      else server.on("listening", resolve);
+    });
+  });
+
+  afterEach(async () => {
+    const oauthMod = await import("./oauth.js");
+    (oauthMod.isOAuthConfigured as ReturnType<typeof vi.fn>).mockReturnValue(false);
+    const configMod = await import("./config.js");
+    (configMod as Record<string, unknown>).EXTERNAL_URL = "";
+    await new Promise<void>((resolve, reject) => {
+      server.close((err) => (err ? reject(err) : resolve()));
+    });
+  });
+
+  it("GET /auth/github redirects to GitHub authorize URL and sets state cookie", async () => {
+    const res = await request(server, "GET", "/auth/github");
+    expect(res.status).toBe(302);
+    expect(res.headers.location).toContain("github.com/login/oauth/authorize");
+    const cookies = Array.isArray(res.headers["set-cookie"]) ? res.headers["set-cookie"] : [res.headers["set-cookie"]];
+    const stateCookie = cookies.find(c => c?.includes("yeti_oauth_state="));
+    expect(stateCookie).toBeDefined();
+    expect(stateCookie).toContain("HttpOnly");
+    expect(stateCookie).toContain("SameSite=Lax");
+    expect(stateCookie).toContain("Path=/auth/callback");
+    expect(stateCookie).toContain("Max-Age=300");
+    expect(stateCookie).toContain("Secure");
+  });
+
+  it("GET /auth/callback with access_denied error redirects to login with oauth_denied", async () => {
+    const res = await request(server, "GET", "/auth/callback?error=access_denied");
+    expect(res.status).toBe(302);
+    expect(res.headers.location).toBe("/login?error=oauth_denied");
+  });
+
+  it("GET /auth/callback without code redirects to login with oauth_error", async () => {
+    const res = await request(server, "GET", "/auth/callback?state=some-state");
+    expect(res.status).toBe(302);
+    expect(res.headers.location).toBe("/login?error=oauth_error");
+  });
+
+  it("GET /auth/callback with mismatched state redirects to login with oauth_error", async () => {
+    const res = await request(server, "GET", "/auth/callback?code=test-code&state=wrong-state", {
+      headers: { Cookie: "yeti_oauth_state=correct-state" },
+    });
+    expect(res.status).toBe(302);
+    expect(res.headers.location).toBe("/login?error=oauth_error");
+  });
+
+  it("GET /auth/callback with valid code and state sets session cookie on success", async () => {
+    const oauthMod = await import("./oauth.js");
+    (oauthMod.exchangeCodeForUser as ReturnType<typeof vi.fn>).mockResolvedValueOnce({ login: "testuser" });
+    (oauthMod.createSessionCookie as ReturnType<typeof vi.fn>).mockReturnValueOnce("signed-session-value");
+
+    const res = await request(server, "GET", "/auth/callback?code=valid-code&state=matching-state", {
+      headers: { Cookie: "yeti_oauth_state=matching-state" },
+    });
+    expect(res.status).toBe(302);
+    expect(res.headers.location).toBe("/");
+    const cookies = Array.isArray(res.headers["set-cookie"]) ? res.headers["set-cookie"] : [res.headers["set-cookie"]];
+    const sessionCookie = cookies.find(c => c?.includes("yeti_session="));
+    expect(sessionCookie).toBeDefined();
+    expect(sessionCookie).toContain("signed-session-value");
+    expect(sessionCookie).toContain("HttpOnly");
+    expect(sessionCookie).toContain("SameSite=Strict");
+    expect(sessionCookie).toContain("Path=/");
+    expect(sessionCookie).toContain("Secure");
+  });
+
+  it("GET /auth/callback redirects to login with not_org_member on org check failure", async () => {
+    const oauthMod = await import("./oauth.js");
+    (oauthMod.exchangeCodeForUser as ReturnType<typeof vi.fn>).mockResolvedValueOnce({ error: "not_org_member" });
+
+    const res = await request(server, "GET", "/auth/callback?code=valid-code&state=matching-state", {
+      headers: { Cookie: "yeti_oauth_state=matching-state" },
+    });
+    expect(res.status).toBe(302);
+    expect(res.headers.location).toBe("/login?error=not_org_member");
+  });
+
+  it("GET /auth/logout clears session cookie and redirects to login", async () => {
+    const res = await request(server, "GET", "/auth/logout");
+    expect(res.status).toBe(302);
+    expect(res.headers.location).toBe("/login");
+    const cookies = Array.isArray(res.headers["set-cookie"]) ? res.headers["set-cookie"] : [res.headers["set-cookie"]];
+    const clearCookie = cookies.find(c => c?.includes("yeti_session="));
+    expect(clearCookie).toBeDefined();
+    expect(clearCookie).toContain("Max-Age=0");
+  });
+
+  it("GET /login shows GitHub sign-in button when OAuth configured (no token)", async () => {
+    const res = await request(server, "GET", "/login");
+    expect(res.status).toBe(200);
+    expect(res.body).toContain("Sign in with GitHub");
+    expect(res.body).not.toContain("Auth Token");
+  });
+
+  it("GET /login shows both sign-in and token form when both configured", async () => {
+    const configMod = await import("./config.js");
+    (configMod as Record<string, unknown>).AUTH_TOKEN = "test-token";
+    try {
+      const res = await request(server, "GET", "/login");
+      expect(res.status).toBe(200);
+      expect(res.body).toContain("Sign in with GitHub");
+      expect(res.body).toContain("Auth Token");
+      expect(res.body).toContain("or");
+    } finally {
+      (configMod as Record<string, unknown>).AUTH_TOKEN = "";
+    }
+  });
+});
+
+describe("OAuth session auth", () => {
+  let server: http.Server;
+
+  beforeEach(async () => {
+    const oauthMod = await import("./oauth.js");
+    (oauthMod.isOAuthConfigured as ReturnType<typeof vi.fn>).mockReturnValue(true);
+    const configMod = await import("./config.js");
+    (configMod as Record<string, unknown>).EXTERNAL_URL = "https://yeti.example.com";
+    server = createServer(mockScheduler());
+    await new Promise<void>((resolve) => {
+      if (server.listening) resolve();
+      else server.on("listening", resolve);
+    });
+  });
+
+  afterEach(async () => {
+    const oauthMod = await import("./oauth.js");
+    (oauthMod.isOAuthConfigured as ReturnType<typeof vi.fn>).mockReturnValue(false);
+    (oauthMod.verifySessionCookie as ReturnType<typeof vi.fn>).mockReturnValue(null);
+    const configMod = await import("./config.js");
+    (configMod as Record<string, unknown>).EXTERNAL_URL = "";
+    await new Promise<void>((resolve, reject) => {
+      server.close((err) => (err ? reject(err) : resolve()));
+    });
+  });
+
+  it("GET / returns 401 when OAuth configured but no session cookie", async () => {
+    const res = await request(server, "GET", "/");
+    expect(res.status).toBe(401);
+  });
+
+  it("GET / returns 200 when valid session cookie provided", async () => {
+    const oauthMod = await import("./oauth.js");
+    (oauthMod.verifySessionCookie as ReturnType<typeof vi.fn>).mockReturnValue({ login: "testuser" });
+
+    const res = await request(server, "GET", "/", {
+      headers: { Cookie: "yeti_session=valid-session-cookie" },
+    });
+    expect(res.status).toBe(200);
+    expect(res.body).toContain("Logged in as testuser");
+    expect(res.body).toContain("Logout");
+  });
+
+  it("GET /config returns 200 with valid session cookie", async () => {
+    const oauthMod = await import("./oauth.js");
+    (oauthMod.verifySessionCookie as ReturnType<typeof vi.fn>).mockReturnValue({ login: "testuser" });
+
+    const res = await request(server, "GET", "/config", {
+      headers: { Cookie: "yeti_session=valid-session-cookie" },
+    });
+    expect(res.status).toBe(200);
+    expect(res.body).toContain("Save Configuration");
+  });
+
+  it("POST /trigger/:job returns 401 when OAuth-only but no session", async () => {
+    const res = await request(server, "POST", "/trigger/issue-worker");
+    expect(res.status).toBe(401);
+  });
+
+  it("GET /health remains public when OAuth is configured", async () => {
+    const res = await request(server, "GET", "/health");
+    expect(res.status).toBe(200);
+  });
+
+  it("GET /login remains public when OAuth is configured", async () => {
+    const res = await request(server, "GET", "/login");
+    expect(res.status).toBe(200);
   });
 });

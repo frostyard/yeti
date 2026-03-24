@@ -122,6 +122,55 @@ The dashboard's **Integrations** section will show `GitHub Auth: App (yeti[bot])
 4. Post an `LGTM` comment (or just approve --- the auto-merger accepts either).
 5. The auto-merger should merge the PR.
 
+## OAuth for Dashboard (Optional)
+
+If you want GitHub sign-in for the Yeti dashboard (instead of or alongside the static `authToken`), you can enable OAuth using your existing GitHub App. This is entirely optional --- token-based auth continues to work.
+
+### 1. Add a callback URL
+
+In your GitHub App settings page (**Settings > Developer settings > GitHub Apps > your app**):
+
+1. Under **Callback URL**, add your Yeti external URL with the `/auth/callback` path, e.g., `https://yeti.example.com/auth/callback`.
+
+### 2. Generate a client secret
+
+On the same App settings page, scroll to **Client secrets** and click **Generate a new client secret**. Copy the value immediately --- it won't be shown again.
+
+### 3. Configure Yeti
+
+Add the three OAuth fields to `~/.yeti/config.json`:
+
+```json
+{
+  "githubAppClientId": "Iv1.abc123...",
+  "githubAppClientSecret": "your-client-secret",
+  "externalUrl": "https://yeti.example.com"
+}
+```
+
+Or as environment variables in `~/.yeti/env`:
+
+```bash
+YETI_GITHUB_APP_CLIENT_ID=Iv1.abc123...
+YETI_GITHUB_APP_CLIENT_SECRET=your-client-secret
+YETI_EXTERNAL_URL=https://yeti.example.com
+```
+
+The **Client ID** is shown on your GitHub App's settings page (different from the App ID).
+
+!!! warning "Org membership required"
+    OAuth login checks that the user is a member of at least one organization listed in `githubOwners`. If `githubOwners` contains only personal usernames (not orgs), OAuth login will be denied for all users. You need at least one actual GitHub organization in `githubOwners`.
+
+### 4. Restart Yeti
+
+```bash
+sudo systemctl restart yeti
+```
+
+The login page will now show a "Sign in with GitHub" button. If `authToken` is also set, both methods are available.
+
+---
+
 ## Troubleshooting
 
 **"GitHub App private key not found"** --- The path in `githubAppPrivateKeyPath` doesn't exist or isn't readable. Check the path and file permissions.
@@ -133,6 +182,12 @@ The dashboard's **Integrations** section will show `GitHub Auth: App (yeti[bot])
 **"base branch policy prohibits the merge"** --- Branch protection may require the App itself to be listed as a bypass actor, or there may be additional rules (like required status checks) that aren't passing. Check your branch protection settings.
 
 **PRs still showing your personal username** --- The App config requires a restart. Run `sudo systemctl restart yeti` after changing the config.
+
+**OAuth: "not an org member" error** --- OAuth checks org membership via the GitHub API, which only works for organizations (not personal usernames). Ensure at least one entry in `githubOwners` is an actual GitHub organization, and that the user is a member of it.
+
+**OAuth: callback URL mismatch** --- The callback URL in your GitHub App settings must exactly match `{externalUrl}/auth/callback`. Check for trailing slashes, `http` vs `https`, and port mismatches.
+
+**OAuth: login page shows no "Sign in with GitHub" button** --- All three fields must be set: `githubAppClientId`, `githubAppClientSecret`, and `externalUrl`. Check your config and restart Yeti.
 
 ---
 

@@ -464,13 +464,16 @@ export function htmlOpenTag(theme: Theme): string {
   return `<html lang="en" data-theme="${theme}">`;
 }
 
-export function buildNav(theme: Theme): string {
+export function buildNav(theme: Theme, username?: string | null): string {
   const options = ["system", "light", "dark"] as const;
   const labels: Record<string, string> = { system: "System", light: "Light", dark: "Dark" };
   const selectHtml = options
     .map(v => `<option value="${v}"${v === theme ? " selected" : ""}>${labels[v]}</option>`)
     .join("");
-  return `<nav><a href="/">Dashboard</a><a href="/repos">Repos</a><a href="/jobs">Jobs</a><a href="/queue">Queue</a><a href="/logs">Logs</a><a href="/config">Config</a><select id="theme-select" onchange="setTheme(this.value)">${selectHtml}</select></nav>`;
+  const userHtml = username
+    ? `<span style="font-size:0.85rem;color:var(--text-secondary)">Logged in as ${escapeHtml(username)} &middot; <a href="/auth/logout">Logout</a></span>`
+    : "";
+  return `<nav><a href="/">Dashboard</a><a href="/repos">Repos</a><a href="/jobs">Jobs</a><a href="/queue">Queue</a><a href="/logs">Logs</a><a href="/config">Config</a>${userHtml}<select id="theme-select" onchange="setTheme(this.value)">${selectHtml}</select></nav>`;
 }
 
 export const THEME_SCRIPT = `<script>function setTheme(v){document.cookie="yeti_theme="+v+";Path=/;SameSite=Strict;Max-Age=31536000";if(v==="system"){document.documentElement.removeAttribute("data-theme")}else{document.documentElement.setAttribute("data-theme",v)}}</script>`;

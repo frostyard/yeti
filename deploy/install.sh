@@ -93,7 +93,10 @@ if [[ ! -f "$CONFIG_FILE" ]]; then
   "queueScanIntervalMs": 300000,
   "githubAppId": "",
   "githubAppInstallationId": "",
-  "githubAppPrivateKeyPath": ""
+  "githubAppPrivateKeyPath": "",
+  "githubAppClientId": "",
+  "githubAppClientSecret": "",
+  "externalUrl": ""
 }
 CONF
   chmod 600 "$CONFIG_FILE"
@@ -130,6 +133,11 @@ if [[ ! -f "$ENV_FILE" ]]; then
 # YETI_GITHUB_APP_ID=
 # YETI_GITHUB_APP_INSTALLATION_ID=
 # YETI_GITHUB_APP_PRIVATE_KEY_PATH=
+
+# OAuth (optional — enables GitHub sign-in for the dashboard)
+# YETI_GITHUB_APP_CLIENT_ID=
+# YETI_GITHUB_APP_CLIENT_SECRET=
+# YETI_EXTERNAL_URL=
 CONF
   chmod 600 "$ENV_FILE"
   log "Created $ENV_FILE — edit it to set environment overrides"

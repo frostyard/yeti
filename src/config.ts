@@ -87,6 +87,9 @@ export interface ConfigFile {
   githubAppId?: string;
   githubAppInstallationId?: string;
   githubAppPrivateKeyPath?: string;
+  githubAppClientId?: string;
+  githubAppClientSecret?: string;
+  externalUrl?: string;
 }
 
 function loadConfig() {
@@ -203,7 +206,17 @@ function loadConfig() {
   const githubAppInstallationId = process.env["YETI_GITHUB_APP_INSTALLATION_ID"] ?? file.githubAppInstallationId ?? "";
   const githubAppPrivateKeyPath = process.env["YETI_GITHUB_APP_PRIVATE_KEY_PATH"] ?? file.githubAppPrivateKeyPath ?? "";
 
-  return { githubOwners, selfRepo, port, intervals, schedules, logRetentionDays, logRetentionPerJob, discordBotToken, discordChannelId, discordAllowedUsers, authToken, maxClaudeWorkers, claudeTimeoutMs, maxCopilotWorkers, copilotTimeoutMs, maxCodexWorkers, codexTimeoutMs, pausedJobs, skippedItems, prioritizedItems, allowedRepos, includeForks, enabledJobs, jobAi, queueScanIntervalMs, githubAppId, githubAppInstallationId, githubAppPrivateKeyPath };
+  const githubAppClientId = process.env["YETI_GITHUB_APP_CLIENT_ID"] ?? file.githubAppClientId ?? "";
+  const githubAppClientSecret = process.env["YETI_GITHUB_APP_CLIENT_SECRET"] ?? file.githubAppClientSecret ?? "";
+  let externalUrl = (process.env["YETI_EXTERNAL_URL"] ?? file.externalUrl ?? "").replace(/\/+$/, "");
+  if (externalUrl && !externalUrl.startsWith("http://") && !externalUrl.startsWith("https://")) {
+    if (githubAppClientId && githubAppClientSecret) {
+      console.warn(`[WARN] externalUrl "${externalUrl}" does not start with http:// or https:// — OAuth will be disabled`);
+    }
+    externalUrl = "";
+  }
+
+  return { githubOwners, selfRepo, port, intervals, schedules, logRetentionDays, logRetentionPerJob, discordBotToken, discordChannelId, discordAllowedUsers, authToken, maxClaudeWorkers, claudeTimeoutMs, maxCopilotWorkers, copilotTimeoutMs, maxCodexWorkers, codexTimeoutMs, pausedJobs, skippedItems, prioritizedItems, allowedRepos, includeForks, enabledJobs, jobAi, queueScanIntervalMs, githubAppId, githubAppInstallationId, githubAppPrivateKeyPath, githubAppClientId, githubAppClientSecret, externalUrl };
 }
 
 const config = loadConfig();
@@ -237,6 +250,10 @@ export const DISCORD_CHANNEL_ID = config.discordChannelId;
 export const GITHUB_APP_ID = config.githubAppId;
 export const GITHUB_APP_INSTALLATION_ID = config.githubAppInstallationId;
 export const GITHUB_APP_PRIVATE_KEY_PATH = config.githubAppPrivateKeyPath;
+// Immutable — requires restart (OAuth)
+export const GITHUB_APP_CLIENT_ID = config.githubAppClientId;
+export const GITHUB_APP_CLIENT_SECRET = config.githubAppClientSecret;
+export const EXTERNAL_URL = config.externalUrl;
 // Live-reloadable
 export let DISCORD_ALLOWED_USERS: readonly string[] = config.discordAllowedUsers;
 
@@ -292,7 +309,7 @@ export function reloadConfig(): void {
   notifyListeners();
 }
 
-const SENSITIVE_KEYS = new Set(["authToken", "discordBotToken"]);
+const SENSITIVE_KEYS = new Set(["authToken", "discordBotToken", "githubAppClientSecret"]);
 
 function maskValue(value: string): string {
   if (!value) return "Not configured";

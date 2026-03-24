@@ -32,6 +32,7 @@ export function buildJobsPage(
   theme: Theme,
   paused: Set<string>,
   scheduleInfo: Map<string, { intervalMs: number; scheduledHour?: number }>,
+  username?: string | null,
 ): string {
   const jobRows = allJobs.map(job => {
     const { name } = job;
@@ -135,7 +136,7 @@ ${htmlOpenTag(theme)}
 </head>
 <body>
   <h1>Jobs</h1>
-  ${buildNav(theme)}
+  ${buildNav(theme, username)}
   ${THEME_SCRIPT}
   <table>
     <thead><tr><th>Job</th><th></th><th>Backend</th><th>Model</th><th>Schedule</th><th>Status</th><th>Last Run</th><th>Next Run</th><th>Logs</th><th></th></tr></thead>

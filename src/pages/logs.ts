@@ -9,7 +9,7 @@ function logLevelClass(level: string): string {
   return "log-info";
 }
 
-export function buildLogsListPage(runs: JobRun[], jobNames: string[], jobFilter: string | null, theme: Theme, workItemsByRun?: Map<string, Task[]>, search?: string, recentItems?: Array<{ repo: string; item_number: number }>): string {
+export function buildLogsListPage(runs: JobRun[], jobNames: string[], jobFilter: string | null, theme: Theme, workItemsByRun?: Map<string, Task[]>, search?: string, recentItems?: Array<{ repo: string; item_number: number }>, username?: string | null): string {
   const filterLinks = [
     `<a href="/logs"${!jobFilter ? ' class="active"' : ""}>All</a>`,
     ...jobNames.map(
@@ -47,7 +47,7 @@ ${htmlOpenTag(theme)}
 </head>
 <body>
   <h1>yeti</h1>
-  ${buildNav(theme)}
+  ${buildNav(theme, username)}
   ${THEME_SCRIPT}
   <h2>Job Runs</h2>
   <form method="get" action="/logs" class="search-bar">
@@ -91,6 +91,7 @@ export function buildIssueLogsPage(
   logsByRun: Map<string, JobLog[]>,
   workItemsByRun: Map<string, Task[]>,
   theme: Theme,
+  username?: string | null,
 ): string {
   const shortRepo = repo.includes("/") ? repo.split("/").pop()! : repo;
 
@@ -152,7 +153,7 @@ ${htmlOpenTag(theme)}
 </head>
 <body>
   <h1>yeti</h1>
-  ${buildNav(theme)}
+  ${buildNav(theme, username)}
   ${THEME_SCRIPT}
   <h2>${escapeHtml(shortRepo)}#${itemNumber}</h2>
   <div style="margin-bottom:1rem;font-size:0.85rem">
@@ -200,7 +201,7 @@ ${htmlOpenTag(theme)}
 </html>`;
 }
 
-export function buildLogDetailPage(run: JobRun, logs: JobLog[], theme: Theme, tasks?: Task[]): string {
+export function buildLogDetailPage(run: JobRun, logs: JobLog[], theme: Theme, tasks?: Task[], username?: string | null): string {
   const lastLogId = logs.length > 0 ? logs[logs.length - 1].id : 0;
 
   const logLines = logs
@@ -222,7 +223,7 @@ ${htmlOpenTag(theme)}
 </head>
 <body>
   <h1>yeti</h1>
-  ${buildNav(theme)}
+  ${buildNav(theme, username)}
   ${THEME_SCRIPT}
   <h2>${escapeHtml(run.job_name)}</h2>
   <dl class="meta">

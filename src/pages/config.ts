@@ -2,12 +2,13 @@ import type { Theme } from "./layout.js";
 import { PAGE_CSS, escapeHtml, htmlOpenTag, buildNav, THEME_SCRIPT, siteTitle } from "./layout.js";
 import { getConfigForDisplay } from "../config.js";
 import * as config from "../config.js";
+import { isOAuthConfigured } from "../oauth.js";
 
 function isEnvOverridden(envVar: string): boolean {
   return process.env[envVar] !== undefined && process.env[envVar] !== "";
 }
 
-export function buildConfigPage(saved: boolean, theme: Theme): string {
+export function buildConfigPage(saved: boolean, theme: Theme, username?: string | null): string {
   const cfg = getConfigForDisplay();
 
   const envMap: Record<string, string> = {
@@ -23,6 +24,9 @@ export function buildConfigPage(saved: boolean, theme: Theme): string {
     githubAppId: "YETI_GITHUB_APP_ID",
     githubAppInstallationId: "YETI_GITHUB_APP_INSTALLATION_ID",
     githubAppPrivateKeyPath: "YETI_GITHUB_APP_PRIVATE_KEY_PATH",
+    githubAppClientId: "YETI_GITHUB_APP_CLIENT_ID",
+    githubAppClientSecret: "YETI_GITHUB_APP_CLIENT_SECRET",
+    externalUrl: "YETI_EXTERNAL_URL",
   };
 
   function envNote(key: string): string {
@@ -40,7 +44,7 @@ export function buildConfigPage(saved: boolean, theme: Theme): string {
 
   const intervals = cfg.intervals as Record<string, number>;
   const schedules = cfg.schedules as Record<string, number>;
-  const authDisabled = !config.AUTH_TOKEN;
+  const authDisabled = !config.AUTH_TOKEN && !isOAuthConfigured();
   const queueScanMinutes = Math.round(Number(cfg.queueScanIntervalMs ?? 300000) / 60000);
 
   return `<!DOCTYPE html>
@@ -53,7 +57,7 @@ ${htmlOpenTag(theme)}
 </head>
 <body>
   <h1>yeti</h1>
-  ${buildNav(theme)}
+  ${buildNav(theme, username)}
   ${THEME_SCRIPT}
   ${saved ? '<div class="banner">Configuration saved and applied.</div>' : ""}
   ${authDisabled ? '<div class="warning-banner">Authentication is disabled. Set an auth token to protect this interface.</div>' : ""}
@@ -126,6 +130,21 @@ ${htmlOpenTag(theme)}
     <label>Private Key Path</label>
     <div class="readonly-value">${escapeHtml(String(cfg.githubAppPrivateKeyPath ?? "")) || "<em>Not configured</em>"}</div>
     ${envNote("githubAppPrivateKeyPath")}
+
+    <h2>OAuth (optional)</h2>
+    <div class="field-note">Enables GitHub sign-in for the dashboard. Requires a GitHub App with OAuth configured. Edit these in <code>~/.yeti/config.json</code> and restart.</div>
+
+    <label>Client ID</label>
+    <div class="readonly-value">${escapeHtml(String(cfg.githubAppClientId ?? "")) || "<em>Not configured</em>"}</div>
+    ${envNote("githubAppClientId")}
+
+    <label>Client Secret</label>
+    <div class="readonly-value">${escapeHtml(String(cfg.githubAppClientSecret ?? "")) || "<em>Not configured</em>"}</div>
+    ${envNote("githubAppClientSecret")}
+
+    <label>External URL</label>
+    <div class="readonly-value">${escapeHtml(String(cfg.externalUrl ?? "")) || "<em>Not configured</em>"}</div>
+    ${envNote("externalUrl")}
 
     <h2>Intervals (minutes)</h2>
     ${Object.entries(intervals).map(([key, value]) =>
