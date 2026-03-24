@@ -54,6 +54,11 @@ vi.mock("./discord.js", () => ({
   discordStatus: vi.fn(() => ({ configured: false, connected: false, lastResult: null })),
 }));
 
+vi.mock("./github-app.js", () => ({
+  isGitHubAppConfigured: vi.fn().mockReturnValue(false),
+  getAppSlug: vi.fn().mockReturnValue(null),
+}));
+
 vi.mock("./github.js", () => ({
   getQueueSnapshot: vi.fn().mockReturnValue({ items: [], oldestFetchAt: null }),
   enrichQueueItemsWithPRStatus: vi.fn().mockResolvedValue(undefined),

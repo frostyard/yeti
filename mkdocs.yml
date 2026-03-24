@@ -57,6 +57,7 @@ nav:
   - Home: index.md
   - Getting Started:
       - Installation: getting-started/installation.md
+      - GitHub App Setup: getting-started/github-app.md
       - Configuration: getting-started/configuration.md
       - Quickstart: getting-started/quickstart.md
   - Usage:

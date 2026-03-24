@@ -14,6 +14,7 @@ src/
 ├── config.ts            Configuration loading (env > config file > defaults)
 ├── scheduler.ts         Interval/schedule-based job runner with skip-if-busy
 ├── github.ts            gh CLI wrapper with transient-error retry
+├── github-app.ts        Optional GitHub App auth (JWT, installation tokens, GH_TOKEN injection)
 ├── claude.ts            Multi-backend AI dispatch (Claude + Copilot + Codex), bounded concurrent queues, worktree helpers
 ├── db.ts                SQLite task tracking (better-sqlite3)
 ├── server.ts            HTTP server — dashboard, health, status, manual triggers
@@ -145,6 +146,17 @@ signals for auto-merger, not review feedback). `getPRCheckStatus()` returns
 four states: `"passing"`, `"failing"`, `"pending"`, or `"none"` (no checks
 exist at all — used by auto-merger to distinguish doc-only PRs that skip CI
 from PRs with in-progress checks).
+
+**`github-app.ts`** — Optional GitHub App authentication. When configured
+(via `githubAppId`, `githubAppInstallationId`, `githubAppPrivateKeyPath`),
+gives Yeti a separate bot identity so humans can approve its PRs under branch
+protection. Signs JWTs (RS256 via Node.js `crypto.createSign`), exchanges them
+for installation tokens via the GitHub API, and sets `process.env.GH_TOKEN` so
+all `gh` and `git` subprocess calls inherit the App identity automatically.
+Token refresh is lazy with a 5-minute pre-expiry buffer and in-flight dedup.
+`initGitHubApp()` is called once at startup; `ensureGitHubAppToken()` is called
+before each job tick. If no App config is set, all functions are no-ops and
+Yeti continues using personal `gh` CLI auth.
 
 **`claude.ts`** — Two concerns: (1) **multi-backend AI dispatch** with three
 bounded concurrent queues — `enqueue` (Claude, `MAX_CLAUDE_WORKERS` default 2),

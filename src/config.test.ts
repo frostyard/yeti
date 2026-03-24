@@ -181,6 +181,83 @@ describe("config", () => {
     mod.offConfigChange(listener);
   });
 
+  it("GitHub App config fields are loaded from config.json", async () => {
+    const mod = await import("./config.js");
+
+    fs.mkdirSync(path.dirname(mod.CONFIG_PATH), { recursive: true });
+    fs.writeFileSync(
+      mod.CONFIG_PATH,
+      JSON.stringify({
+        githubAppId: "12345",
+        githubAppInstallationId: "67890",
+        githubAppPrivateKeyPath: "/home/yeti/.yeti/app.pem",
+      }),
+    );
+
+    // These are immutable (set at import time), so check via getConfigForDisplay
+    const display = mod.getConfigForDisplay();
+    expect(display.githubAppId).toBe("12345");
+    expect(display.githubAppInstallationId).toBe("67890");
+    expect(display.githubAppPrivateKeyPath).toBe("/home/yeti/.yeti/app.pem");
+  });
+
+  it("GitHub App config fields default to empty strings", async () => {
+    const mod = await import("./config.js");
+
+    fs.mkdirSync(path.dirname(mod.CONFIG_PATH), { recursive: true });
+    fs.writeFileSync(mod.CONFIG_PATH, JSON.stringify({}));
+
+    const display = mod.getConfigForDisplay();
+    expect(display.githubAppId).toBe("");
+    expect(display.githubAppInstallationId).toBe("");
+    expect(display.githubAppPrivateKeyPath).toBe("");
+  });
+
+  it("GitHub App config fields can be overridden via env vars", async () => {
+    process.env["YETI_GITHUB_APP_ID"] = "env-app-id";
+    process.env["YETI_GITHUB_APP_INSTALLATION_ID"] = "env-install-id";
+    process.env["YETI_GITHUB_APP_PRIVATE_KEY_PATH"] = "/env/path.pem";
+
+    const mod = await import("./config.js");
+
+    fs.mkdirSync(path.dirname(mod.CONFIG_PATH), { recursive: true });
+    fs.writeFileSync(
+      mod.CONFIG_PATH,
+      JSON.stringify({
+        githubAppId: "file-id",
+        githubAppInstallationId: "file-install",
+        githubAppPrivateKeyPath: "/file/path.pem",
+      }),
+    );
+
+    const display = mod.getConfigForDisplay();
+    expect(display.githubAppId).toBe("env-app-id");
+    expect(display.githubAppInstallationId).toBe("env-install-id");
+    expect(display.githubAppPrivateKeyPath).toBe("/env/path.pem");
+
+    delete process.env["YETI_GITHUB_APP_ID"];
+    delete process.env["YETI_GITHUB_APP_INSTALLATION_ID"];
+    delete process.env["YETI_GITHUB_APP_PRIVATE_KEY_PATH"];
+  });
+
+  it("GitHub App config fields are not updated by reloadConfig (immutable)", async () => {
+    const mod = await import("./config.js");
+
+    fs.mkdirSync(path.dirname(mod.CONFIG_PATH), { recursive: true });
+    fs.writeFileSync(mod.CONFIG_PATH, JSON.stringify({}));
+
+    const initialId = mod.GITHUB_APP_ID;
+
+    fs.writeFileSync(
+      mod.CONFIG_PATH,
+      JSON.stringify({ githubAppId: "changed-id" }),
+    );
+    mod.reloadConfig();
+
+    // Immutable exports should not change on reload
+    expect(mod.GITHUB_APP_ID).toBe(initialId);
+  });
+
   it("offConfigChange removes listener", async () => {
     const mod = await import("./config.js");
 

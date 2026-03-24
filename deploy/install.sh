@@ -90,7 +90,10 @@ if [[ ! -f "$CONFIG_FILE" ]]; then
   "allowedRepos": [],
   "includeForks": false,
   "enabledJobs": [],
-  "queueScanIntervalMs": 300000
+  "queueScanIntervalMs": 300000,
+  "githubAppId": "",
+  "githubAppInstallationId": "",
+  "githubAppPrivateKeyPath": ""
 }
 CONF
   chmod 600 "$CONFIG_FILE"
@@ -122,6 +125,11 @@ if [[ ! -f "$ENV_FILE" ]]; then
 
 # Repo discovery
 # YETI_INCLUDE_FORKS=false
+
+# GitHub App (optional — gives Yeti a separate bot identity)
+# YETI_GITHUB_APP_ID=
+# YETI_GITHUB_APP_INSTALLATION_ID=
+# YETI_GITHUB_APP_PRIVATE_KEY_PATH=
 CONF
   chmod 600 "$ENV_FILE"
   log "Created $ENV_FILE — edit it to set environment overrides"

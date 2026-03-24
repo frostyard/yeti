@@ -84,6 +84,9 @@ export interface ConfigFile {
   includeForks?: boolean;
   enabledJobs?: string[];
   queueScanIntervalMs?: number;
+  githubAppId?: string;
+  githubAppInstallationId?: string;
+  githubAppPrivateKeyPath?: string;
 }
 
 function loadConfig() {
@@ -196,7 +199,11 @@ function loadConfig() {
   const jobAi = file.jobAi ?? {};
   const queueScanIntervalMs = file.queueScanIntervalMs ?? 5 * 60 * 1000;
 
-  return { githubOwners, selfRepo, port, intervals, schedules, logRetentionDays, logRetentionPerJob, discordBotToken, discordChannelId, discordAllowedUsers, authToken, maxClaudeWorkers, claudeTimeoutMs, maxCopilotWorkers, copilotTimeoutMs, maxCodexWorkers, codexTimeoutMs, pausedJobs, skippedItems, prioritizedItems, allowedRepos, includeForks, enabledJobs, jobAi, queueScanIntervalMs };
+  const githubAppId = process.env["YETI_GITHUB_APP_ID"] ?? file.githubAppId ?? "";
+  const githubAppInstallationId = process.env["YETI_GITHUB_APP_INSTALLATION_ID"] ?? file.githubAppInstallationId ?? "";
+  const githubAppPrivateKeyPath = process.env["YETI_GITHUB_APP_PRIVATE_KEY_PATH"] ?? file.githubAppPrivateKeyPath ?? "";
+
+  return { githubOwners, selfRepo, port, intervals, schedules, logRetentionDays, logRetentionPerJob, discordBotToken, discordChannelId, discordAllowedUsers, authToken, maxClaudeWorkers, claudeTimeoutMs, maxCopilotWorkers, copilotTimeoutMs, maxCodexWorkers, codexTimeoutMs, pausedJobs, skippedItems, prioritizedItems, allowedRepos, includeForks, enabledJobs, jobAi, queueScanIntervalMs, githubAppId, githubAppInstallationId, githubAppPrivateKeyPath };
 }
 
 const config = loadConfig();
@@ -226,6 +233,10 @@ export let QUEUE_SCAN_INTERVAL_MS = config.queueScanIntervalMs;
 // Immutable — requires restart (bot connection)
 export const DISCORD_BOT_TOKEN = config.discordBotToken;
 export const DISCORD_CHANNEL_ID = config.discordChannelId;
+// Immutable — requires restart (GitHub App auth)
+export const GITHUB_APP_ID = config.githubAppId;
+export const GITHUB_APP_INSTALLATION_ID = config.githubAppInstallationId;
+export const GITHUB_APP_PRIVATE_KEY_PATH = config.githubAppPrivateKeyPath;
 // Live-reloadable
 export let DISCORD_ALLOWED_USERS: readonly string[] = config.discordAllowedUsers;
 

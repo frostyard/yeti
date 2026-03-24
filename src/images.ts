@@ -90,6 +90,10 @@ function getExtension(contentType: string): string {
 }
 
 async function getGitHubToken(): Promise<string | null> {
+  // Prefer GH_TOKEN env var (set by GitHub App auth) over gh CLI credential store
+  const envToken = process.env["GH_TOKEN"];
+  if (envToken) return envToken;
+
   return new Promise((resolve) => {
     execFile("gh", ["auth", "token"], (err, stdout) => {
       if (err) {

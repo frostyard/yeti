@@ -29,6 +29,7 @@ import { cancelQueuedTasks, cancelCurrentTask } from "./claude.js";
 import { reportError } from "./error-reporter.js";
 import { VERSION } from "./version.js";
 import { announceIfNewVersion } from "./startup-announce.js";
+import { isGitHubAppConfigured, initGitHubApp } from "./github-app.js";
 
 log.info(`yeti ${VERSION} starting up`);
 
@@ -97,6 +98,18 @@ const pruneInterval = setInterval(() => {
     // best effort
   }
 }, 24 * 60 * 60 * 1000);
+
+// ── GitHub App auth (optional) ──
+
+if (isGitHubAppConfigured()) {
+  try {
+    await initGitHubApp();
+    log.info("GitHub App authentication enabled");
+  } catch (err) {
+    log.error(`Failed to initialize GitHub App: ${err}`);
+    log.warn("Falling back to personal gh CLI auth");
+  }
+}
 
 // ── Jobs ──
 

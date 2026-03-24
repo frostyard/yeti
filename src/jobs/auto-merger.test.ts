@@ -33,6 +33,7 @@ const { mockGh } = vi.hoisted(() => ({
     removeLabel: vi.fn(),
     getPRChangedFiles: vi.fn(),
     getPRMergeableState: vi.fn(),
+    getPRReviewDecision: vi.fn(),
     isRateLimited: vi.fn().mockReturnValue(false),
     isItemSkipped: vi.fn().mockReturnValue(false),
     hasPriorityLabel: vi.fn().mockReturnValue(false),
@@ -60,6 +61,7 @@ describe("auto-merger", () => {
     mockGh.removeLabel.mockResolvedValue(undefined);
     mockGh.getPRChangedFiles.mockResolvedValue([]);
     mockGh.getPRMergeableState.mockResolvedValue("MERGEABLE");
+    mockGh.getPRReviewDecision.mockResolvedValue("");
   });
 
   it("merges dependabot PR when checks pass", async () => {
@@ -86,16 +88,44 @@ describe("auto-merger", () => {
     expect(mockGh.mergePR).toHaveBeenCalledWith(repo.fullName, pr.number);
   });
 
-  it("skips Yeti PR without valid LGTM", async () => {
+  it("skips Yeti PR without LGTM or review approval", async () => {
     const pr = mockPR({ headRefName: "yeti/issue-42" });
     mockGh.listPRs.mockResolvedValue([pr]);
     mockGh.hasValidLGTM.mockResolvedValue(false);
+    mockGh.getPRReviewDecision.mockResolvedValue("");
 
     await run([repo]);
 
     expect(mockGh.hasValidLGTM).toHaveBeenCalledWith(repo.fullName, pr.number, "main");
+    expect(mockGh.getPRReviewDecision).toHaveBeenCalledWith(repo.fullName, pr.number);
     expect(mockGh.getPRCheckStatus).not.toHaveBeenCalled();
     expect(mockGh.mergePR).not.toHaveBeenCalled();
+  });
+
+  it("merges Yeti PR when no LGTM but GitHub review is APPROVED", async () => {
+    const pr = mockPR({ headRefName: "yeti/issue-42" });
+    mockGh.listPRs.mockResolvedValue([pr]);
+    mockGh.hasValidLGTM.mockResolvedValue(false);
+    mockGh.getPRReviewDecision.mockResolvedValue("APPROVED");
+    mockGh.getPRCheckStatus.mockResolvedValue("passing");
+
+    await run([repo]);
+
+    expect(mockGh.hasValidLGTM).toHaveBeenCalled();
+    expect(mockGh.getPRReviewDecision).toHaveBeenCalledWith(repo.fullName, pr.number);
+    expect(mockGh.mergePR).toHaveBeenCalledWith(repo.fullName, pr.number);
+  });
+
+  it("does not check review decision when LGTM is valid", async () => {
+    const pr = mockPR({ headRefName: "yeti/issue-42" });
+    mockGh.listPRs.mockResolvedValue([pr]);
+    mockGh.hasValidLGTM.mockResolvedValue(true);
+    mockGh.getPRCheckStatus.mockResolvedValue("passing");
+
+    await run([repo]);
+
+    expect(mockGh.getPRReviewDecision).not.toHaveBeenCalled();
+    expect(mockGh.mergePR).toHaveBeenCalled();
   });
 
   it("skips PR when checks are pending", async () => {

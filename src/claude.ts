@@ -151,7 +151,15 @@ export function resolveEnqueue(aiOptions?: AiOptions): typeof enqueue {
 
 // ── Git helpers ──
 
-export function git(args: string[], cwd: string): Promise<string> {
+let _gitPreCallHook: (() => Promise<void>) | null = null;
+
+/** Register a hook called before every git() invocation (used for GitHub App token refresh). */
+export function setGitPreCallHook(hook: () => Promise<void>): void {
+  _gitPreCallHook = hook;
+}
+
+export async function git(args: string[], cwd: string): Promise<string> {
+  if (_gitPreCallHook) await _gitPreCallHook();
   return new Promise((resolve, reject) => {
     execFile("git", args, { cwd, maxBuffer: 10 * 1024 * 1024 }, (err, stdout, stderr) => {
       if (err) {
@@ -199,6 +207,7 @@ export async function ensureClone(repo: Repo): Promise<string> {
         await git(["checkout", `origin/${repo.defaultBranch}`, "--force"], dir);
       } else {
         fs.mkdirSync(dir, { recursive: true });
+        if (_gitPreCallHook) await _gitPreCallHook();
         await new Promise<void>((resolve, reject) => {
           execFile(
             "gh",

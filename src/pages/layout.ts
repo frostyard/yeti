@@ -270,6 +270,11 @@ export const PAGE_CSS = `
       color: var(--warning);
       margin-top: 0.15rem;
     }
+    .config-form .readonly-value {
+      font-family: monospace;
+      padding: 0.35rem 0;
+      color: var(--text-subtle);
+    }
     .save-btn {
       margin-top: 1.5rem;
       background: var(--save-bg);
