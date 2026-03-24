@@ -17,6 +17,7 @@ vi.mock("./config.js", () => ({
     "Refined":              { color: "0075ca", description: "Issue is ready for yeti to implement" },
     "Ready":                { color: "0e8a16", description: "Yeti has finished — needs human attention" },
   },
+  LOG_LEVELS: ["debug", "info", "warn", "error"],
   getConfigForDisplay: vi.fn().mockReturnValue({
     githubOwners: ["owner1"],
     selfRepo: "owner1/repo1",
@@ -24,6 +25,7 @@ vi.mock("./config.js", () => ({
     port: 9384,
     intervals: { issueWorkerMs: 300000, issueRefinerMs: 300000, ciFixerMs: 600000, reviewAddresserMs: 300000, bugInvestigatorMs: 600000, autoMergerMs: 600000 },
     schedules: { docMaintainerHour: 1, repoStandardsHour: 2, improvementIdentifierHour: 3 },
+    logLevel: "debug",
     logRetentionDays: 14,
     logRetentionPerJob: 20,
     enabledJobs: ["issue-worker", "ci-fixer"],
@@ -516,6 +518,35 @@ describe("HTTP server", () => {
     expect(res.status).toBe(200);
     expect(res.body).toContain('name="includeForks"');
     expect(res.body).toContain("Include forked repositories");
+  });
+
+  it("GET /config renders logLevel dropdown with current value selected", async () => {
+    const res = await request(server, "GET", "/config");
+    expect(res.status).toBe(200);
+    expect(res.body).toContain('name="logLevel"');
+    expect(res.body).toContain('<option value="debug" selected>debug</option>');
+    expect(res.body).toContain("Minimum log level");
+  });
+
+  it("POST /config with valid logLevel persists it", async () => {
+    const { writeConfig: wc } = await import("./config.js");
+    await request(server, "POST", "/config", {
+      body: "logLevel=warn",
+    });
+    expect(wc).toHaveBeenCalledWith(
+      expect.objectContaining({ logLevel: "warn" }),
+    );
+  });
+
+  it("POST /config with invalid logLevel ignores it", async () => {
+    const { writeConfig: wc } = await import("./config.js");
+    (wc as ReturnType<typeof vi.fn>).mockClear();
+    await request(server, "POST", "/config", {
+      body: "logLevel=invalid",
+    });
+    expect(wc).toHaveBeenCalled();
+    const args = (wc as ReturnType<typeof vi.fn>).mock.calls[0][0];
+    expect(args.logLevel).toBeUndefined();
   });
 
   it("GET /login redirects to / when auth disabled", async () => {

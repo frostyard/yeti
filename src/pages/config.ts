@@ -1,6 +1,6 @@
 import type { Theme } from "./layout.js";
 import { PAGE_CSS, escapeHtml, htmlOpenTag, buildNav, THEME_SCRIPT, siteTitle } from "./layout.js";
-import { getConfigForDisplay } from "../config.js";
+import { getConfigForDisplay, LOG_LEVELS } from "../config.js";
 import * as config from "../config.js";
 import { isOAuthConfigured } from "../oauth.js";
 
@@ -25,6 +25,7 @@ export function buildConfigPage(saved: boolean, theme: Theme, username?: string 
   const tab: TabId = VALID_TABS.includes(activeTab as TabId) ? (activeTab as TabId) : "general";
 
   const envMap: Record<string, string> = {
+    logLevel: "YETI_LOG_LEVEL",
     allowedRepos: "YETI_ALLOWED_REPOS",
     includeForks: "YETI_INCLUDE_FORKS",
     githubOwners: "YETI_GITHUB_OWNERS",
@@ -105,6 +106,13 @@ ${htmlOpenTag(theme)}
 
     <label for="logRetentionPerJob">Min Logs Kept Per Job</label>
     <input type="number" name="logRetentionPerJob" id="logRetentionPerJob" value="${Number(cfg.logRetentionPerJob)}" min="0">
+
+    <label for="logLevel">Log Level</label>
+    <select name="logLevel" id="logLevel"${isDisabled("logLevel") ? " disabled" : ""}>
+      ${LOG_LEVELS.map(l => `<option value="${l}"${cfg.logLevel === l ? " selected" : ""}>${l}</option>`).join("")}
+    </select>
+    ${envNote("logLevel")}
+    <div class="field-note">Minimum log level for console and stored logs. Default: debug.</div>
 
     <label for="queueScanIntervalMs">Queue Scan Interval (minutes)</label>
     <input type="number" name="queueScanIntervalMs" id="queueScanIntervalMs" value="${queueScanMinutes}" min="1">

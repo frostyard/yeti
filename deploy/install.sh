@@ -82,6 +82,7 @@ if [[ ! -f "$CONFIG_FILE" ]]; then
     "mkdocsUpdateHour": 4,
     "promptEvaluatorHour": 0
   },
+  "logLevel": "debug",
   "logRetentionDays": 14,
   "logRetentionPerJob": 20,
   "pausedJobs": [],
@@ -126,6 +127,9 @@ if [[ ! -f "$ENV_FILE" ]]; then
 # Codex backend
 # YETI_MAX_CODEX_WORKERS=1
 # YETI_CODEX_TIMEOUT_MS=1200000
+
+# Log level (debug, info, warn, error)
+# YETI_LOG_LEVEL=debug
 
 # Repo discovery
 # YETI_INCLUDE_FORKS=false
