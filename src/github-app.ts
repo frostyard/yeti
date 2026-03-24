@@ -49,21 +49,20 @@ export async function initGitHubApp(): Promise<void> {
     log.warn(`[github-app] Private key file ${keyPath} has permissions ${mode.toString(8)}, expected 600`);
   }
 
-  // Capture pre-init state so we can restore on failure
+  // Capture pre-init state so we can restore on any failure
   const previousToken = process.env["GH_TOKEN"];
 
-  // Get first installation token (sets process.env.GH_TOKEN)
-  await refreshToken();
-
-  // App slug is required — without it we can't set the bot login, and
-  // getSelfLogin() will fall back to GET /user which fails with installation tokens.
-  if (!appSlug) {
-    rollback(previousToken);
-    throw new Error("GitHub App init failed: could not determine app slug from GET /app");
-  }
-
-  // Configure git credential helper BEFORE applying other side effects.
   try {
+    // Get first installation token (sets process.env.GH_TOKEN)
+    await refreshToken();
+
+    // App slug is required — without it we can't set the bot login, and
+    // getSelfLogin() will fall back to GET /user which fails with installation tokens.
+    if (!appSlug) {
+      throw new Error("GitHub App init failed: could not determine app slug from GET /app");
+    }
+
+    // Configure git credential helper — must succeed before we apply side effects
     await exec("gh", ["auth", "setup-git"]);
   } catch (err) {
     rollback(previousToken);
@@ -147,40 +146,56 @@ export function generateJWT(): string {
 async function refreshToken(): Promise<void> {
   const jwt = generateJWT();
 
-  // Temporarily set GH_TOKEN to the JWT for the API call
-  const previousToken = process.env["GH_TOKEN"];
-  process.env["GH_TOKEN"] = jwt;
+  // GitHub App endpoints require "Authorization: Bearer <jwt>", but the gh CLI
+  // sends GH_TOKEN as "Authorization: token <value>". So we use fetch() directly
+  // for the JWT-authenticated bootstrap calls.
 
   try {
-    // GET /app requires JWT (not installation token), so fetch slug while JWT is active.
-    // On failure, appSlug stays null — initGitHubApp() treats that as a hard error.
+    // GET /app requires JWT — fetch slug on first call
     if (!appSlug) {
       try {
-        const appRaw = await exec("gh", ["api", "/app"]);
-        const appInfo = JSON.parse(appRaw) as { slug?: string };
+        const appInfo = await githubApi<{ slug?: string }>("GET", "/app", jwt);
         appSlug = appInfo.slug ?? null;
       } catch {
         // Swallowed here; initGitHubApp() checks appSlug and fails if null
       }
     }
 
-    const raw = await exec("gh", [
-      "api", "--method", "POST",
+    const response = await githubApi<{ token: string; expires_at: string }>(
+      "POST",
       `/app/installations/${GITHUB_APP_INSTALLATION_ID}/access_tokens`,
-    ]);
-    const response = JSON.parse(raw) as { token: string; expires_at: string };
+      jwt,
+    );
     cachedToken = response.token;
     tokenExpiresAt = new Date(response.expires_at).getTime();
     process.env["GH_TOKEN"] = cachedToken;
   } catch (err) {
-    // Restore previous token on failure
-    if (previousToken !== undefined) {
-      process.env["GH_TOKEN"] = previousToken;
+    // Ensure GH_TOKEN is not left in a bad state
+    if (cachedToken) {
+      process.env["GH_TOKEN"] = cachedToken; // keep last good token if we had one
     } else {
       delete process.env["GH_TOKEN"];
     }
     throw err;
   }
+}
+
+/** Direct GitHub API call with Bearer auth (for JWT-authenticated endpoints). */
+async function githubApi<T>(method: string, path: string, token: string): Promise<T> {
+  const url = `https://api.github.com${path}`;
+  const res = await fetch(url, {
+    method,
+    headers: {
+      "Authorization": `Bearer ${token}`,
+      "Accept": "application/vnd.github+json",
+      "X-GitHub-Api-Version": "2022-11-28",
+    },
+  });
+  if (!res.ok) {
+    const body = await res.text();
+    throw new Error(`GitHub API ${method} ${path} failed (${res.status}): ${body}`);
+  }
+  return await res.json() as T;
 }
 
 function base64url(input: string): string {
