@@ -21,6 +21,7 @@ import * as triageYetiErrors from "./jobs/triage-yeti-errors.js";
 import * as issueAuditor from "./jobs/issue-auditor.js";
 import * as planReviewer from "./jobs/plan-reviewer.js";
 import * as mkdocsUpdate from "./jobs/mkdocs-update.js";
+import * as promptEvaluator from "./jobs/prompt-evaluator.js";
 import * as discord from "./discord.js";
 import { isDiscordConfigured } from "./discord.js";
 import { setShuttingDown } from "./shutdown.js";
@@ -201,6 +202,15 @@ const jobs: Job[] = [
     async run() {
       const repos = await gh.listRepos();
       await planReviewer.run(repos);
+    },
+  },
+  {
+    name: "prompt-evaluator",
+    intervalMs: 0,
+    scheduledHour: SCHEDULES.promptEvaluatorHour,
+    async run() {
+      const repos = await gh.listRepos();
+      await promptEvaluator.run(repos);
     },
   },
 ];
