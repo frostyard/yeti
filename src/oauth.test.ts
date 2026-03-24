@@ -53,13 +53,13 @@ describe("isOAuthConfigured", () => {
 });
 
 describe("getAuthorizationUrl", () => {
-  it("builds correct GitHub authorize URL with read:org scope", () => {
+  it("builds correct GitHub authorize URL without scope (App OAuth ignores it)", () => {
     const url = getAuthorizationUrl("random-state-123");
     expect(url).toContain("https://github.com/login/oauth/authorize?");
     expect(url).toContain("client_id=test-client-id");
     expect(url).toContain("redirect_uri=https%3A%2F%2Fyeti.example.com%2Fauth%2Fcallback");
     expect(url).toContain("state=random-state-123");
-    expect(url).toContain("scope=read%3Aorg");
+    expect(url).not.toContain("scope");
   });
 });
 
@@ -68,13 +68,15 @@ describe("exchangeCodeForUser", () => {
 
   beforeEach(() => {
     originalFetch = globalThis.fetch;
+    process.env["GH_TOKEN"] = "ghs_installation_token";
   });
 
   afterEach(() => {
     globalThis.fetch = originalFetch;
+    delete process.env["GH_TOKEN"];
   });
 
-  it("exchanges code for token, gets user, checks org membership", async () => {
+  it("exchanges code for token, gets user, checks org membership via installation token", async () => {
     vi.stubGlobal(
       "fetch",
       vi.fn()
@@ -85,12 +87,10 @@ describe("exchangeCodeForUser", () => {
         .mockResolvedValueOnce({
           ok: true,
           json: () => Promise.resolve({ login: "testuser" }),
-          headers: new Headers({ "x-oauth-scopes": "read:org" }),
+          headers: new Headers({ "x-oauth-scopes": "" }),
         })
-        .mockResolvedValueOnce({
-          ok: true,
-          json: () => Promise.resolve([{ login: "test-org" }, { login: "other-org" }]),
-        }),
+        // Org membership check returns 204 (is a member)
+        .mockResolvedValueOnce({ status: 204 }),
     );
 
     const result = await exchangeCodeForUser("test-code");
@@ -98,12 +98,11 @@ describe("exchangeCodeForUser", () => {
 
     const fetchMock = globalThis.fetch as ReturnType<typeof vi.fn>;
     expect(fetchMock).toHaveBeenCalledTimes(3);
-    // Token exchange
     expect(fetchMock.mock.calls[0][0]).toBe("https://github.com/login/oauth/access_token");
-    // User identity
     expect(fetchMock.mock.calls[1][0]).toBe("https://api.github.com/user");
-    // Org list
-    expect(fetchMock.mock.calls[2][0]).toBe("https://api.github.com/user/orgs?per_page=100");
+    // Org check uses installation token, not user token
+    expect(fetchMock.mock.calls[2][0]).toBe("https://api.github.com/orgs/test-org/members/testuser");
+    expect(fetchMock.mock.calls[2][1].headers.Authorization).toBe("Bearer ghs_installation_token");
   });
 
   it("returns null when token exchange fails", async () => {
@@ -150,7 +149,7 @@ describe("exchangeCodeForUser", () => {
     expect(result).toBeNull();
   });
 
-  it("returns not_org_member error when user is not a member of any configured org", async () => {
+  it("returns not_org_member when membership check returns 404", async () => {
     vi.stubGlobal(
       "fetch",
       vi.fn()
@@ -161,20 +160,18 @@ describe("exchangeCodeForUser", () => {
         .mockResolvedValueOnce({
           ok: true,
           json: () => Promise.resolve({ login: "outsider" }),
-          headers: new Headers({ "x-oauth-scopes": "read:org" }),
+          headers: new Headers({ "x-oauth-scopes": "" }),
         })
-        // User's orgs don't include any configured owner
-        .mockResolvedValueOnce({
-          ok: true,
-          json: () => Promise.resolve([{ login: "unrelated-org" }]),
-        }),
+        // All org checks return 404 (not a member)
+        .mockResolvedValueOnce({ status: 404 })
+        .mockResolvedValueOnce({ status: 404 }),
     );
 
     const result = await exchangeCodeForUser("test-code");
     expect(result).toEqual({ error: "not_org_member" });
   });
 
-  it("returns not_org_member when user has no orgs", async () => {
+  it("returns null on transient error during org membership check", async () => {
     vi.stubGlobal(
       "fetch",
       vi.fn()
@@ -185,19 +182,17 @@ describe("exchangeCodeForUser", () => {
         .mockResolvedValueOnce({
           ok: true,
           json: () => Promise.resolve({ login: "testuser" }),
-          headers: new Headers({ "x-oauth-scopes": "read:org" }),
+          headers: new Headers({ "x-oauth-scopes": "" }),
         })
-        .mockResolvedValueOnce({
-          ok: true,
-          json: () => Promise.resolve([]),
-        }),
+        .mockResolvedValueOnce({ status: 500 }),
     );
 
     const result = await exchangeCodeForUser("test-code");
-    expect(result).toEqual({ error: "not_org_member" });
+    expect(result).toBeNull();
   });
 
-  it("matches org names case-insensitively", async () => {
+  it("returns null when no installation token is available", async () => {
+    delete process.env["GH_TOKEN"];
     vi.stubGlobal(
       "fetch",
       vi.fn()
@@ -208,34 +203,7 @@ describe("exchangeCodeForUser", () => {
         .mockResolvedValueOnce({
           ok: true,
           json: () => Promise.resolve({ login: "testuser" }),
-          headers: new Headers({ "x-oauth-scopes": "read:org" }),
-        })
-        .mockResolvedValueOnce({
-          ok: true,
-          json: () => Promise.resolve([{ login: "Test-Org" }]),
-        }),
-    );
-
-    const result = await exchangeCodeForUser("test-code");
-    expect(result).toEqual({ login: "testuser" });
-  });
-
-  it("returns null on transient error fetching org list", async () => {
-    vi.stubGlobal(
-      "fetch",
-      vi.fn()
-        .mockResolvedValueOnce({
-          ok: true,
-          json: () => Promise.resolve({ access_token: "ghu_test" }),
-        })
-        .mockResolvedValueOnce({
-          ok: true,
-          json: () => Promise.resolve({ login: "testuser" }),
-          headers: new Headers({ "x-oauth-scopes": "read:org" }),
-        })
-        .mockResolvedValueOnce({
-          ok: false,
-          status: 500,
+          headers: new Headers({ "x-oauth-scopes": "" }),
         }),
     );
 
