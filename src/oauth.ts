@@ -16,11 +16,12 @@ export function isOAuthConfigured(): boolean {
 }
 
 export function getAuthorizationUrl(state: string): string {
+  // Note: GitHub App OAuth ignores the scope parameter — permissions come from the
+  // App's configured permissions. We omit scope intentionally.
   const params = new URLSearchParams({
     client_id: GITHUB_APP_CLIENT_ID,
     redirect_uri: `${EXTERNAL_URL}/auth/callback`,
     state,
-    scope: "read:org",
   });
   return `https://github.com/login/oauth/authorize?${params.toString()}`;
 }
@@ -84,33 +85,40 @@ export async function exchangeCodeForUser(code: string): Promise<OAuthResult> {
     return null;
   }
 
-  // Step 3: Check org membership via user's own org list.
-  // GET /user/orgs lists the authenticated user's orgs (requires read:org scope).
-  // This avoids the circular permission issue with GET /orgs/{org}/members/{username},
-  // which requires the requester to already be an org member.
-  const allowedOwners = new Set(GITHUB_OWNERS.map(o => o.toLowerCase()));
-  try {
-    const orgsRes = await fetch("https://api.github.com/user/orgs?per_page=100", {
-      headers: {
-        Authorization: `Bearer ${accessToken}`,
-        Accept: "application/json",
-      },
-    });
-    if (!orgsRes.ok) {
-      log.warn(`OAuth org list fetch failed: HTTP ${orgsRes.status}`);
-      return null; // Transient error — don't blame the user
-    }
-    const orgs = (await orgsRes.json()) as Array<{ login?: string }>;
-    const orgLogins = orgs.map(o => o.login).filter(Boolean);
-    log.info(`[oauth] User ${login} belongs to orgs: [${orgLogins.join(", ")}], allowed: [${[...allowedOwners].join(", ")}]`);
-    for (const org of orgs) {
-      if (org.login && allowedOwners.has(org.login.toLowerCase())) {
+  // Step 3: Check org membership using the installation token.
+  // GitHub App user OAuth tokens don't support scopes — permissions come from the
+  // App config. Using the installation token (which has Organization > Members: Read)
+  // avoids this limitation. GET /orgs/{org}/members/{username} returns 204 if member.
+  const installationToken = process.env["GH_TOKEN"];
+  if (!installationToken) {
+    log.warn("[oauth] No installation token available for org membership check");
+    return null;
+  }
+
+  for (const owner of GITHUB_OWNERS) {
+    try {
+      const memberRes = await fetch(
+        `https://api.github.com/orgs/${encodeURIComponent(owner)}/members/${encodeURIComponent(login)}`,
+        {
+          headers: {
+            Authorization: `Bearer ${installationToken}`,
+            Accept: "application/json",
+          },
+        },
+      );
+      log.info(`[oauth] Org check ${owner}/${login}: HTTP ${memberRes.status}`);
+      if (memberRes.status === 204) {
         return { login };
       }
+      // 404 = not a member or not an org — try next owner
+      if (memberRes.status !== 404) {
+        log.warn(`[oauth] Unexpected status ${memberRes.status} checking ${owner} membership`);
+        return null; // Transient/permission error — don't blame the user
+      }
+    } catch (err) {
+      log.warn(`[oauth] Org check for ${owner} failed: ${err}`);
+      return null; // Transient error
     }
-  } catch (err) {
-    log.warn(`OAuth org list fetch failed: ${err}`);
-    return null; // Transient error — don't blame the user
   }
 
   log.warn(`OAuth user ${login} is not a member of any configured org (${GITHUB_OWNERS.join(", ")})`);
