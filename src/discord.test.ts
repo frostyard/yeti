@@ -31,6 +31,7 @@ const { mockConfig, mockClient, mockEventHandlers, mockChannel } = vi.hoisted(()
       DISCORD_ALLOWED_USERS: [] as string[],
       GITHUB_OWNERS: ["frostyard"],
       JOB_AI: {} as Record<string, unknown>,
+      LABELS: { refined: "Refined", ready: "Ready", priority: "Priority", inReview: "In Review", needsRefinement: "Needs Refinement", needsPlanReview: "Needs Plan Review" },
     },
     mockClient,
     mockEventHandlers,
