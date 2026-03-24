@@ -301,6 +301,41 @@ describe("auto-merger", () => {
     expect(log.warn).not.toHaveBeenCalled();
   });
 
+  it("skips PR when branch protection blocks merge", async () => {
+    const pr = mockPR({ author: { login: "dependabot[bot]" } });
+    mockGh.listPRs.mockResolvedValue([pr]);
+    mockGh.getPRCheckStatus.mockResolvedValue("passing");
+    mockGh.mergePR.mockRejectedValue(
+      new Error("gh pr merge 91 --repo frostyard/intuneme --squash failed: X Pull request frostyard/intuneme#91 is not mergeable: the base branch policy prohibits the merge."),
+    );
+
+    await run([repo]);
+
+    expect(mockGh.mergePR).toHaveBeenCalledWith(repo.fullName, pr.number);
+    expect(mockNotify).not.toHaveBeenCalled();
+    expect(reportError).not.toHaveBeenCalled();
+    expect(log.info).toHaveBeenCalledWith(
+      `[auto-merger] ${repo.fullName}#${pr.number} has branch protection, skipping`,
+    );
+    expect(mockGh.removeLabel).not.toHaveBeenCalled();
+  });
+
+  it("still reports non-branch-protection merge errors", async () => {
+    const pr = mockPR({ author: { login: "dependabot[bot]" } });
+    mockGh.listPRs.mockResolvedValue([pr]);
+    mockGh.getPRCheckStatus.mockResolvedValue("passing");
+    mockGh.mergePR.mockRejectedValue(new Error("API error"));
+
+    await run([repo]);
+
+    expect(reportError).toHaveBeenCalledWith(
+      "auto-merger:process-pr",
+      `${repo.fullName}#${pr.number}`,
+      expect.any(Error),
+    );
+    expect(mockNotify).not.toHaveBeenCalled();
+  });
+
   it("checks mergeable state before merging", async () => {
     const pr = mockPR({ author: { login: "dependabot[bot]" } });
     mockGh.listPRs.mockResolvedValue([pr]);

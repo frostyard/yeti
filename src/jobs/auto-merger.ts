@@ -59,7 +59,15 @@ export async function run(repos: Repo[]): Promise<void> {
 
           gh.populateQueueCache("auto-mergeable", repo.fullName, { number: pr.number, title: pr.title, type: "pr", updatedAt: pr.updatedAt, priority: gh.hasPriorityLabel(pr.labels) });
           log.info(`[auto-merger] Merging ${repo.fullName}#${pr.number}: ${pr.title}`);
-          await gh.mergePR(repo.fullName, pr.number);
+          try {
+            await gh.mergePR(repo.fullName, pr.number);
+          } catch (err) {
+            if (err instanceof Error && err.message.includes("base branch policy prohibits the merge")) {
+              log.info(`[auto-merger] ${repo.fullName}#${pr.number} has branch protection, skipping`);
+              continue;
+            }
+            throw err;
+          }
           notify(`[auto-merger] Merged ${repo.fullName}#${pr.number}\n${gh.pullUrl(repo.fullName, pr.number)}`);
 
           if (isYetiPR) {
