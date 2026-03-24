@@ -13,7 +13,7 @@ import { VERSION } from "./version.js";
 import { buildStatusPage } from "./pages/dashboard.js";
 import { buildQueuePage } from "./pages/queue.js";
 import { buildLogsListPage, buildLogDetailPage, buildIssueLogsPage } from "./pages/logs.js";
-import { buildConfigPage } from "./pages/config.js";
+import { buildConfigPage, VALID_TABS, type TabId } from "./pages/config.js";
 import { buildJobsPage, type JobInfo } from "./pages/jobs.js";
 import { buildLoginPage } from "./pages/login.js";
 import { buildReposPage } from "./pages/repos.js";
@@ -461,7 +461,8 @@ async function handleRequest(req: http.IncomingMessage, res: http.ServerResponse
 
     // If auth token changed, set new cookie so user isn't locked out
     const newToken = config.AUTH_TOKEN;
-    const headers: Record<string, string> = { Location: "/config?saved=1" };
+    const tab = VALID_TABS.includes(params["_tab"] as TabId) ? params["_tab"] : "general";
+    const headers: Record<string, string> = { Location: `/config?saved=1&tab=${tab}` };
     if (newToken) {
       headers["Set-Cookie"] = `yeti_token=${encodeURIComponent(newToken)}; HttpOnly; Secure; SameSite=Strict; Path=/`;
     }
@@ -747,7 +748,8 @@ async function handleRequest(req: http.IncomingMessage, res: http.ServerResponse
     const urlObj = new URL(req.url, "http://localhost");
     const saved = urlObj.searchParams.get("saved") === "1";
     res.writeHead(200, { "Content-Type": "text/html" });
-    res.end(buildConfigPage(saved, theme, auth.username));
+    const tabParam = urlObj.searchParams.get("tab") ?? undefined;
+    res.end(buildConfigPage(saved, theme, auth.username, tabParam));
     return;
   }
 

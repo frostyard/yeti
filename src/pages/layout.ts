@@ -390,6 +390,30 @@ export const PAGE_CSS = `
       font-size: 0.8rem;
       cursor: pointer;
     }
+    .tab-bar {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0;
+      border-bottom: 1px solid var(--border);
+      margin-bottom: 1.5rem;
+    }
+    .tab-bar a { text-decoration: none; }
+    .tab-bar button {
+      padding: 0.5rem 1rem;
+      font-size: 0.85rem;
+      color: var(--text-secondary);
+      background: none;
+      border: none;
+      border-bottom: 2px solid transparent;
+      margin-bottom: -1px;
+      cursor: pointer;
+    }
+    .tab-bar button:hover { color: var(--text); }
+    .tab-bar button.active {
+      color: var(--accent);
+      border-bottom-color: var(--accent);
+    }
+    .tab-panel-hidden { display: none; }
 `;
 
 export function escapeHtml(s: string): string {

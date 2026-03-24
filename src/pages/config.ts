@@ -4,12 +4,25 @@ import { getConfigForDisplay } from "../config.js";
 import * as config from "../config.js";
 import { isOAuthConfigured } from "../oauth.js";
 
+export const VALID_TABS = ["general", "scheduling", "ai", "integrations", "security"] as const;
+export type TabId = (typeof VALID_TABS)[number];
+
+const TAB_LABELS: Record<TabId, string> = {
+  general: "General",
+  scheduling: "Scheduling",
+  ai: "AI Backends",
+  integrations: "Integrations",
+  security: "Security",
+};
+
 function isEnvOverridden(envVar: string): boolean {
   return process.env[envVar] !== undefined && process.env[envVar] !== "";
 }
 
-export function buildConfigPage(saved: boolean, theme: Theme, username?: string | null): string {
+export function buildConfigPage(saved: boolean, theme: Theme, username?: string | null, activeTab?: string): string {
   const cfg = getConfigForDisplay();
+
+  const tab: TabId = VALID_TABS.includes(activeTab as TabId) ? (activeTab as TabId) : "general";
 
   const envMap: Record<string, string> = {
     allowedRepos: "YETI_ALLOWED_REPOS",
@@ -48,6 +61,17 @@ export function buildConfigPage(saved: boolean, theme: Theme, username?: string 
   const authDisabled = !config.AUTH_TOKEN && !isOAuthConfigured();
   const queueScanMinutes = Math.round(Number(cfg.queueScanIntervalMs ?? 300000) / 60000);
 
+  function panelAttrs(id: TabId): string {
+    const hidden = id !== tab;
+    return `class="${hidden ? "tab-panel tab-panel-hidden" : "tab-panel"}" role="tabpanel" aria-labelledby="config-tab-${id}" aria-hidden="${hidden}"`;
+  }
+
+  const tabBar = `<div class="tab-bar" role="tablist" aria-label="Configuration sections">${VALID_TABS.map(id =>
+    `<button type="button" class="${id === tab ? "active" : ""}" role="tab" id="config-tab-${id}" aria-selected="${id === tab ? "true" : "false"}" aria-controls="tab-${id}" tabindex="${id === tab ? "0" : "-1"}" data-tab="${id}" onclick="switchTab('${id}')">${TAB_LABELS[id]}</button>`
+  ).join("")}</div>`;
+
+  const tabScript = `<script>function switchTab(id){document.querySelectorAll('.tab-panel').forEach(function(p){p.classList.add('tab-panel-hidden');p.setAttribute('aria-hidden','true')});var el=document.getElementById('tab-'+id);if(el){el.classList.remove('tab-panel-hidden');el.setAttribute('aria-hidden','false')}document.querySelectorAll('.tab-bar button').forEach(function(b){b.classList.remove('active');b.setAttribute('aria-selected','false');b.setAttribute('tabindex','-1')});var btn=document.querySelector('.tab-bar button[data-tab=\"'+id+'\"]');if(btn){btn.classList.add('active');btn.setAttribute('aria-selected','true');btn.setAttribute('tabindex','0');btn.focus()}var h=document.querySelector('input[name=\"_tab\"]');if(h)h.value=id}</script>`;
+
   return `<!DOCTYPE html>
 ${htmlOpenTag(theme)}
 <head>
@@ -62,7 +86,11 @@ ${htmlOpenTag(theme)}
   ${THEME_SCRIPT}
   ${saved ? '<div class="banner">Configuration saved and applied.</div>' : ""}
   ${authDisabled ? '<div class="warning-banner">Authentication is disabled. Set an auth token to protect this interface.</div>' : ""}
+  ${tabBar}
   <form method="POST" action="/config" class="config-form">
+    <input type="hidden" name="_tab" value="${tab}">
+
+    <div ${panelAttrs("general")} id="tab-general">
     <h2>General</h2>
     <label for="githubOwners">GitHub Owners (comma-separated)</label>
     <input type="text" name="githubOwners" id="githubOwners" value="${escapeHtml(Array.isArray(cfg.githubOwners) ? (cfg.githubOwners as string[]).join(", ") : "")}"${isDisabled("githubOwners") ? " disabled" : ""}>
@@ -101,7 +129,60 @@ ${htmlOpenTag(theme)}
     <label for="port">Port</label>
     <input type="number" name="port" id="port" value="${Number(cfg.port)}" disabled>
     <div class="field-note">Read-only — requires restart to change</div>
+    </div>
 
+    <div ${panelAttrs("scheduling")} id="tab-scheduling">
+    <h2>Intervals (minutes)</h2>
+    ${Object.entries(intervals).map(([key, value]) =>
+      `<label for="${escapeHtml(key)}">${escapeHtml(key.replace(/Ms$/, ""))}</label>
+      <input type="number" name="interval_${escapeHtml(key)}" id="${escapeHtml(key)}" value="${Math.round(value / 60000)}" min="1">`
+    ).join("\n    ")}
+
+    <h2>Schedules (hour, 0-23)</h2>
+    ${Object.entries(schedules).map(([key, value]) =>
+      `<label for="${escapeHtml(key)}">${escapeHtml(key.replace(/Hour$/, ""))}</label>
+      <input type="number" name="schedule_${escapeHtml(key)}" id="${escapeHtml(key)}" value="${value}" min="0" max="23">`
+    ).join("\n    ")}
+    </div>
+
+    <div ${panelAttrs("ai")} id="tab-ai">
+    <h2>AI Backends</h2>
+    <label for="maxCopilotWorkers">Max Copilot Workers</label>
+    <input type="number" name="maxCopilotWorkers" id="maxCopilotWorkers" value="${Number(cfg.maxCopilotWorkers ?? 1)}" min="0">
+    <div class="field-note">Number of concurrent Copilot CLI processes (0 to disable)</div>
+
+    <label for="copilotTimeoutMs">Copilot Timeout (minutes)</label>
+    <input type="number" name="copilotTimeoutMs" id="copilotTimeoutMs" value="${Math.round(Number(cfg.copilotTimeoutMs ?? 1200000) / 60000)}" min="1">
+
+    <label for="maxCodexWorkers">Max Codex Workers</label>
+    <input type="number" name="maxCodexWorkers" id="maxCodexWorkers" value="${Number(cfg.maxCodexWorkers ?? 1)}" min="0">
+    <div class="field-note">Number of concurrent Codex CLI processes (0 to disable)</div>
+
+    <label for="codexTimeoutMs">Codex Timeout (minutes)</label>
+    <input type="number" name="codexTimeoutMs" id="codexTimeoutMs" value="${Math.round(Number(cfg.codexTimeoutMs ?? 1200000) / 60000)}" min="1">
+
+    <h3>Per-Job AI Config</h3>
+    <div class="field-note">Override the AI backend and/or model for specific jobs. Leave model empty for default.</div>
+    <table class="config-table">
+      <thead><tr><th>Job</th><th>Backend</th><th>Model</th></tr></thead>
+      <tbody>
+        ${["issue-refiner", "issue-worker", "ci-fixer", "review-addresser", "doc-maintainer", "improvement-identifier", "plan-reviewer", "mkdocs-update", "triage-yeti-errors", "discord"].map(job => {
+          const jobCfg = (cfg.jobAi as Record<string, { backend?: string; model?: string }> | undefined)?.[job] ?? {};
+          return `<tr>
+            <td>${escapeHtml(job)}</td>
+            <td><select name="jobAi_${escapeHtml(job)}_backend">
+              <option value="claude"${!jobCfg.backend || jobCfg.backend === "claude" ? " selected" : ""}>claude</option>
+              <option value="copilot"${jobCfg.backend === "copilot" ? " selected" : ""}>copilot</option>
+              <option value="codex"${jobCfg.backend === "codex" ? " selected" : ""}>codex</option>
+            </select></td>
+            <td><input type="text" name="jobAi_${escapeHtml(job)}_model" value="${escapeHtml(jobCfg.model ?? "")}" placeholder="default"></td>
+          </tr>`;
+        }).join("\n        ")}
+      </tbody>
+    </table>
+    </div>
+
+    <div ${panelAttrs("integrations")} id="tab-integrations">
     <h2>Discord</h2>
     <label for="discordBotToken">Discord Bot Token</label>
     <input type="password" name="discordBotToken" id="discordBotToken" placeholder="${escapeHtml(String(cfg.discordBotToken ?? ""))}"${isDisabled("discordBotToken") ? " disabled" : ""}>
@@ -153,62 +234,19 @@ ${htmlOpenTag(theme)}
     <label>Webhook Secret</label>
     <div class="readonly-value">${escapeHtml(String(cfg.webhookSecret ?? "")) || "<em>Not configured</em>"}</div>
     ${envNote("webhookSecret")}
+    </div>
 
-    <h2>Intervals (minutes)</h2>
-    ${Object.entries(intervals).map(([key, value]) =>
-      `<label for="${escapeHtml(key)}">${escapeHtml(key.replace(/Ms$/, ""))}</label>
-      <input type="number" name="interval_${escapeHtml(key)}" id="${escapeHtml(key)}" value="${Math.round(value / 60000)}" min="1">`
-    ).join("\n    ")}
-
-    <h2>Schedules (hour, 0-23)</h2>
-    ${Object.entries(schedules).map(([key, value]) =>
-      `<label for="${escapeHtml(key)}">${escapeHtml(key.replace(/Hour$/, ""))}</label>
-      <input type="number" name="schedule_${escapeHtml(key)}" id="${escapeHtml(key)}" value="${value}" min="0" max="23">`
-    ).join("\n    ")}
-
-    <h2>AI Backends</h2>
-    <label for="maxCopilotWorkers">Max Copilot Workers</label>
-    <input type="number" name="maxCopilotWorkers" id="maxCopilotWorkers" value="${Number(cfg.maxCopilotWorkers ?? 1)}" min="0">
-    <div class="field-note">Number of concurrent Copilot CLI processes (0 to disable)</div>
-
-    <label for="copilotTimeoutMs">Copilot Timeout (minutes)</label>
-    <input type="number" name="copilotTimeoutMs" id="copilotTimeoutMs" value="${Math.round(Number(cfg.copilotTimeoutMs ?? 1200000) / 60000)}" min="1">
-
-    <label for="maxCodexWorkers">Max Codex Workers</label>
-    <input type="number" name="maxCodexWorkers" id="maxCodexWorkers" value="${Number(cfg.maxCodexWorkers ?? 1)}" min="0">
-    <div class="field-note">Number of concurrent Codex CLI processes (0 to disable)</div>
-
-    <label for="codexTimeoutMs">Codex Timeout (minutes)</label>
-    <input type="number" name="codexTimeoutMs" id="codexTimeoutMs" value="${Math.round(Number(cfg.codexTimeoutMs ?? 1200000) / 60000)}" min="1">
-
-    <h3>Per-Job AI Config</h3>
-    <div class="field-note">Override the AI backend and/or model for specific jobs. Leave model empty for default.</div>
-    <table class="config-table">
-      <thead><tr><th>Job</th><th>Backend</th><th>Model</th></tr></thead>
-      <tbody>
-        ${["issue-refiner", "issue-worker", "ci-fixer", "review-addresser", "doc-maintainer", "improvement-identifier", "plan-reviewer", "mkdocs-update", "triage-yeti-errors", "discord"].map(job => {
-          const jobCfg = (cfg.jobAi as Record<string, { backend?: string; model?: string }> | undefined)?.[job] ?? {};
-          return `<tr>
-            <td>${escapeHtml(job)}</td>
-            <td><select name="jobAi_${escapeHtml(job)}_backend">
-              <option value="claude"${!jobCfg.backend || jobCfg.backend === "claude" ? " selected" : ""}>claude</option>
-              <option value="copilot"${jobCfg.backend === "copilot" ? " selected" : ""}>copilot</option>
-              <option value="codex"${jobCfg.backend === "codex" ? " selected" : ""}>codex</option>
-            </select></td>
-            <td><input type="text" name="jobAi_${escapeHtml(job)}_model" value="${escapeHtml(jobCfg.model ?? "")}" placeholder="default"></td>
-          </tr>`;
-        }).join("\n        ")}
-      </tbody>
-    </table>
-
+    <div ${panelAttrs("security")} id="tab-security">
     <h2>Authentication</h2>
     <label for="authToken">Auth Token</label>
     <input type="password" name="authToken" id="authToken" placeholder="${escapeHtml(String(cfg.authToken ?? ""))}"${isDisabled("authToken") ? " disabled" : ""}>
     ${envNote("authToken")}
     <div class="field-note">Leave empty to keep current value</div>
+    </div>
 
     <button type="submit" class="save-btn">Save Configuration</button>
   </form>
+  ${tabScript}
 </body>
 </html>`;
 }
