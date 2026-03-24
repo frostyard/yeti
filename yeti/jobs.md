@@ -354,6 +354,10 @@ For each PR:
   accepts both "passing" checks and "no checks" (CI never ran). Rejects
   failing or in-progress checks.
 - On merge of a Yeti PR, removes the `In Review` label from the linked issue
+- **Branch protection**: When `mergePR()` fails with "base branch policy
+  prohibits the merge", the PR is silently skipped (info log only, no error
+  report, no notification, `In Review` label not removed). Other merge errors
+  are still reported normally.
 - Other PRs are ignored
 - If checks are failing: logs a warning and skips
 - If checks are pending: skips silently

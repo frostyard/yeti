@@ -15,7 +15,7 @@ src/
 ├── scheduler.ts         Interval/schedule-based job runner with skip-if-busy
 ├── github.ts            gh CLI wrapper with transient-error retry
 ├── github-app.ts        Optional GitHub App auth (JWT, installation tokens, GH_TOKEN injection)
-├── claude.ts            Multi-backend AI dispatch (Claude + Copilot + Codex), bounded concurrent queues, worktree helpers
+├── claude.ts            Multi-backend AI dispatch (Claude + Copilot + Codex), BoundedQueue class, worktree helpers
 ├── db.ts                SQLite task tracking (better-sqlite3)
 ├── server.ts            HTTP server — dashboard, health, status, manual triggers
 ├── log.ts               Timestamped logging
@@ -51,6 +51,9 @@ src/
     ├── mkdocs-update.ts        Daily MkDocs documentation update from recent git changes
     ├── issue-auditor.ts        Daily audit ensuring no issues fall between the cracks
     └── prompt-evaluator.ts     Weekly self-improvement: A/B tests prompts, files issues for winners
+
+scripts/
+└── ab-agent-test.sh       A/B test harness comparing AI backends (Claude vs Codex) on real issues
 
 deploy/
 ├── yeti.service           systemd service unit
@@ -150,22 +153,22 @@ from PRs with in-progress checks).
 **`github-app.ts`** — Optional GitHub App authentication. When configured
 (via `githubAppId`, `githubAppInstallationId`, `githubAppPrivateKeyPath`),
 gives Yeti a separate bot identity so humans can approve its PRs under branch
-protection. Signs JWTs (RS256 via Node.js `crypto.createSign`), exchanges them
-for installation tokens via the GitHub API, and sets `process.env.GH_TOKEN` so
-all `gh` and `git` subprocess calls inherit the App identity automatically.
+protection. Signs JWTs (RS256 via Node.js `crypto.createSign`, numeric `iss` claim),
+exchanges them for installation tokens via direct GitHub API calls using
+`Bearer` auth headers, and sets `process.env.GH_TOKEN` so all `gh` and `git`
+subprocess calls inherit the App identity automatically.
 Token refresh is lazy with a 5-minute pre-expiry buffer and in-flight dedup.
 `initGitHubApp()` is called once at startup; `ensureGitHubAppToken()` is called
 before each job tick. If no App config is set, all functions are no-ops and
 Yeti continues using personal `gh` CLI auth.
 
 **`claude.ts`** — Two concerns: (1) **multi-backend AI dispatch** with three
-bounded concurrent queues — `enqueue` (Claude, `MAX_CLAUDE_WORKERS` default 2),
-`enqueueCopilot` (Copilot, `MAX_COPILOT_WORKERS` default 1), and `enqueueCodex`
-(Codex, `MAX_CODEX_WORKERS` default 1). `resolveEnqueue(aiOptions)` selects the
-correct queue based on the backend in `AiOptions` (codex → `enqueueCodex`,
-copilot → `enqueueCopilot`, default → `enqueue`). All jobs call `runAI()` through
-`resolveEnqueue()` for backend-agnostic dispatch; `runClaude()` is retained as a
-legacy wrapper. (2) Git worktree helpers — `ensureClone`, `createWorktree`,
+bounded concurrent queues — one per backend (Claude, Copilot, Codex), each
+implemented as a `BoundedQueue` instance with configurable concurrency
+(`MAX_CLAUDE_WORKERS` default 2, `MAX_COPILOT_WORKERS` default 1,
+`MAX_CODEX_WORKERS` default 1). `resolveEnqueue(aiOptions)` selects the
+correct queue based on the backend in `AiOptions`. All jobs call `runAI()` through
+`resolveEnqueue()` for backend-agnostic dispatch. (2) Git worktree helpers — `ensureClone`, `createWorktree`,
 `createWorktreeFromBranch`, `removeWorktree`, `attemptMerge`, `pushBranch`,
 `generatePRDescription`, etc. `ensureClone` (exported) clones a repo on first
 use and on subsequent calls runs `git fetch --all --prune` followed by
@@ -293,7 +296,7 @@ See [Jobs](jobs.md) for detailed behavior of each.
 | `review-addresser` | Yeti PRs with unreacted review comments | 5 min | Fetches unresolved review comments, pushes fix commits, reacts with thumbsup to track addressed comments |
 | `triage-yeti-errors` | `[yeti-error]` issues in `SELF_REPO` | 10 min | Investigates internal Yeti errors, deduplicates by fingerprint, posts report |
 | `doc-maintainer` | Daily at 1 AM | Scheduled | Updates `yeti/` to reflect current codebase |
-| `auto-merger` | Dependabot PRs + LGTM'd Yeti PRs + doc PRs | 10 min | Squash-merges PRs when conditions are met |
+| `auto-merger` | Dependabot PRs + LGTM'd Yeti PRs + doc PRs | 10 min | Squash-merges PRs when conditions are met; silently skips branch-protected repos |
 | `repo-standards` | Daily at 2 AM (+ on startup) | Scheduled | Syncs labels and cleans legacy labels |
 | `improvement-identifier` | Daily at 3 AM | Scheduled | Analyzes codebase via Claude, implements improvements as PRs |
 | `mkdocs-update` | Daily at 4 AM | Scheduled | Updates MkDocs documentation from recent source code changes |
