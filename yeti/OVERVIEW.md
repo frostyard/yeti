@@ -23,6 +23,7 @@ src/
 ├── log.ts               Timestamped logging
 ├── notify.ts            Notification dispatcher — forwards to Discord
 ├── discord.ts           Discord bot — notifications + job control commands (!yeti …)
+├── webhooks.ts          GitHub webhook handler — HMAC verification, event routing, queue cache updates
 ├── error-reporter.ts    Deduplicating GitHub issue-based error reporter (filters ShutdownError, RateLimitError)
 ├── images.ts            Image/attachment extraction + download for issue/PR context
 ├── version.ts           Build-time injected version string
@@ -161,7 +162,9 @@ exchanges them for installation tokens via direct GitHub API calls using
 subprocess calls inherit the App identity automatically.
 Token refresh is lazy with a 5-minute pre-expiry buffer and in-flight dedup.
 `initGitHubApp()` is called once at startup; `ensureGitHubAppToken()` is called
-before each job tick. If no App config is set, all functions are no-ops and
+before each job tick. `configureWebhook()` auto-sets the App's webhook URL and
+secret on startup via `PATCH /app/hook/config` (JWT auth) — idempotent, logs
+a warning on failure. If no App config is set, all functions are no-ops and
 Yeti continues using personal `gh` CLI auth.
 
 **`oauth.ts`** — Optional GitHub OAuth for dashboard sign-in. When
@@ -245,11 +248,39 @@ Routes:
 - `GET /logs/issue` — Issue-specific logs page (`?repo=...&number=...`)
 - `GET /config` / `POST /config` — Config viewer/editor (HTML form)
 - `GET /config/api` — JSON config (sensitive fields masked)
+- `POST /webhooks/github` — GitHub webhook endpoint (HMAC-SHA256 verified, no auth required — see `webhooks.ts`)
 
 Supports dark/light/system themes. Auth is enabled when `authToken` is set
 or OAuth is configured (either or both). Accepts `Authorization: Bearer
 <token>` header, `yeti_token` cookie (token auth), or `yeti_session` cookie
 (OAuth). Token comparison uses `crypto.timingSafeEqual`.
+
+**`webhooks.ts`** — GitHub webhook handler for near-real-time event processing.
+Receives events via `POST /webhooks/github` with HMAC-SHA256 signature
+verification (`X-Hub-Signature-256` header, using `WEBHOOK_SECRET`). Routes
+three event types:
+
+- **`ping`** — Returns `pong` (GitHub sends this when the webhook is first configured)
+- **`issues.labeled` / `issues.unlabeled`** — Updates the dashboard queue cache
+  in real time (adds/removes entries based on `LABEL_TO_CATEGORY` mapping) and
+  triggers the corresponding job when a trigger label is added (`Refined` →
+  issue-worker, `Needs Refinement` → issue-refiner, `Needs Plan Review` →
+  plan-reviewer). `Priority` label changes update priority flags on existing
+  cache entries.
+- **`check_run.completed`** — When a check run concludes with `failure` or
+  `timed_out` and is associated with a PR, triggers ci-fixer.
+
+All events are filtered through `isRepoAllowed()` which mirrors `filterRepos()`
+semantics including the `SELF_REPO` exception. Triggering uses
+`scheduler.triggerJob()` — jobs run their normal scan logic, just immediately
+instead of waiting for the next poll interval. Webhooks supplement polling
+(hybrid model), never replace it — if webhooks are misconfigured or down,
+polling continues to work.
+
+`configureWebhook()` in `github-app.ts` auto-sets the App's webhook URL
+(`<externalUrl>/webhooks/github`) and secret on startup via
+`PATCH /app/hook/config` (JWT auth). This is idempotent and logs a warning on
+failure (polling still works without webhooks).
 
 **`plan-parser.ts`** — Parses structured implementation plan comments into
 discrete phases for multi-PR workflows. Looks for `### PR N:` or `### Phase N:`
@@ -591,6 +622,7 @@ defaults.
 | `githubAppClientId` | `YETI_GITHUB_APP_CLIENT_ID` | *(empty — OAuth disabled)* |
 | `githubAppClientSecret` | `YETI_GITHUB_APP_CLIENT_SECRET` | *(empty — OAuth disabled)* |
 | `externalUrl` | `YETI_EXTERNAL_URL` | *(empty — OAuth disabled; must start with http:// or https://)* |
+| `webhookSecret` | `YETI_WEBHOOK_SECRET` | *(empty — webhooks disabled; auto-configured when GitHub App + externalUrl are set)* |
 | `pausedJobs` | — | `[]` (job names to pause on startup) |
 | `enabledJobs` | — | `[]` (job names to register with the scheduler; empty = no jobs run) |
 | `skippedItems` | — | `[]` (array of `{repo, number}` excluded from processing) |
