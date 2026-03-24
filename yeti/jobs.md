@@ -478,3 +478,50 @@ which issues were fixed.
 
 Per-repo errors are caught and reported without blocking other repos.
 
+## prompt-evaluator
+
+**Source**: `src/jobs/prompt-evaluator.ts`
+**Trigger**: Daily schedule
+**Schedule**: Runs at hour configured by `schedules.promptEvaluatorHour`
+(default: midnight / 0 AM local time)
+
+A self-improvement mechanism that A/B tests Yeti's plan-producing prompts
+against AI-generated improved variants. Evaluates one prompt per run,
+cycling through the `PROMPT_REGISTRY` round-robin (state persisted in
+`~/.yeti/prompt-eval-state.json`).
+
+**Registered prompts** (5 total):
+
+| Prompt | Source file | Purpose |
+|--------|------------|---------|
+| `buildNewPlanPrompt` | `issue-refiner.ts` | Initial implementation plan from a GitHub issue |
+| `buildRefinementPrompt` | `issue-refiner.ts` | Refine a plan based on human feedback |
+| `buildFollowUpPrompt` | `issue-refiner.ts` | Answer follow-up questions on an issue with an open PR |
+| `buildReviewPrompt` | `plan-reviewer.ts` | Critically review an implementation plan |
+| `buildPrompt` (issue-worker) | `issue-worker.ts` | Implement a solution based on a plan |
+
+**Evaluation pipeline** (all AI calls use the job's configured backend via
+`JOB_AI["prompt-evaluator"]`):
+
+1. **Read source**: Creates a read-only worktree, reads the prompt function's
+   source code from the registered file
+2. **Generate test inputs**: Asks AI to produce 4 diverse test cases (2
+   realistic GitHub issues + 2 adversarial edge cases). Aborts if fewer
+   than 4 are returned.
+3. **Generate variant**: Asks AI to analyze the prompt for weaknesses and
+   propose an improved version with a rationale
+4. **A/B comparison**: For each test case, runs both the current prompt and
+   the variant prompt, collecting outputs
+5. **Judge**: For each test case, an AI judge scores both outputs on 4
+   criteria (specificity, actionability, scope-awareness, uncertainty
+   handling) on a 1–5 scale and declares a winner
+6. **Report**: If the variant wins at least 3 of 4 test cases, files a
+   GitHub issue in `SELF_REPO` with the `prompt-improvement` label
+   containing full scores, reasoning, and collapsible output comparisons.
+   Deduplicates by checking for existing issues with the same title.
+
+The `prompt-improvement` label signals that a human should review the
+proposed prompt change before applying it — no automatic prompt
+modifications are made. Notifications are sent when an improvement is
+found.
+
