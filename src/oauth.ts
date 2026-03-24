@@ -71,6 +71,8 @@ export async function exchangeCodeForUser(code: string): Promise<OAuthResult> {
       log.warn(`OAuth user identity fetch failed: HTTP ${userRes.status}`);
       return null;
     }
+    const scopes = userRes.headers.get("x-oauth-scopes") ?? "(none)";
+    log.info(`[oauth] Token scopes: ${scopes}`);
     const userData = (await userRes.json()) as { login?: string };
     if (!userData.login) {
       log.warn("OAuth user identity missing login field");
@@ -99,6 +101,8 @@ export async function exchangeCodeForUser(code: string): Promise<OAuthResult> {
       return null; // Transient error — don't blame the user
     }
     const orgs = (await orgsRes.json()) as Array<{ login?: string }>;
+    const orgLogins = orgs.map(o => o.login).filter(Boolean);
+    log.info(`[oauth] User ${login} belongs to orgs: [${orgLogins.join(", ")}], allowed: [${[...allowedOwners].join(", ")}]`);
     for (const org of orgs) {
       if (org.login && allowedOwners.has(org.login.toLowerCase())) {
         return { login };
