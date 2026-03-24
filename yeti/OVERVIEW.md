@@ -166,12 +166,17 @@ Yeti continues using personal `gh` CLI auth.
 **`oauth.ts`** — Optional GitHub OAuth for dashboard sign-in. When
 `githubAppClientId`, `githubAppClientSecret`, and `externalUrl` are all
 configured, enables "Sign in with GitHub" on the login page. Handles the
-full OAuth flow: generates authorization URLs with `read:org` scope,
+full OAuth flow: generates authorization URLs (no `scope` parameter —
+GitHub App OAuth ignores scopes, permissions come from the App config),
 exchanges authorization codes for user access tokens via direct GitHub API
 calls (not `gh` CLI), fetches user identity, and checks org membership
-against `GITHUB_OWNERS` (OR logic — any org match is sufficient; personal
-usernames in `githubOwners` are silently skipped since the `/orgs/` endpoint
-404s for them). Sessions use HMAC-signed cookies (derived key from
+against `GITHUB_OWNERS` using the GitHub App installation token
+(`process.env.GH_TOKEN`) via `GET /orgs/{org}/members/{username}` (returns
+204 if member). The installation token is used for org checks because GitHub
+App user OAuth tokens don't support scopes — the App's configured
+Organization > Members: Read permission enables this. OR logic — any org
+match is sufficient; personal usernames in `githubOwners` silently 404 and
+are skipped. Sessions use HMAC-signed cookies (derived key from
 `githubAppClientSecret`, 24h expiry) — no server-side session store. The
 user access token is used only during the callback and is not persisted.
 Zero external dependencies (Node.js `crypto` and `fetch()` only).
@@ -248,11 +253,9 @@ or OAuth is configured (either or both). Accepts `Authorization: Bearer
 **`plan-parser.ts`** — Parses structured implementation plan comments into
 discrete phases for multi-PR workflows. Looks for `### PR N:` or `### Phase N:`
 headers to split a plan into phases. Also provides `findPlanComment()` to locate the
-most recent plan comment in an issue's comment history, `getPlanUpdatePhase()`
-to read the `<!-- plan-updated-after-phase:N -->` marker from plan text,
-and `makePlanUpdateFooter()` to generate the visible + machine-readable
-footer appended after plan updates. Used by issue-worker to implement
-multi-phase plans sequentially and update the plan between phases.
+most recent plan comment in an issue's comment history (uses `includes` rather
+than `startsWith` so it still matches when the Yeti visible header is
+prepended). Used by issue-worker to implement multi-phase plans sequentially.
 
 **`log.ts`** — Timestamped console logging with four levels: `debug`, `info`,
 `warn`, `error`. Errors also trigger notifications via `notify.ts`. All log calls capture
@@ -584,6 +587,9 @@ defaults.
 | `includeForks` | `YETI_INCLUDE_FORKS` | `false` (only source repos discovered) |
 | `jobAi` | — | `{}` (per-job AI backend/model overrides — all jobs respect this) |
 | `authToken` | `YETI_AUTH_TOKEN` | *(empty — auth disabled)* |
+| `githubAppClientId` | `YETI_GITHUB_APP_CLIENT_ID` | *(empty — OAuth disabled)* |
+| `githubAppClientSecret` | `YETI_GITHUB_APP_CLIENT_SECRET` | *(empty — OAuth disabled)* |
+| `externalUrl` | `YETI_EXTERNAL_URL` | *(empty — OAuth disabled; must start with http:// or https://)* |
 | `pausedJobs` | — | `[]` (job names to pause on startup) |
 | `enabledJobs` | — | `[]` (job names to register with the scheduler; empty = no jobs run) |
 | `skippedItems` | — | `[]` (array of `{repo, number}` excluded from processing) |
