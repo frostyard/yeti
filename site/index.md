@@ -22,7 +22,7 @@ You stay in the driver's seat. Yeti handles the legwork.
 
 ## How it works
 
-Yeti runs as a background daemon that polls your GitHub repositories on configurable intervals:
+Yeti runs as a background daemon that polls your GitHub repositories on configurable intervals (and optionally receives webhooks for near-real-time triggers):
 
 1. **Scan** --- Discovers issues and PRs that need attention across all your repos
 2. **Plan** --- Reads the codebase and generates detailed implementation plans for labeled issues
@@ -62,8 +62,9 @@ The cold reality: most of the time you spent on an issue was not making decision
 
 ## Features
 
-- **11 automated jobs** --- issue refinement, implementation, CI fixing, review addressing, auto-merging, documentation maintenance, repo standards enforcement, improvement identification, issue auditing, plan review, and error triage
-- **Web dashboard** --- Real-time view of job status, work queue, logs, and configuration. Runs on port 9384.
+- **13 automated jobs** --- issue refinement, plan review, implementation, CI fixing, review addressing, auto-merging, documentation maintenance, MkDocs updates, repo standards enforcement, improvement identification, issue auditing, prompt self-improvement, and error triage
+- **Web dashboard** --- Real-time view of job status, work queue, logs, and configuration with live toast notifications via SSE. Runs on port 9384.
+- **Webhooks** --- Optional GitHub webhook support for near-real-time triggers, supplementing interval-based polling
 - **Discord bot** --- Create issues, analyze PRs, trigger jobs, and get notifications from your Discord server
 - **Multi-repo** --- Monitors all repositories under your configured GitHub organizations
 - **Multi-backend AI** --- Route different jobs to Claude, Copilot, or Codex with per-job model overrides

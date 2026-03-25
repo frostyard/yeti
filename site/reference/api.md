@@ -38,6 +38,7 @@ The `/health`, `/status`, `/login`, `POST /login`, and `/auth/*` routes are acce
 | `GET` | `/` | Main dashboard -- job status, worker queues, running tasks, schedule info |
 | `GET` | `/jobs` | Jobs page -- all registered jobs with backend, model, schedule, status, and controls |
 | `GET` | `/repos` | Repos page -- configured repositories with active queue items and recent completed tasks |
+| `GET` | `/notifications` | Notifications page -- recent notification history with job, message, level |
 
 ### Repo Management (Auth Required)
 
@@ -72,6 +73,25 @@ The `/health`, `/status`, `/login`, `POST /login`, and `/auth/*` routes are acce
 | `GET` | `/logs/:runId` | Individual run detail page with full logs and associated tasks |
 | `GET` | `/logs/:runId/tail` | Live log tail (JSON). Supports `?after=<id>` for polling. Returns `{status, completed_at, logs: [...]}` |
 | `GET` | `/logs/issue` | Issue-specific logs. Requires `?repo=owner/name&number=123` |
+
+### Real-time Notifications (Auth Required)
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `GET` | `/notifications/stream` | Server-Sent Events stream for real-time notifications. Supports `Last-Event-ID` header for replay of missed events. Sends a keepalive comment every 30 seconds |
+
+Each SSE event contains a JSON payload:
+
+```json
+{
+  "id": 42,
+  "jobName": "issue-worker",
+  "message": "Opened PR #99 for issue #50",
+  "url": "https://github.com/org/repo/pull/99",
+  "level": "info",
+  "createdAt": "2026-03-25T14:30:00.000Z"
+}
+```
 
 ### Configuration (Auth Required)
 

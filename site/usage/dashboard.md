@@ -171,6 +171,25 @@ The config page (`/config`) lets you view and edit Yeti's configuration directly
 
 See the [Configuration](../getting-started/configuration.md) guide for details on which fields reload live and which require a restart.
 
+## Notifications page
+
+The notifications page (`/notifications`) shows a history of recent notifications from all jobs. Each entry displays:
+
+| Column | Description |
+|---|---|
+| **Time** | When the notification was created (relative timestamp) |
+| **Job** | Which job produced the notification |
+| **Message** | The notification text, linked to the relevant GitHub item when available |
+| **Level** | Severity: `info`, `warn`, or `error` |
+
+The page shows the 50 most recent notifications in reverse chronological order.
+
+### Toast notifications
+
+Every dashboard page connects to a Server-Sent Events (SSE) stream at `/notifications/stream`. When any job produces a notification, a toast popup appears in the bottom-right corner of the current page. Toasts are color-coded by level and auto-dismiss after 8 seconds. Clicking a toast with a URL opens the linked item in a new tab.
+
+If you reload or reconnect, the SSE endpoint replays any notifications you missed using the `Last-Event-ID` mechanism.
+
 ## Themes
 
 The dashboard supports three display modes:

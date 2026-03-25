@@ -270,6 +270,17 @@ Issues with titles matching `[yeti-error] <fingerprint>` are Yeti's own error re
 2. Only after the report is posted will the issue-refiner consider the issue for planning.
 3. The issue-refiner then requires the `Needs Refinement` label (same as regular issues).
 
+### Webhook-Accelerated Triggers
+
+When GitHub webhooks are configured, certain transitions happen faster than the default polling intervals:
+
+- **PR approval** --- A `pull_request_review` webhook with an `approved` state triggers the [auto-merger](jobs/auto-merger.md) immediately for eligible PRs (`yeti/issue-*`, `yeti/improve-*`, and Dependabot PRs).
+- **PR closed** --- A `pull_request.closed` webhook removes the item from the dashboard queue cache immediately, keeping the queue view accurate without waiting for the next scan.
+- **Issue labeled/unlabeled** --- `issues.labeled` and `issues.unlabeled` webhooks trigger the relevant job and update the queue cache in real time.
+- **CI failure** --- A `check_run.completed` webhook (for failures on PRs) triggers the ci-fixer immediately.
+
+Webhooks supplement polling --- they never replace it. If webhooks are not configured or a webhook delivery is missed, the normal polling intervals pick up the work on the next cycle.
+
 ### Dependabot PRs
 
 Dependabot PRs are auto-merged by the [auto-merger](jobs/auto-merger.md) when all checks pass. No issue or plan is needed.
