@@ -8,8 +8,7 @@ import { reportError } from "../error-reporter.js";
 import { notify } from "../notify.js";
 import { processTextForImages } from "../images.js";
 import { extractFingerprint, REPORT_HEADER as YETI_ERROR_REPORT_HEADER } from "./triage-yeti-errors.js";
-
-const PLAN_HEADER = "## Implementation Plan";
+import { PLAN_HEADER } from "../plan-parser.js";
 
 function isCiUnrelatedIssue(issue: gh.Issue): boolean {
   return issue.title.startsWith("[ci-unrelated]");

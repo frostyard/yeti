@@ -49,7 +49,8 @@ vi.mock("./triage-yeti-errors.js", () => ({
 
 const mockFindPlanComment = vi.hoisted(() => vi.fn());
 const mockParsePlan = vi.hoisted(() => vi.fn());
-vi.mock("../plan-parser.js", () => ({
+vi.mock("../plan-parser.js", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../plan-parser.js")>()),
   findPlanComment: mockFindPlanComment,
   parsePlan: mockParsePlan,
 }));
