@@ -216,11 +216,14 @@ polling continues to work.
 failure (polling still works without webhooks).
 
 **`plan-parser.ts`** — Parses structured implementation plan comments into
-discrete phases for multi-PR workflows. Looks for `### PR N:` or `### Phase N:`
-headers to split a plan into phases. Also provides `findPlanComment()` to locate the
-most recent plan comment in an issue's comment history (uses `includes` rather
-than `startsWith` so it still matches when the Yeti visible header is
-prepended). Used by issue-worker to implement multi-phase plans sequentially.
+discrete phases for multi-PR workflows. Exports the `PLAN_HEADER` constant
+(`"## Implementation Plan"`) used by issue-refiner, plan-reviewer, and
+issue-auditor to identify plan comments (centralized to eliminate duplicate
+definitions). Looks for `### PR N:` or `### Phase N:` headers to split a plan
+into phases. Also provides `findPlanComment()` to locate the most recent plan
+comment in an issue's comment history (uses `includes` rather than `startsWith`
+so it still matches when the Yeti visible header is prepended). Used by
+issue-worker to implement multi-phase plans sequentially.
 
 **`log.ts`** — Timestamped console logging with four levels: `debug`, `info`,
 `warn`, `error`. Each level (except `error`) is gated by the `LOG_LEVEL` config
