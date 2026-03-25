@@ -601,6 +601,14 @@ describe("HTTP server", () => {
     expect(res.body).toContain("plan review loop");
   });
 
+  it("GET /config includes prompt-evaluator in valid jobs and AI config table", async () => {
+    const res = await request(server, "GET", "/config");
+    expect(res.status).toBe(200);
+    expect(res.body).toContain("prompt-evaluator");
+    expect(res.body).toContain('name="jobAi_prompt-evaluator_backend"');
+    expect(res.body).toContain('name="jobAi_prompt-evaluator_model"');
+  });
+
   it("GET /login redirects to / when auth disabled", async () => {
     const res = await request(server, "GET", "/login");
     expect(res.status).toBe(303);
