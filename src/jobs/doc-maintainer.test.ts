@@ -147,7 +147,10 @@ describe("doc-maintainer", () => {
       expect.stringContaining("update documentation"),
       "## Summary\nUpdated docs",
     );
-    expect(mockNotify).toHaveBeenCalledWith(expect.stringContaining("[doc-maintainer] Created PR #100"));
+    expect(mockNotify).toHaveBeenCalledWith(expect.objectContaining({
+      jobName: "doc-maintainer",
+      message: expect.stringContaining("Created PR #100"),
+    }));
     expect(mockDb.recordTaskComplete).toHaveBeenCalledWith(1);
   });
 

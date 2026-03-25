@@ -94,3 +94,23 @@ Retention is configured via `logRetentionDays` (default: 14 days) and
 `logRetentionPerJob` (default: 20) in `~/.yeti/config.json`. The pruner
 deletes runs older than the retention period but always keeps the most
 recent N runs per job type. Orphaned log entries are cascade-deleted.
+
+## `notifications` table
+
+Stores recent notification history for the dashboard. Populated by
+`notify.ts` whenever a notification is dispatched.
+
+| Column | Type | Constraints | Description |
+|--------|------|-------------|-------------|
+| `id` | INTEGER | PRIMARY KEY AUTOINCREMENT | Unique notification identifier |
+| `job_name` | TEXT | NOT NULL | Job that produced this notification (e.g. `issue-worker`) |
+| `message` | TEXT | NOT NULL | Notification message text |
+| `url` | TEXT | nullable | Optional GitHub URL associated with the notification |
+| `level` | TEXT | NOT NULL | Severity: `info`, `warn`, or `error` |
+| `created_at` | TEXT | NOT NULL | ISO timestamp when the notification was created |
+
+### Notification Pruning
+
+Notifications older than 7 days are pruned on startup and nightly by
+`main.ts`. There is no per-job retention limit — all notifications within
+the 7-day window are kept.

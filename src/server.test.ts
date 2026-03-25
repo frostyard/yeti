@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import http from "node:http";
+import { EventEmitter } from "node:events";
 
 vi.mock("./config.js", () => ({
   SERVER_PORT: 0,
@@ -78,6 +79,10 @@ vi.mock("./github-app.js", () => ({
   getAppSlug: vi.fn().mockReturnValue(null),
 }));
 
+vi.mock("./notify.js", () => ({
+  notificationEmitter: new EventEmitter(),
+}));
+
 vi.mock("./github.js", () => ({
   getQueueSnapshot: vi.fn().mockReturnValue({ items: [], oldestFetchAt: null }),
   enrichQueueItemsWithPRStatus: vi.fn().mockResolvedValue(undefined),
@@ -132,9 +137,11 @@ vi.mock("./db.js", () => ({
   getRunsForIssue: vi.fn().mockReturnValue([]),
   getLogsForRuns: vi.fn().mockReturnValue(new Map()),
   getRecentCompletedTasks: vi.fn().mockReturnValue([]),
+  getRecentNotifications: vi.fn().mockReturnValue([]),
+  getNotificationsSince: vi.fn().mockReturnValue([]),
 }));
 
-import { formatUptime, buildLogsListPage, buildLogDetailPage, buildIssueLogsPage, buildQueuePage } from "./server.js";
+import { formatUptime, buildLogsListPage, buildLogDetailPage, buildIssueLogsPage, buildQueuePage, closeSSEConnections } from "./server.js";
 import type { Theme } from "./server.js";
 import { createServer } from "./server.js";
 import type { Scheduler } from "./scheduler.js";
@@ -1923,5 +1930,147 @@ describe("Webhook endpoint disabled", () => {
       body: "{}",
     });
     expect(res.status).toBe(404);
+  });
+});
+
+describe("SSE notifications", () => {
+  let server: http.Server;
+
+  beforeEach(async () => {
+    server = createServer(mockScheduler());
+    await new Promise<void>((resolve) => {
+      if (server.listening) resolve();
+      else server.on("listening", resolve);
+    });
+  });
+
+  afterEach(async () => {
+    closeSSEConnections();
+    await new Promise<void>((resolve, reject) => {
+      server.close((err) => (err ? reject(err) : resolve()));
+    });
+  });
+
+  it("GET /notifications/stream returns event-stream headers", async () => {
+    const addr = server.address() as { port: number };
+    const { status, headers } = await new Promise<{ status: number; headers: http.IncomingHttpHeaders }>((resolve, reject) => {
+      const req = http.request(
+        { hostname: "127.0.0.1", port: addr.port, path: "/notifications/stream", method: "GET" },
+        (res) => {
+          resolve({ status: res.statusCode!, headers: res.headers });
+          req.destroy();
+        },
+      );
+      req.on("error", () => {});
+      req.end();
+    });
+    expect(status).toBe(200);
+    expect(headers["content-type"]).toBe("text/event-stream");
+    expect(headers["cache-control"]).toBe("no-cache");
+    expect(headers["x-accel-buffering"]).toBe("no");
+  });
+});
+
+describe("SSE notifications with auth", () => {
+  let server: http.Server;
+
+  beforeEach(async () => {
+    const configMod = await import("./config.js");
+    (configMod as Record<string, unknown>).AUTH_TOKEN = "test-secret-token";
+    server = createServer(mockScheduler());
+    await new Promise<void>((resolve) => {
+      if (server.listening) resolve();
+      else server.on("listening", resolve);
+    });
+  });
+
+  afterEach(async () => {
+    closeSSEConnections();
+    const configMod = await import("./config.js");
+    (configMod as Record<string, unknown>).AUTH_TOKEN = "";
+    await new Promise<void>((resolve, reject) => {
+      server.close((err) => (err ? reject(err) : resolve()));
+    });
+  });
+
+  it("GET /notifications/stream requires auth", async () => {
+    const res = await request(server, "GET", "/notifications/stream");
+    expect(res.status).toBe(401);
+  });
+
+  it("GET /notifications/stream works with valid cookie", async () => {
+    const addr = server.address() as { port: number };
+    const { status, headers } = await new Promise<{ status: number; headers: http.IncomingHttpHeaders }>((resolve, reject) => {
+      const req = http.request(
+        { hostname: "127.0.0.1", port: addr.port, path: "/notifications/stream", method: "GET", headers: { cookie: "yeti_token=test-secret-token" } },
+        (res) => {
+          resolve({ status: res.statusCode!, headers: res.headers });
+          req.destroy();
+        },
+      );
+      req.on("error", () => {});
+      req.end();
+    });
+    expect(status).toBe(200);
+    expect(headers["content-type"]).toBe("text/event-stream");
+  });
+});
+
+describe("notifications page", () => {
+  let server: http.Server;
+
+  beforeEach(async () => {
+    server = createServer(mockScheduler());
+    await new Promise<void>((resolve) => {
+      if (server.listening) resolve();
+      else server.on("listening", resolve);
+    });
+  });
+
+  afterEach(async () => {
+    await new Promise<void>((resolve, reject) => {
+      server.close((err) => (err ? reject(err) : resolve()));
+    });
+  });
+
+  it("GET /notifications returns HTML", async () => {
+    const res = await request(server, "GET", "/notifications");
+    expect(res.status).toBe(200);
+    expect(res.body).toContain("Notifications");
+  });
+});
+
+describe("notifications page with auth", () => {
+  let server: http.Server;
+
+  beforeEach(async () => {
+    const configMod = await import("./config.js");
+    (configMod as Record<string, unknown>).AUTH_TOKEN = "test-secret-token";
+    server = createServer(mockScheduler());
+    await new Promise<void>((resolve) => {
+      if (server.listening) resolve();
+      else server.on("listening", resolve);
+    });
+  });
+
+  afterEach(async () => {
+    const configMod = await import("./config.js");
+    (configMod as Record<string, unknown>).AUTH_TOKEN = "";
+    await new Promise<void>((resolve, reject) => {
+      server.close((err) => (err ? reject(err) : resolve()));
+    });
+  });
+
+  it("GET /notifications requires auth", async () => {
+    const res = await request(server, "GET", "/notifications");
+    expect(res.status).toBe(401);
+  });
+
+  it("GET /notifications returns 200 with valid cookie", async () => {
+    const res = await request(server, "GET", "/notifications", {
+      headers: { cookie: "yeti_token=test-secret-token" },
+    });
+    expect(res.status).toBe(200);
+    expect(res.body).toContain("Notifications");
   });
 });

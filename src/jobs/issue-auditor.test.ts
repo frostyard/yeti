@@ -145,7 +145,10 @@ describe("issue-auditor", () => {
     await run([repo]);
 
     expect(mockGh.addLabel).toHaveBeenCalledWith(repo.fullName, issue.number, "Ready");
-    expect(mockNotify).toHaveBeenCalledWith(expect.stringContaining("fixed 1 issue"));
+    expect(mockNotify).toHaveBeenCalledWith(expect.objectContaining({
+      jobName: "issue-auditor",
+      message: expect.stringContaining("fixed 1 issue"),
+    }));
   });
 
   it("does not add Ready when already present", async () => {
@@ -184,7 +187,10 @@ describe("issue-auditor", () => {
     await run([repo]);
 
     expect(mockGh.addLabel).toHaveBeenCalledWith(repo.fullName, issue.number, "Ready");
-    expect(mockNotify).toHaveBeenCalledWith(expect.stringContaining("stuck multi-phase"));
+    expect(mockNotify).toHaveBeenCalledWith(expect.objectContaining({
+      jobName: "issue-auditor",
+      message: expect.stringContaining("stuck multi-phase"),
+    }));
   });
 
   it("classifies no-body issues as needs-refinement (not skipped)", async () => {
@@ -208,7 +214,10 @@ describe("issue-auditor", () => {
 
     await run([repo]);
 
-    expect(mockNotify).toHaveBeenCalledWith(expect.stringContaining("Issue auditor"));
+    expect(mockNotify).toHaveBeenCalledWith(expect.objectContaining({
+      jobName: "issue-auditor",
+      message: expect.stringContaining("Issue auditor"),
+    }));
   });
 
   it("no notification when everything is clean", async () => {

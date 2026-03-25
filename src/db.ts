@@ -61,6 +61,17 @@ export function initDb(): void {
   `);
   db.exec(`CREATE INDEX IF NOT EXISTS idx_job_logs_run_id ON job_logs(run_id)`);
 
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS notifications (
+      id         INTEGER PRIMARY KEY AUTOINCREMENT,
+      job_name   TEXT NOT NULL,
+      message    TEXT NOT NULL,
+      url        TEXT,
+      level      TEXT NOT NULL DEFAULT 'info',
+      created_at TEXT NOT NULL
+    )
+  `);
+
   log.info("Database initialized");
 }
 
@@ -393,6 +404,50 @@ export function pruneOldLogs(retentionDays: number, keepPerJob = 20): number {
     )
   `).run(cutoff, keepPerJob);
   d.prepare(`DELETE FROM job_logs WHERE run_id NOT IN (SELECT run_id FROM job_runs)`).run();
+  return result.changes;
+}
+
+// ── Notifications ──
+
+export interface NotificationRow {
+  id: number;
+  job_name: string;
+  message: string;
+  url: string | null;
+  level: string;
+  created_at: string;
+}
+
+export function insertNotification(
+  jobName: string,
+  message: string,
+  url?: string,
+  level: string = "info",
+): NotificationRow {
+  const d = getDb();
+  const result = d.prepare(
+    `INSERT INTO notifications (job_name, message, url, level, created_at) VALUES (?, ?, ?, ?, datetime('now'))`,
+  ).run(jobName, message, url ?? null, level);
+  return d.prepare(`SELECT * FROM notifications WHERE id = ?`).get(Number(result.lastInsertRowid)) as NotificationRow;
+}
+
+export function getRecentNotifications(limit = 50): NotificationRow[] {
+  return getDb()
+    .prepare(`SELECT * FROM notifications ORDER BY id DESC LIMIT ?`)
+    .all(limit) as NotificationRow[];
+}
+
+export function getNotificationsSince(afterId: number): NotificationRow[] {
+  return getDb()
+    .prepare(`SELECT * FROM notifications WHERE id > ? ORDER BY id ASC`)
+    .all(afterId) as NotificationRow[];
+}
+
+export function pruneOldNotifications(days = 7): number {
+  const cutoff = new Date(Date.now() - days * 86_400_000).toISOString();
+  const result = getDb()
+    .prepare(`DELETE FROM notifications WHERE created_at < ?`)
+    .run(cutoff);
   return result.changes;
 }
 

@@ -133,7 +133,10 @@ describe("mkdocs-update", () => {
       expect.stringContaining("docs:"),
       "## Summary\nUpdated mkdocs",
     );
-    expect(mockNotify).toHaveBeenCalledWith(expect.stringContaining("[mkdocs-update] Created PR #100"));
+    expect(mockNotify).toHaveBeenCalledWith(expect.objectContaining({
+      jobName: "mkdocs-update",
+      message: expect.stringContaining("Created PR #100"),
+    }));
     expect(mockDb.recordTaskComplete).toHaveBeenCalledWith(1);
   });
 

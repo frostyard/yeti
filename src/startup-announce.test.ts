@@ -45,7 +45,7 @@ describe("announceIfNewVersion", () => {
     announceIfNewVersion("v2025-01-02.1", "/tmp/.yeti");
 
     expect(notify).toHaveBeenCalledWith(
-      "Yeti started with updated version v2025-01-02.1",
+      expect.objectContaining({ jobName: "system", message: "Yeti started with updated version v2025-01-02.1" }),
     );
     expect(fs.writeFileSync).toHaveBeenCalledWith(
       "/tmp/.yeti/last-version",
@@ -61,7 +61,7 @@ describe("announceIfNewVersion", () => {
     announceIfNewVersion("v2025-01-02.1", "/tmp/.yeti");
 
     expect(notify).toHaveBeenCalledWith(
-      "Yeti started with updated version v2025-01-02.1",
+      expect.objectContaining({ jobName: "system", message: "Yeti started with updated version v2025-01-02.1" }),
     );
     expect(fs.writeFileSync).toHaveBeenCalledWith(
       "/tmp/.yeti/last-version",

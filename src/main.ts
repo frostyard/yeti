@@ -6,8 +6,8 @@ import * as config from "./config.js";
 import * as log from "./log.js";
 import * as gh from "./github.js";
 import { startJobs, type Job } from "./scheduler.js";
-import { createServer } from "./server.js";
-import { initDb, setRunIdProvider, getOrphanedTasks, recordTaskFailed, pruneOldLogs, closeDb } from "./db.js";
+import { createServer, closeSSEConnections } from "./server.js";
+import { initDb, setRunIdProvider, getOrphanedTasks, recordTaskFailed, pruneOldLogs, closeDb, pruneOldNotifications } from "./db.js";
 import { runContext } from "./log.js";
 import * as issueWorker from "./jobs/issue-worker.js";
 import * as issueRefiner from "./jobs/issue-refiner.js";
@@ -90,10 +90,23 @@ if (pruned > 0) {
   log.info(`Pruned ${pruned} old job run(s) (retention: ${LOG_RETENTION_DAYS} days)`);
 }
 
+// ── Notification pruning ──
+
+try {
+  const notifPruned = pruneOldNotifications(7);
+  if (notifPruned > 0) {
+    log.info(`Pruned ${notifPruned} old notification(s)`);
+  }
+} catch {
+  // best effort
+}
+
 const pruneInterval = setInterval(() => {
   try {
     const n = pruneOldLogs(LOG_RETENTION_DAYS, LOG_RETENTION_PER_JOB);
     if (n > 0) log.info(`Pruned ${n} old job run(s)`);
+    const np = pruneOldNotifications(7);
+    if (np > 0) log.info(`Pruned ${np} old notification(s)`);
   } catch {
     // best effort
   }
@@ -383,6 +396,7 @@ async function shutdown() {
     await new Promise(resolve => setTimeout(resolve, 5000));
   }
 
+  closeSSEConnections();
   server.close();
   closeDb();
 

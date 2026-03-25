@@ -71,7 +71,7 @@ export async function run(repos: Repo[]): Promise<void> {
             }
             throw err;
           }
-          notify(`[auto-merger] Merged ${repo.fullName}#${pr.number}\n${gh.pullUrl(repo.fullName, pr.number)}`);
+          notify({ jobName: "auto-merger", message: `Merged ${repo.fullName}#${pr.number}`, url: gh.pullUrl(repo.fullName, pr.number) });
 
           if (isYetiPR) {
             const match = pr.headRefName.match(/^yeti\/issue-(\d+)-/);
