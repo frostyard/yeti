@@ -226,8 +226,8 @@ export async function ensureClone(repo: Repo): Promise<string> {
   return work;
 }
 
-/** Create a worktree on a new branch. Returns the worktree path. */
-export async function createWorktree(repo: Repo, branchName: string, namespace: string): Promise<string> {
+/** Shared setup for worktree creation: clone/fetch, cleanup, prune, mkdir. */
+async function prepareWorktreePath(repo: Repo, branchName: string, namespace: string): Promise<{ mainDir: string; wtPath: string }> {
   const mainDir = await ensureClone(repo);
   const wtPath = path.join(WORK_DIR, "worktrees", repo.owner, repo.name, namespace, branchName);
 
@@ -240,6 +240,17 @@ export async function createWorktree(repo: Repo, branchName: string, namespace: 
     }
   }
 
+  // Prune stale worktree metadata (e.g. from other jobs whose directories were removed)
+  await git(["worktree", "prune"], mainDir);
+
+  fs.mkdirSync(path.dirname(wtPath), { recursive: true });
+  return { mainDir, wtPath };
+}
+
+/** Create a worktree on a new branch. Returns the worktree path. */
+export async function createWorktree(repo: Repo, branchName: string, namespace: string): Promise<string> {
+  const { mainDir, wtPath } = await prepareWorktreePath(repo, branchName, namespace);
+
   // Delete stale local branch if it exists from a previous run
   try {
     await git(["branch", "-D", branchName], mainDir);
@@ -247,31 +258,14 @@ export async function createWorktree(repo: Repo, branchName: string, namespace: 
     // Branch doesn't exist, that's fine
   }
 
-  // Prune stale worktree metadata (e.g. from other jobs whose directories were removed)
-  await git(["worktree", "prune"], mainDir);
-
-  fs.mkdirSync(path.dirname(wtPath), { recursive: true });
   await git(["worktree", "add", wtPath, "-b", branchName, "--no-track", `origin/${repo.defaultBranch}`], mainDir);
   return wtPath;
 }
 
 /** Create a worktree for an existing remote branch. Returns the worktree path. */
 export async function createWorktreeFromBranch(repo: Repo, branchName: string, namespace: string): Promise<string> {
-  const mainDir = await ensureClone(repo);
-  const wtPath = path.join(WORK_DIR, "worktrees", repo.owner, repo.name, namespace, branchName);
+  const { mainDir, wtPath } = await prepareWorktreePath(repo, branchName, namespace);
 
-  if (fs.existsSync(wtPath)) {
-    try {
-      await git(["worktree", "remove", wtPath, "--force"], mainDir);
-    } catch {
-      fs.rmSync(wtPath, { recursive: true, force: true });
-    }
-  }
-
-  // Prune stale worktree metadata (e.g. from other jobs whose directories were removed)
-  await git(["worktree", "prune"], mainDir);
-
-  fs.mkdirSync(path.dirname(wtPath), { recursive: true });
   // Use --detach to avoid git's branch-lock constraint: git forbids the same
   // branch being checked out in multiple worktrees simultaneously. Detached HEAD
   // allows multiple jobs to work on the same branch concurrently.
