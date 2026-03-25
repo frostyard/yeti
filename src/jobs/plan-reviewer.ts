@@ -112,7 +112,7 @@ async function processIssue(repo: Repo, issue: gh.Issue, planComment: gh.IssueCo
     const commentBody = REVIEW_LOOP ? stripVerdictLine(reviewOutput) : reviewOutput;
     await gh.commentOnIssue(fullName, issue.number, `${REVIEW_HEADER}\n\n${commentBody}`);
     log.info(`[plan-reviewer] Posted review for ${fullName}#${issue.number}`);
-    notify(`[plan-reviewer] Review posted for ${fullName}#${issue.number}\n${gh.issueUrl(fullName, issue.number)}`);
+    notify({ jobName: "plan-reviewer", message: `Review posted for ${fullName}#${issue.number}`, url: gh.issueUrl(fullName, issue.number) });
 
     // Mark plan comment as processed
     await gh.addReaction(fullName, planComment.id, "+1");

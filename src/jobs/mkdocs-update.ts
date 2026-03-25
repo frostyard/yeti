@@ -83,7 +83,7 @@ async function processRepo(repo: Repo): Promise<void> {
         description,
       );
       log.info(`[mkdocs-update] Created PR #${prNumber} for ${fullName}`);
-      notify(`[mkdocs-update] Created PR #${prNumber} for ${fullName}\n${gh.pullUrl(fullName, prNumber)}`);
+      notify({ jobName: "mkdocs-update", message: `Created PR #${prNumber} for ${fullName}`, url: gh.pullUrl(fullName, prNumber) });
     } else {
       log.warn(`[mkdocs-update] No commits produced for ${fullName}`);
     }

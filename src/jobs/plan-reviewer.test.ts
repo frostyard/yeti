@@ -140,7 +140,10 @@ describe("plan-reviewer", () => {
     expect(mockGh.addLabel).toHaveBeenCalledWith(repo.fullName, issue.number, "Ready");
 
     // Notifies Discord
-    expect(mockNotify).toHaveBeenCalledWith(expect.stringContaining("[plan-reviewer] Review posted"));
+    expect(mockNotify).toHaveBeenCalledWith(expect.objectContaining({
+      jobName: "plan-reviewer",
+      message: expect.stringContaining("Review posted"),
+    }));
 
     // Records task completion
     expect(mockDb.recordTaskStart).toHaveBeenCalledWith("plan-reviewer", repo.fullName, issue.number, null);

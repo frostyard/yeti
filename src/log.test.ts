@@ -92,7 +92,11 @@ describe("log level gating", () => {
     error("critical");
 
     expect(errorSpy).toHaveBeenCalledTimes(1);
-    expect(notify).toHaveBeenCalledWith("[ERROR] critical");
+    expect(notify).toHaveBeenCalledWith(expect.objectContaining({
+      jobName: "system",
+      message: "critical",
+      level: "error",
+    }));
 
     errorSpy.mockRestore();
   });

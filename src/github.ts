@@ -26,7 +26,7 @@ export function isRateLimited(): boolean {
 function setRateLimited(cooldownMs = 60_000): void {
   rateLimitedUntil = Date.now() + cooldownMs;
   log.warn(`[github] Rate limit detected — blocking API calls for ${cooldownMs / 1000}s`);
-  notify(`[WARN] GitHub API rate limit hit — blocking calls for ${cooldownMs / 1000}s`);
+  notify({ jobName: "system", message: `GitHub API rate limit hit — blocking calls for ${cooldownMs / 1000}s`, level: "warn" });
 }
 
 export function clearRateLimitState(): void {
@@ -338,7 +338,7 @@ async function gh(args: string[]): Promise<string> {
   if (rateLimitedUntil !== null) {
     rateLimitedUntil = null;
     log.info("[github] Rate limit cooldown expired — resuming API calls");
-    notify("[INFO] GitHub API rate limit passed — resuming operations");
+    notify({ jobName: "system", message: "GitHub API rate limit passed — resuming operations" });
   }
 
   return new Promise((resolve, reject) => {

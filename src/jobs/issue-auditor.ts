@@ -151,6 +151,6 @@ export async function run(repos: Repo[]): Promise<void> {
   if (fixes.length > 0) {
     const summary = `Issue auditor: fixed ${fixes.length} issue(s) \u2014 ${fixes.join(", ")}`;
     log.info(`[issue-auditor] ${summary}`);
-    notify(summary);
+    notify({ jobName: "issue-auditor", message: summary });
   }
 }
