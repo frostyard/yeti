@@ -191,7 +191,7 @@ or OAuth is configured (either or both). Accepts `Authorization: Bearer
 **`webhooks.ts`** — GitHub webhook handler for near-real-time event processing.
 Receives events via `POST /webhooks/github` with HMAC-SHA256 signature
 verification (`X-Hub-Signature-256` header, using `WEBHOOK_SECRET`). Routes
-three event types:
+five event types:
 
 - **`ping`** — Returns `pong` (GitHub sends this when the webhook is first configured)
 - **`issues.labeled` / `issues.unlabeled`** — Updates the dashboard queue cache
@@ -202,6 +202,13 @@ three event types:
   cache entries.
 - **`check_run.completed`** — When a check run concludes with `failure` or
   `timed_out` and is associated with a PR, triggers ci-fixer.
+- **`pull_request_review.submitted`** — When a review is approved on an
+  auto-mergeable PR (Yeti branches `yeti/issue-*`, `yeti/improve-*`,
+  `yeti/docs-*`, or Dependabot PRs), triggers auto-merger so approved PRs
+  merge faster. Reviews on non-Yeti/non-Dependabot branches are ignored.
+- **`pull_request.closed`** — When a PR is closed (merged or not), removes it
+  from the dashboard queue cache via `removeQueueItem()` for immediate UI
+  accuracy.
 
 All events are filtered through `isRepoAllowed()` which mirrors `filterRepos()`
 semantics including the `SELF_REPO` exception. Triggering uses
