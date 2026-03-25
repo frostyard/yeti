@@ -905,8 +905,9 @@ async function handleRequest(req: http.IncomingMessage, res: http.ServerResponse
     res.flushHeaders();
 
     const lastId = req.headers["last-event-id"];
-    if (lastId) {
-      const missed = getNotificationsSince(Number(lastId));
+    const afterId = lastId ? Number(lastId) : NaN;
+    if (!isNaN(afterId)) {
+      const missed = getNotificationsSince(afterId);
       for (const row of missed) {
         const payload = JSON.stringify({
           id: row.id, jobName: row.job_name, message: row.message,

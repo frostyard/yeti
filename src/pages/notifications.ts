@@ -1,5 +1,5 @@
 import type { NotificationRow } from "../db.js";
-import { PAGE_CSS, buildNav, htmlOpenTag, siteTitle, THEME_SCRIPT, escapeHtml, formatRelativeTime } from "./layout.js";
+import { PAGE_CSS, buildNav, htmlOpenTag, siteTitle, THEME_SCRIPT, TOAST_SCRIPT, escapeHtml, formatRelativeTime } from "./layout.js";
 
 export type Theme = "system" | "light" | "dark";
 
@@ -16,11 +16,11 @@ export function buildNotificationsPage(
       const link = n.url
         ? `<a href="${escapeHtml(n.url)}" target="_blank">${escapeHtml(n.message)}</a>`
         : escapeHtml(n.message);
-      return `<tr class="level-${n.level}">
+      return `<tr class="level-${escapeHtml(n.level)}">
         <td>${formatRelativeTime(n.created_at)}</td>
         <td>${escapeHtml(n.job_name)}</td>
         <td>${link}</td>
-        <td>${n.level}</td>
+        <td>${escapeHtml(n.level)}</td>
       </tr>`;
     }).join("");
     body = `<table><thead><tr><th>Time</th><th>Job</th><th>Message</th><th>Level</th></tr></thead><tbody>${rows}</tbody></table>`;
@@ -34,6 +34,6 @@ ${htmlOpenTag(theme)}
 ${buildNav(theme, username)}
 <h2>Notifications</h2>
 ${body}
-${THEME_SCRIPT}
+${THEME_SCRIPT}${TOAST_SCRIPT}
 </body></html>`;
 }
