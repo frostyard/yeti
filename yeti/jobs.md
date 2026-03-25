@@ -33,13 +33,20 @@ Three modes:
 ### Fresh planning (no plan comment exists)
 
 - Creates a worktree on branch `yeti/plan-<N>-<hex4>`
-- Asks Claude for a fresh implementation plan
-- **Clarifying questions**: Before planning, Claude evaluates whether the issue
-  provides enough detail. If the issue is underspecified (ambiguous behavior,
-  unclear scope, missing acceptance criteria), Claude outputs a
-  `### Clarifying Questions` section with targeted questions instead of guessing.
-  The user responds as a comment on the issue, and the existing refinement loop
-  incorporates their answers into a focused plan on the next cycle.
+- Asks Claude for a fresh implementation plan using a two-step prompt structure:
+  - **Step 1 — Evaluate plannability**: Assesses whether the issue provides
+    enough detail (desired behavior, acceptance criteria, scope clarity). If
+    underspecified, outputs `### Clarifying Questions` with concrete options
+    (e.g. "Should X behave like A or B?") instead of guessing. Supports
+    partial planning — only aspects that are sufficiently clear are planned.
+  - **Step 2 — Produce the implementation plan**: Per-file changes with
+    rationale tied back to the issue, implementation order with justification,
+    inter-change dependencies, risks/edge cases, and testing approach (unit
+    vs integration vs manual, naming test files).
+  - **Anti-scope-creep guards**: The prompt explicitly forbids changes not
+    required by the issue and instructs Claude to choose the narrowest
+    reasonable interpretation when the issue is ambiguous, noting assumptions
+    for reviewer correction.
 - Posts the plan as a comment prefixed with `## Implementation Plan`
 - If `plan-reviewer` is in `enabledJobs`: adds `Needs Plan Review` label (triggers adversarial review)
 - Otherwise: adds the `Ready` label (signals "Yeti is done, your turn")
