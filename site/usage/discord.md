@@ -90,6 +90,16 @@ Label an issue as **Refined**, which tells Yeti to start implementation.
 
 This is the Discord equivalent of adding the **Refined** label on GitHub. Use it when you have already reviewed the plan and want to greenlight implementation from your chat.
 
+### `!yeti for-me`
+
+List all items that need your attention --- issues and PRs with the **Ready** label waiting for a human decision.
+
+```
+!yeti for-me
+```
+
+Yeti pulls from its queue cache and returns a numbered list with repo, issue number, title, priority flag, and a direct GitHub link for each item. If the queue has not been scanned yet, it asks you to try again in a few minutes.
+
 ## Permissions
 
 Only Discord users whose IDs appear in the `discordAllowedUsers` config array can execute commands. Messages from other users are silently ignored.
