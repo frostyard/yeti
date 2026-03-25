@@ -152,9 +152,11 @@ describe("issue-refiner", () => {
     expect(prompt).toContain("senior software engineer");
     // Source-file-reading instruction
     expect(prompt).toContain("read the relevant source files");
-    // Two-step structure
+    // Four-step structure (evaluate, draft, self-critique, final)
     expect(prompt).toContain("## Step 1");
     expect(prompt).toContain("## Step 2");
+    expect(prompt).toContain("## Step 3");
+    expect(prompt).toContain("## Step 4");
     // Anti-scope-creep
     expect(prompt).toContain("Do NOT include changes that are not required by the issue");
     // Testing approach requirement
@@ -169,6 +171,11 @@ describe("issue-refiner", () => {
     expect(prompt).toContain("Why the change is needed");
     // Partial-planning behavior
     expect(prompt).toContain("Only produce the implementation plan for aspects that are sufficiently clear");
+    // Replan self-critique dimensions
+    expect(prompt).toContain("Unverified assumptions");
+    expect(prompt).toContain("Scope discipline");
+    // Internal-only output instruction
+    expect(prompt).toContain("Do not include your intermediate");
   });
 
   it("empty output — logs warning but still adds Ready label", async () => {
