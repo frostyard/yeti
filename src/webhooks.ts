@@ -1,6 +1,6 @@
 import crypto from "node:crypto";
 import { LABELS, ALLOWED_REPOS, GITHUB_OWNERS, SELF_REPO } from "./config.js";
-import { LABEL_TO_CATEGORY, populateQueueCache, removeQueueCacheEntry, updateQueueItemPriority, hasPriorityLabel } from "./github.js";
+import { LABEL_TO_CATEGORY, populateQueueCache, removeQueueCacheEntry, removeQueueItem, updateQueueItemPriority, hasPriorityLabel } from "./github.js";
 import type { Scheduler } from "./scheduler.js";
 import * as log from "./log.js";
 
@@ -55,6 +55,14 @@ export function handleWebhookEvent(event: string, payload: unknown, scheduler: S
 
   if (event === "check_run") {
     return handleCheckRunEvent(p, scheduler);
+  }
+
+  if (event === "pull_request_review") {
+    return handlePullRequestReviewEvent(p, scheduler);
+  }
+
+  if (event === "pull_request") {
+    return handlePullRequestEvent(p);
   }
 
   return { action: "ignored" };
@@ -179,4 +187,56 @@ function handleCheckRunEvent(p: Record<string, unknown>, scheduler: Scheduler): 
   if (result === "started") return { action: "triggered:ci-fixer" };
   if (result === "already-running") return { action: "skipped:already-running" };
   return { action: "skipped:job-not-enabled" };
+}
+
+// ── Pull request review event handler ──
+
+function handlePullRequestReviewEvent(p: Record<string, unknown>, scheduler: Scheduler): { action: string } {
+  if (p.action !== "submitted") return { action: "ignored" };
+
+  const review = p.review as { state?: string } | undefined;
+  if (review?.state !== "approved") return { action: "ignored" };
+
+  const repo = (p.repository as { full_name?: string } | undefined)?.full_name;
+  const pr = p.pull_request as { number?: number; head?: { ref?: string }; user?: { login?: string } } | undefined;
+
+  if (!repo || !pr?.number) return { action: "ignored" };
+
+  if (!isRepoAllowed(repo)) {
+    log.info(`[webhook] Skipping pull_request_review from ${repo} — not in allowed repos`);
+    return { action: "skipped:not-allowed-repo" };
+  }
+
+  // Only trigger for PR types that auto-merger actually processes
+  const headRef = pr.head?.ref ?? "";
+  const author = pr.user?.login ?? "";
+  const isYetiPR = headRef.startsWith("yeti/issue-") || headRef.startsWith("yeti/improve-");
+  if (!isYetiPR && author !== "dependabot[bot]") return { action: "ignored" };
+
+  const result = scheduler.triggerJob("auto-merger");
+  log.info(`[webhook] pull_request_review approved on ${repo}#${pr.number} → auto-merger: ${result}`);
+
+  if (result === "started") return { action: "triggered:auto-merger" };
+  if (result === "already-running") return { action: "skipped:already-running" };
+  return { action: "skipped:job-not-enabled" };
+}
+
+// ── Pull request event handler ──
+
+function handlePullRequestEvent(p: Record<string, unknown>): { action: string } {
+  if (p.action !== "closed") return { action: "ignored" };
+
+  const repo = (p.repository as { full_name?: string } | undefined)?.full_name;
+  const pr = p.pull_request as { number?: number } | undefined;
+
+  if (!repo || !pr?.number) return { action: "ignored" };
+
+  if (!isRepoAllowed(repo)) {
+    log.info(`[webhook] Skipping pull_request from ${repo} — not in allowed repos`);
+    return { action: "skipped:not-allowed-repo" };
+  }
+
+  removeQueueItem(repo, pr.number);
+  log.info(`[webhook] Removed queue entries for ${repo}#${pr.number} (PR closed)`);
+  return { action: "cache-updated" };
 }

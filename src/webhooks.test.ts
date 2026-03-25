@@ -31,6 +31,7 @@ vi.mock("./log.js", () => ({
 
 const mockPopulateQueueCache = vi.fn();
 const mockRemoveQueueCacheEntry = vi.fn();
+const mockRemoveQueueItem = vi.fn();
 const mockUpdateQueueItemPriority = vi.fn();
 
 vi.mock("./github.js", () => ({
@@ -42,6 +43,7 @@ vi.mock("./github.js", () => ({
   },
   populateQueueCache: (...args: unknown[]) => mockPopulateQueueCache(...args),
   removeQueueCacheEntry: (...args: unknown[]) => mockRemoveQueueCacheEntry(...args),
+  removeQueueItem: (...args: unknown[]) => mockRemoveQueueItem(...args),
   updateQueueItemPriority: (...args: unknown[]) => mockUpdateQueueItemPriority(...args),
   hasPriorityLabel: (labels: { name: string }[]) => labels.some((l) => l.name === "Priority"),
 }));
@@ -95,6 +97,29 @@ function checkRunPayload(conclusion: string, repo = "test-org/test-repo", pullRe
       conclusion,
       pull_requests: pullRequests,
     },
+    repository: { full_name: repo },
+  };
+}
+
+function prReviewPayload(
+  state: string,
+  action = "submitted",
+  repo = "test-org/test-repo",
+  headRef = "yeti/issue-42-fix",
+  author = "frostyardyeti[bot]",
+) {
+  return {
+    action,
+    review: { state },
+    pull_request: { number: 10, head: { ref: headRef }, user: { login: author } },
+    repository: { full_name: repo },
+  };
+}
+
+function prPayload(action: string, repo = "test-org/test-repo", number = 10) {
+  return {
+    action,
+    pull_request: { number },
     repository: { full_name: repo },
   };
 }
@@ -291,6 +316,107 @@ describe("handleWebhookEvent", () => {
   it("handles issues event with non-labeled/unlabeled action", () => {
     const scheduler = mockScheduler();
     const result = handleWebhookEvent("issues", { action: "opened" }, scheduler);
+    expect(result.action).toBe("ignored");
+  });
+
+  // ── pull_request_review events ──
+
+  it("triggers auto-merger on approved review for yeti/issue- branch", () => {
+    const scheduler = mockScheduler();
+    const result = handleWebhookEvent("pull_request_review", prReviewPayload("approved"), scheduler);
+    expect(scheduler.triggerJob).toHaveBeenCalledWith("auto-merger");
+    expect(result.action).toBe("triggered:auto-merger");
+  });
+
+  it("triggers auto-merger on approved review for yeti/improve- branch", () => {
+    const scheduler = mockScheduler();
+    const result = handleWebhookEvent("pull_request_review", prReviewPayload("approved", "submitted", "test-org/test-repo", "yeti/improve-perf"), scheduler);
+    expect(scheduler.triggerJob).toHaveBeenCalledWith("auto-merger");
+    expect(result.action).toBe("triggered:auto-merger");
+  });
+
+  it("triggers auto-merger on approved review from dependabot[bot]", () => {
+    const scheduler = mockScheduler();
+    const result = handleWebhookEvent("pull_request_review", prReviewPayload("approved", "submitted", "test-org/test-repo", "dependabot/npm/lodash-4.0", "dependabot[bot]"), scheduler);
+    expect(scheduler.triggerJob).toHaveBeenCalledWith("auto-merger");
+    expect(result.action).toBe("triggered:auto-merger");
+  });
+
+  it("ignores approved review on non-yeti non-dependabot branch", () => {
+    const scheduler = mockScheduler();
+    const result = handleWebhookEvent("pull_request_review", prReviewPayload("approved", "submitted", "test-org/test-repo", "feature/my-thing", "some-user"), scheduler);
+    expect(scheduler.triggerJob).not.toHaveBeenCalled();
+    expect(result.action).toBe("ignored");
+  });
+
+  it("ignores non-submitted pull_request_review action", () => {
+    const scheduler = mockScheduler();
+    const result = handleWebhookEvent("pull_request_review", prReviewPayload("approved", "dismissed"), scheduler);
+    expect(scheduler.triggerJob).not.toHaveBeenCalled();
+    expect(result.action).toBe("ignored");
+  });
+
+  it("ignores non-approved review state", () => {
+    const scheduler = mockScheduler();
+    const result = handleWebhookEvent("pull_request_review", prReviewPayload("changes_requested"), scheduler);
+    expect(scheduler.triggerJob).not.toHaveBeenCalled();
+    expect(result.action).toBe("ignored");
+  });
+
+  it("skips pull_request_review from non-allowed repo", () => {
+    mockConfig.allowedRepos = ["other-repo"];
+    const scheduler = mockScheduler();
+    const result = handleWebhookEvent("pull_request_review", prReviewPayload("approved"), scheduler);
+    expect(scheduler.triggerJob).not.toHaveBeenCalled();
+    expect(result.action).toBe("skipped:not-allowed-repo");
+  });
+
+  it("returns skipped:already-running for pull_request_review when auto-merger busy", () => {
+    const scheduler = mockScheduler("already-running");
+    const result = handleWebhookEvent("pull_request_review", prReviewPayload("approved"), scheduler);
+    expect(result.action).toBe("skipped:already-running");
+  });
+
+  it("returns skipped:job-not-enabled for pull_request_review when auto-merger disabled", () => {
+    const scheduler = mockScheduler("unknown");
+    const result = handleWebhookEvent("pull_request_review", prReviewPayload("approved"), scheduler);
+    expect(result.action).toBe("skipped:job-not-enabled");
+  });
+
+  it("handles malformed pull_request_review payload gracefully", () => {
+    const scheduler = mockScheduler();
+    const result = handleWebhookEvent("pull_request_review", { action: "submitted", review: { state: "approved" } }, scheduler);
+    expect(result.action).toBe("ignored");
+  });
+
+  // ── pull_request events ──
+
+  it("removes queue entries on pull_request closed", () => {
+    const scheduler = mockScheduler();
+    const result = handleWebhookEvent("pull_request", prPayload("closed"), scheduler);
+    expect(mockRemoveQueueItem).toHaveBeenCalledWith("test-org/test-repo", 10);
+    expect(result.action).toBe("cache-updated");
+  });
+
+  it("ignores non-closed pull_request actions", () => {
+    const scheduler = mockScheduler();
+    const result = handleWebhookEvent("pull_request", prPayload("opened"), scheduler);
+    expect(mockRemoveQueueItem).not.toHaveBeenCalled();
+    expect(result.action).toBe("ignored");
+  });
+
+  it("skips pull_request from non-allowed repo", () => {
+    mockConfig.allowedRepos = ["other-repo"];
+    const scheduler = mockScheduler();
+    const result = handleWebhookEvent("pull_request", prPayload("closed"), scheduler);
+    expect(mockRemoveQueueItem).not.toHaveBeenCalled();
+    expect(result.action).toBe("skipped:not-allowed-repo");
+  });
+
+  it("handles malformed pull_request payload gracefully", () => {
+    const scheduler = mockScheduler();
+    const result = handleWebhookEvent("pull_request", { action: "closed" }, scheduler);
+    expect(mockRemoveQueueItem).not.toHaveBeenCalled();
     expect(result.action).toBe("ignored");
   });
 });
