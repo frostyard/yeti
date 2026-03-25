@@ -171,7 +171,10 @@ describe("ci-fixer", () => {
     expect(mockClaude.pushBranch).toHaveBeenCalled();
     expect(mockClaude.regeneratePRDescription).toHaveBeenCalledWith("/tmp/worktree", pr.baseRefName, pr, undefined);
     expect(mockGh.updatePRBody).toHaveBeenCalledWith(repo.fullName, pr.number, "## Summary\nUpdated");
-    expect(mockNotify).toHaveBeenCalledWith(expect.stringContaining("[ci-fixer] Pushed fix"));
+    expect(mockNotify).toHaveBeenCalledWith(expect.objectContaining({
+      jobName: "ci-fixer",
+      message: expect.stringContaining("Pushed fix"),
+    }));
     expect(mockDb.recordTaskComplete).toHaveBeenCalledWith(1);
   });
 

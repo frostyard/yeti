@@ -1,5 +1,5 @@
 import type { Theme } from "./layout.js";
-import { PAGE_CSS, escapeHtml, htmlOpenTag, buildNav, THEME_SCRIPT, siteTitle, itemLogsUrl, formatRelativeTime } from "./layout.js";
+import { PAGE_CSS, escapeHtml, htmlOpenTag, buildNav, THEME_SCRIPT, TOAST_SCRIPT, siteTitle, itemLogsUrl, formatRelativeTime } from "./layout.js";
 import type { QueueItem, QueueCategory } from "../github.js";
 import type { Repo } from "../config.js";
 import type { Task } from "../db.js";
@@ -206,7 +206,7 @@ ${htmlOpenTag(theme)}
 </head>
 <body>
   ${buildNav(theme, username)}
-  ${THEME_SCRIPT}
+  ${THEME_SCRIPT}${TOAST_SCRIPT}
   <h1>Repos</h1>
   ${summaryHtml}
   ${addRepoHtml}

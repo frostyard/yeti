@@ -129,7 +129,10 @@ describe("issue-worker", () => {
       expect(mockGh.addLabel).toHaveBeenCalledWith(repo.fullName, 1, "In Review");
       expect(mockGh.removeLabel).toHaveBeenCalledWith(repo.fullName, 1, "Ready");
       expect(mockGh.removeLabel).toHaveBeenCalledWith(repo.fullName, 1, "Refined");
-      expect(mockNotify).toHaveBeenCalledWith(expect.stringContaining("[issue-worker] Created PR #100"));
+      expect(mockNotify).toHaveBeenCalledWith(expect.objectContaining({
+        jobName: "issue-worker",
+        message: expect.stringContaining("Created PR #100"),
+      }));
       expect(mockDb.recordTaskComplete).toHaveBeenCalledWith(1);
     });
 

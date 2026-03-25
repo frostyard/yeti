@@ -117,7 +117,10 @@ describe("review-addresser", () => {
     expect(mockGh.addReaction).toHaveBeenCalledWith(repo.fullName, 100, "+1");
     expect(mockGh.addReviewCommentReaction).toHaveBeenCalledWith(repo.fullName, 200, "+1");
     expect(mockGh.addLabel).toHaveBeenCalledWith(repo.fullName, pr.number, "Ready");
-    expect(mockNotify).toHaveBeenCalledWith(expect.stringContaining("[review-addresser] Addressed review"));
+    expect(mockNotify).toHaveBeenCalledWith(expect.objectContaining({
+      jobName: "review-addresser",
+      message: expect.stringContaining("Addressed review"),
+    }));
     expect(mockDb.recordTaskComplete).toHaveBeenCalledWith(1);
   });
 

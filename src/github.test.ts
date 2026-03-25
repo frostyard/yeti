@@ -386,7 +386,7 @@ describe("gh retry logic", () => {
     });
 
     await expect(searchIssues("org/repo", "test")).rejects.toThrow(RateLimitError);
-    expect(mockNotify).toHaveBeenCalledWith(expect.stringContaining("rate limit hit"));
+    expect(mockNotify).toHaveBeenCalledWith(expect.objectContaining({ jobName: "system", message: expect.stringContaining("rate limit hit") }));
 
     // Reset call count so we can assert cleanly on the resume notification
     mockNotify.mockClear();
@@ -402,7 +402,7 @@ describe("gh retry logic", () => {
 
     await searchIssues("org/repo", "test");
     expect(mockNotify).toHaveBeenCalledTimes(1);
-    expect(mockNotify).toHaveBeenCalledWith(expect.stringContaining("resuming operations"));
+    expect(mockNotify).toHaveBeenCalledWith(expect.objectContaining({ jobName: "system", message: expect.stringContaining("resuming operations") }));
 
     // A subsequent call should NOT fire the notification again
     mockNotify.mockClear();

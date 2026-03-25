@@ -19,6 +19,9 @@ import { buildLoginPage } from "./pages/login.js";
 import { buildReposPage } from "./pages/repos.js";
 import { isOAuthConfigured, getAuthorizationUrl, exchangeCodeForUser, createSessionCookie, verifySessionCookie } from "./oauth.js";
 import { verifyWebhookSignature, handleWebhookEvent } from "./webhooks.js";
+import { notificationEmitter } from "./notify.js";
+import { getRecentNotifications, getNotificationsSince } from "./db.js";
+import { buildNotificationsPage } from "./pages/notifications.js";
 
 // Re-export for backwards compatibility with tests and other consumers
 export { formatUptime, formatRelativeTime } from "./pages/layout.js";
@@ -27,6 +30,9 @@ export { buildQueuePage } from "./pages/queue.js";
 export { buildLogsListPage, buildLogDetailPage, buildIssueLogsPage } from "./pages/logs.js";
 
 const startedAt = new Date().toISOString();
+
+const sseClients = new Set<{ res: http.ServerResponse; keepalive: ReturnType<typeof setInterval> }>();
+let sseNotificationListener: ((...args: unknown[]) => void) | null = null;
 
 // ── Queue page category groups ──
 
@@ -156,11 +162,43 @@ export function createServer(scheduler: Scheduler, allJobs: JobInfo[] = []): htt
     }
   });
 
+  // Remove any previous listener (e.g. from a prior createServer call in tests)
+  if (sseNotificationListener) {
+    notificationEmitter.removeListener("notification", sseNotificationListener);
+  }
+  sseNotificationListener = (row: unknown) => {
+    const r = row as { id: number; job_name: string; message: string; url: string | null; level: string; created_at: string };
+    const payload = JSON.stringify({
+      id: r.id,
+      jobName: r.job_name,
+      message: r.message,
+      url: r.url,
+      level: r.level,
+      createdAt: r.created_at,
+    });
+    for (const client of sseClients) {
+      client.res.write(`id: ${r.id}\ndata: ${payload}\n\n`);
+    }
+  };
+  notificationEmitter.on("notification", sseNotificationListener);
+
   server.listen(SERVER_PORT, () => {
     log.info(`HTTP server listening on port ${SERVER_PORT}`);
   });
 
   return server;
+}
+
+export function closeSSEConnections(): void {
+  for (const client of sseClients) {
+    clearInterval(client.keepalive);
+    client.res.end();
+  }
+  sseClients.clear();
+  if (sseNotificationListener) {
+    notificationEmitter.removeListener("notification", sseNotificationListener);
+    sseNotificationListener = null;
+  }
 }
 
 function getTheme(req: http.IncomingMessage): "dark" | "light" | "system" {
@@ -851,6 +889,52 @@ async function handleRequest(req: http.IncomingMessage, res: http.ServerResponse
     const logs = getJobRunLogs(runId);
     const tasks = getTasksByRunId(runId);
     const html = buildLogDetailPage(run, logs, theme, tasks, auth.username);
+    res.writeHead(200, { "Content-Type": "text/html" });
+    res.end(html);
+    return;
+  }
+
+  if (req.url === "/notifications/stream") {
+    if (!requireAuth(req, res)) return;
+    res.writeHead(200, {
+      "Content-Type": "text/event-stream",
+      "Cache-Control": "no-cache",
+      "Connection": "keep-alive",
+      "X-Accel-Buffering": "no",
+    });
+    res.flushHeaders();
+
+    const lastId = req.headers["last-event-id"];
+    const afterId = lastId ? Number(lastId) : NaN;
+    if (!isNaN(afterId)) {
+      const missed = getNotificationsSince(afterId);
+      for (const row of missed) {
+        const payload = JSON.stringify({
+          id: row.id, jobName: row.job_name, message: row.message,
+          url: row.url, level: row.level, createdAt: row.created_at,
+        });
+        res.write(`id: ${row.id}\ndata: ${payload}\n\n`);
+      }
+    }
+
+    const keepalive = setInterval(() => {
+      res.write(`: keepalive\n\n`);
+    }, 30_000);
+    const client = { res, keepalive };
+    sseClients.add(client);
+
+    req.on("close", () => {
+      clearInterval(keepalive);
+      sseClients.delete(client);
+    });
+    return;
+  }
+
+  if (req.url === "/notifications") {
+    const auth = requireAuth(req, res);
+    if (!auth) return;
+    const notifications = getRecentNotifications(50);
+    const html = buildNotificationsPage(notifications, theme, auth.username);
     res.writeHead(200, { "Content-Type": "text/html" });
     res.end(html);
     return;

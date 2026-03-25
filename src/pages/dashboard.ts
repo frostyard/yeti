@@ -1,5 +1,5 @@
 import type { Theme } from "./layout.js";
-import { PAGE_CSS, escapeHtml, repoShortName, itemLogsUrl, formatUptime, formatRelativeTime, formatCountdown, htmlOpenTag, buildNav, THEME_SCRIPT, discordLabel, siteTitle } from "./layout.js";
+import { PAGE_CSS, escapeHtml, repoShortName, itemLogsUrl, formatUptime, formatRelativeTime, formatCountdown, htmlOpenTag, buildNav, THEME_SCRIPT, TOAST_SCRIPT, discordLabel, siteTitle } from "./layout.js";
 import { msUntilHour } from "../scheduler.js";
 import { isGitHubAppConfigured, getAppSlug } from "../github-app.js";
 import { WEBHOOK_SECRET } from "../config.js";
@@ -120,7 +120,7 @@ ${htmlOpenTag(theme)}
 <body>
   <h1>yeti</h1>
   ${buildNav(theme, username)}
-  ${THEME_SCRIPT}
+  ${THEME_SCRIPT}${TOAST_SCRIPT}
   <dl class="meta">
     <dt>Version</dt>
     <dd>${version}</dd>

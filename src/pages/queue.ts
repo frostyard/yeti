@@ -1,5 +1,5 @@
 import type { Theme } from "./layout.js";
-import { PAGE_CSS, escapeHtml, repoShortName, itemLogsUrl, formatRelativeTime, htmlOpenTag, buildNav, THEME_SCRIPT, siteTitle } from "./layout.js";
+import { PAGE_CSS, escapeHtml, repoShortName, itemLogsUrl, formatRelativeTime, htmlOpenTag, buildNav, THEME_SCRIPT, TOAST_SCRIPT, siteTitle } from "./layout.js";
 import type { QueueItem, QueueCategory } from "../github.js";
 
 const CATEGORY_DISPLAY: Record<QueueCategory, { label: string; color: string }> = {
@@ -152,7 +152,7 @@ ${htmlOpenTag(theme)}
 </head>
 <body>
   ${buildNav(theme, username)}
-  ${THEME_SCRIPT}
+  ${THEME_SCRIPT}${TOAST_SCRIPT}
   <h1>Queue</h1>
   ${buildQueueSection("Needs My Attention", myAttention, false)}
   ${buildQueueSection("Needs Yeti Attention", yetiAttention, true)}

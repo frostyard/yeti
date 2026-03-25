@@ -39,7 +39,8 @@ src/
 │   ├── logs.ts          Log list, detail, and issue logs page HTML builders
 │   ├── config.ts        Config editor page HTML builder (tabbed: General, Scheduling, AI, Integrations, Security)
 │   ├── login.ts         Login page HTML builder
-│   └── layout.ts        Shared layout (header, theme, siteTitle, formatters)
+│   ├── notifications.ts Notifications page HTML builder (recent notification history)
+│   └── layout.ts        Shared layout (header, theme, siteTitle, formatters, TOAST_SCRIPT)
 └── jobs/
     ├── issue-refiner.ts        Discovers issues needing plans via comment analysis
     ├── plan-reviewer.ts        Adversarial plan review using configurable AI backend
@@ -78,15 +79,19 @@ See [Modules](modules.md) for detailed descriptions of each module. Key relation
 - **`github-app.ts`** optional GitHub App auth (JWT signing, installation tokens, `GH_TOKEN` injection)
 - **`oauth.ts`** optional GitHub OAuth for dashboard sign-in (stateless HMAC cookies, org membership check)
 - **`claude.ts`** multi-backend AI dispatch (3 bounded queues) + git worktree helpers
-- **`db.ts`** SQLite with `tasks`, `job_runs`, `job_logs` tables — see [Database Schema](database-schema.md)
-- **`server.ts`** HTTP dashboard + API routes + webhook endpoint
+- **`db.ts`** SQLite with `tasks`, `job_runs`, `job_logs`, `notifications` tables — see [Database Schema](database-schema.md)
+- **`server.ts`** HTTP dashboard + API routes + webhook endpoint + SSE notifications stream
 - **`webhooks.ts`** GitHub webhook handler (HMAC-verified, routes issues/check_run/pull_request_review/pull_request events to job triggers and queue cache updates)
 - **`log.ts`** level-gated logging captured to DB via `AsyncLocalStorage`
 - **`error-reporter.ts`** deduplicating error reporter (GitHub issues + Discord, 30-min cooldown)
 - **`images.ts`** extracts/downloads images and file attachments for AI context
 - **`plan-parser.ts`** parses multi-PR implementation plans into phases; exports shared `PLAN_HEADER` constant
-- **`notify.ts`** / **`discord.ts`** notification dispatch and Discord bot commands
+- **`notify.ts`** / **`discord.ts`** notification dispatch (DB + SSE + Discord) and Discord bot commands
 - **`startup-announce.ts`** announces new deployments; **`shutdown.ts`** shared shutdown flag
+
+### Dashboard (`src/pages/`)
+
+The web dashboard is a first-class consumer of job, config, and queue data. Page builders in `src/pages/` render HTML for the dashboard routes in `server.ts`. `layout.ts` exports a `siteTitle()` helper that builds page titles from `GITHUB_OWNERS` (e.g. "yeti — frostyard — Queue"), reading the config at call time for live-reload compatibility. It also exports `TOAST_SCRIPT` — client-side JavaScript that connects to the `/notifications/stream` SSE endpoint and renders incoming notifications as auto-dismissing toast popups on every dashboard page. Navigation: Dashboard → Jobs → Queue → Logs → Config → Notifications. The Jobs page (`/jobs`) lists all known jobs with descriptions, enabled/disabled state, AI backend, model override, schedule, and Run/Pause controls. `createServer()` accepts a `JobInfo[]` array from `main.ts` so the Jobs page can show schedule info for all jobs (including disabled ones not registered with the scheduler). Any changes to config fields, job states, queue categories, or log/task schemas must be reflected in the corresponding page builders — the dashboard is not optional.
 
 ## Jobs
 

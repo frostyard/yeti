@@ -118,7 +118,10 @@ describe("issue-refiner", () => {
       expect.stringContaining("## Implementation Plan"),
     );
     expect(mockGh.addLabel).toHaveBeenCalledWith(repo.fullName, issue.number, "Ready");
-    expect(mockNotify).toHaveBeenCalledWith(expect.stringContaining("[issue-refiner] Plan produced"));
+    expect(mockNotify).toHaveBeenCalledWith(expect.objectContaining({
+      jobName: "issue-refiner",
+      message: expect.stringContaining("Plan produced"),
+    }));
     expect(mockDb.recordTaskStart).toHaveBeenCalledWith("issue-refiner", repo.fullName, issue.number, null);
     expect(mockDb.recordTaskComplete).toHaveBeenCalledWith(1);
     expect(mockClaude.removeWorktree).toHaveBeenCalled();

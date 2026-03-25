@@ -36,6 +36,10 @@ import {
   getLatestRunIdsByJob,
   getJobRun,
   pruneOldLogs,
+  insertNotification,
+  getRecentNotifications,
+  getNotificationsSince,
+  pruneOldNotifications,
   type Task,
 } from "./db.js";
 
@@ -722,5 +726,67 @@ describe("getRecentActions", () => {
     const actions = getRecentActions();
     expect(actions).toHaveLength(1);
     expect(actions[0].status).toBe("failed");
+  });
+});
+
+describe("notifications", () => {
+  beforeEach(() => {
+    initDb();
+  });
+
+  afterEach(() => {
+    closeDb();
+  });
+
+  it("inserts and returns full row", () => {
+    const row = insertNotification("issue-worker", "Created PR #5", "https://github.com/org/repo/pull/5", "info");
+    expect(row).toMatchObject({
+      job_name: "issue-worker",
+      message: "Created PR #5",
+      url: "https://github.com/org/repo/pull/5",
+      level: "info",
+    });
+    expect(row.id).toBeGreaterThan(0);
+    expect(row.created_at).toBeTruthy();
+  });
+
+  it("defaults level to info", () => {
+    const row = insertNotification("system", "Started");
+    expect(row.level).toBe("info");
+  });
+
+  it("allows null url", () => {
+    const row = insertNotification("system", "Rate limit hit");
+    expect(row.url).toBeNull();
+  });
+
+  it("getRecentNotifications returns newest first", () => {
+    insertNotification("a", "first");
+    insertNotification("b", "second");
+    insertNotification("c", "third");
+    const rows = getRecentNotifications(2);
+    expect(rows).toHaveLength(2);
+    expect(rows[0].job_name).toBe("c");
+    expect(rows[1].job_name).toBe("b");
+  });
+
+  it("getNotificationsSince returns after given id, oldest first", () => {
+    const r1 = insertNotification("a", "first");
+    const r2 = insertNotification("b", "second");
+    const r3 = insertNotification("c", "third");
+    const rows = getNotificationsSince(r1.id);
+    expect(rows).toHaveLength(2);
+    expect(rows[0].id).toBe(r2.id);
+    expect(rows[1].id).toBe(r3.id);
+  });
+
+  it("pruneOldNotifications removes old entries", () => {
+    insertNotification("a", "old");
+    // Backdate the entry
+    _rawDb().prepare("UPDATE notifications SET created_at = datetime('now', '-10 days') WHERE job_name = 'a'").run();
+    insertNotification("b", "recent");
+    const pruned = pruneOldNotifications(7);
+    expect(pruned).toBe(1);
+    expect(getRecentNotifications()).toHaveLength(1);
   });
 });

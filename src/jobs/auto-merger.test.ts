@@ -73,7 +73,10 @@ describe("auto-merger", () => {
 
     expect(mockGh.mergePR).toHaveBeenCalledWith(repo.fullName, pr.number);
     expect(mockGh.hasValidLGTM).not.toHaveBeenCalled();
-    expect(mockNotify).toHaveBeenCalledWith(expect.stringContaining("[auto-merger] Merged"));
+    expect(mockNotify).toHaveBeenCalledWith(expect.objectContaining({
+      jobName: "auto-merger",
+      message: expect.stringContaining("Merged"),
+    }));
   });
 
   it("merges Yeti PR when checks pass and LGTM is valid", async () => {

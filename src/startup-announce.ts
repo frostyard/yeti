@@ -16,7 +16,7 @@ export function announceIfNewVersion(version: string, workDir: string): void {
   }
 
   if (lastVersion !== version) {
-    notify(`Yeti started with updated version ${version}`);
+    notify({ jobName: "system", message: `Yeti started with updated version ${version}` });
     const status = discordStatus();
     if (status.connected) {
       log.info(`Announced deployment: ${version}`);

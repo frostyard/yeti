@@ -451,7 +451,7 @@ async function evaluatePrompt(entry: PromptEntry, repo: Repo): Promise<void> {
         const report = buildReport(entry.name, variant.variant, variant.rationale, results);
         const issueNumber = await gh.createIssue(SELF_REPO, report.title, report.body, ["prompt-improvement"]);
         log.info(`[prompt-evaluator] Created issue #${issueNumber} for ${entry.name}`);
-        notify(`[prompt-evaluator] Improvement found for ${entry.name} — issue #${issueNumber}\n${gh.issueUrl(SELF_REPO, issueNumber)}`);
+        notify({ jobName: "prompt-evaluator", message: `Improvement found for ${entry.name} — issue #${issueNumber}`, url: gh.issueUrl(SELF_REPO, issueNumber) });
       }
     }
 

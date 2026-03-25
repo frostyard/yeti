@@ -129,7 +129,10 @@ describe("improvement-identifier", () => {
       "refactor: Remove unused helper function",
       expect.stringContaining("`src/utils.ts:42`"),
     );
-    expect(mockNotify).toHaveBeenCalledWith(expect.stringContaining("[improvement-identifier] Created PR #42"));
+    expect(mockNotify).toHaveBeenCalledWith(expect.objectContaining({
+      jobName: "improvement-identifier",
+      message: expect.stringContaining("Created PR #42"),
+    }));
   });
 
   it("no PRs created when Claude finds nothing", async () => {

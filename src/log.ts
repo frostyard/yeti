@@ -51,7 +51,7 @@ export function warn(msg: string): void {
 export function error(msg: string): void {
   // error() is never gated — it triggers notifications and must always execute
   console.error(`${ts()} [ERROR] ${msg}`);
-  notify(`[ERROR] ${msg}`);
+  notify({ jobName: "system", message: msg, level: "error" });
   captureLog("error", msg);
 }
 
