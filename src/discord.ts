@@ -289,6 +289,27 @@ async function handleCommand(command: string, args: string[], message: Message):
       break;
     }
 
+    case "for-me": {
+      const { items, oldestFetchAt } = gh.getQueueSnapshot(["ready"]);
+      if (oldestFetchAt === null) {
+        await message.reply("Queue hasn't been scanned yet — try again in a few minutes");
+        break;
+      }
+      if (items.length === 0) {
+        await message.reply("Nothing needs your attention right now");
+        break;
+      }
+      const lines = items.map((item) => {
+        const repoShort = item.repo.split("/")[1];
+        const prefix = item.prioritized ? " [priority]" : "";
+        return `• **${repoShort}#${item.number}** — ${item.title}${prefix} (https://github.com/${item.repo}/issues/${item.number})`;
+      });
+      let output = `**Needs your attention (${items.length}):**\n${lines.join("\n")}`;
+      if (output.length > 1900) output = output.slice(0, 1900) + "...";
+      await message.reply(output);
+      break;
+    }
+
     case "recent": {
       const jobFilter = args[0] || undefined;
       const perJobLimit = jobFilter ? 10 : 3;
@@ -340,6 +361,7 @@ async function handleCommand(command: string, args: string[], message: Message):
         "`!yeti issue <repo> <title>` — create a GitHub issue\n" +
         "`!yeti look <repo>#<number>` — summarize an issue/PR\n" +
         "`!yeti assign <repo>#<number>` — label issue as Refined\n" +
+        "`!yeti for-me` — items needing your attention\n" +
         "`!yeti help` — this message"
       );
       break;

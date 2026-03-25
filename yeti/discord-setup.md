@@ -168,6 +168,7 @@ Send these commands in the `#yeti` channel. Only users in `discordAllowedUsers` 
 | `!yeti look <repo>#<number>` | Summarize an issue or PR via Claude (e.g. `!yeti look snosi#42`) |
 | `!yeti assign <repo>#<number>` | Label an issue as Refined for Yeti to pick up (e.g. `!yeti assign snosi#42`) |
 | `!yeti recent [job]` | Show recent actions per job (optional filter by job name) |
+| `!yeti for-me` | List issues/PRs labeled Ready that need human attention, with GitHub links |
 | `!yeti help` | Show the command list |
 
 ---

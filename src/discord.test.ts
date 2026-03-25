@@ -77,6 +77,7 @@ vi.mock("./github.js", () => ({
   getIssueComments: vi.fn(() => Promise.resolve([
     { id: 1, body: "A comment", login: "user1" },
   ])),
+  getQueueSnapshot: vi.fn(() => ({ items: [], oldestFetchAt: Date.now() })),
 }));
 
 import { isDiscordConfigured, discordStatus, notify, start, stop, ready } from "./discord.js";
@@ -562,6 +563,91 @@ describe("start and commands", () => {
     });
     const reply = msg.reply.mock.calls[0][0] as string;
     expect(reply.length).toBeLessThanOrEqual(1903); // 1900 + "..."
+  });
+
+  // ── for-me command ──
+
+  it("!yeti for-me with cold cache replies scan not ready", async () => {
+    vi.mocked(gh.getQueueSnapshot).mockReturnValue({ items: [], oldestFetchAt: null });
+    const scheduler = makeScheduler();
+    await start(scheduler);
+    const msg = makeMessage({ content: "!yeti for-me" });
+    mockEventHandlers["messageCreate"](msg);
+    await vi.waitFor(() => {
+      expect(msg.reply).toHaveBeenCalled();
+    });
+    expect(msg.reply).toHaveBeenCalledWith("Queue hasn't been scanned yet — try again in a few minutes");
+  });
+
+  it("!yeti for-me with empty scanned queue replies nothing", async () => {
+    vi.mocked(gh.getQueueSnapshot).mockReturnValue({ items: [], oldestFetchAt: Date.now() });
+    const scheduler = makeScheduler();
+    await start(scheduler);
+    const msg = makeMessage({ content: "!yeti for-me" });
+    mockEventHandlers["messageCreate"](msg);
+    await vi.waitFor(() => {
+      expect(msg.reply).toHaveBeenCalled();
+    });
+    expect(msg.reply).toHaveBeenCalledWith("Nothing needs your attention right now");
+  });
+
+  it("!yeti for-me with items returns formatted list with links", async () => {
+    vi.mocked(gh.getQueueSnapshot).mockReturnValue({
+      items: [
+        { repo: "frostyard/snosi", number: 10, title: "Fix auth bug", category: "ready", updatedAt: "2026-03-21", type: "issue" },
+        { repo: "frostyard/yeti", number: 5, title: "Add feature", category: "ready", updatedAt: "2026-03-20", type: "issue", prioritized: true },
+      ],
+      oldestFetchAt: Date.now(),
+    });
+    const scheduler = makeScheduler();
+    await start(scheduler);
+    const msg = makeMessage({ content: "!yeti for-me" });
+    mockEventHandlers["messageCreate"](msg);
+    await vi.waitFor(() => {
+      expect(msg.reply).toHaveBeenCalled();
+    });
+    const reply = msg.reply.mock.calls[0][0] as string;
+    expect(reply).toContain("Needs your attention (2):");
+    expect(reply).toContain("snosi#10");
+    expect(reply).toContain("Fix auth bug");
+    expect(reply).toContain("https://github.com/frostyard/snosi/issues/10");
+    expect(reply).toContain("yeti#5");
+    expect(reply).toContain("Add feature");
+    expect(reply).toContain("https://github.com/frostyard/yeti/issues/5");
+    expect(reply).toContain("[priority]");
+  });
+
+  it("!yeti for-me truncates long output", async () => {
+    const items = Array.from({ length: 50 }, (_, i) => ({
+      repo: "frostyard/snosi",
+      number: i + 1,
+      title: "A".repeat(100),
+      category: "ready" as const,
+      updatedAt: "2026-03-21",
+      type: "issue" as const,
+    }));
+    vi.mocked(gh.getQueueSnapshot).mockReturnValue({ items, oldestFetchAt: Date.now() });
+    const scheduler = makeScheduler();
+    await start(scheduler);
+    const msg = makeMessage({ content: "!yeti for-me" });
+    mockEventHandlers["messageCreate"](msg);
+    await vi.waitFor(() => {
+      expect(msg.reply).toHaveBeenCalled();
+    });
+    const reply = msg.reply.mock.calls[0][0] as string;
+    expect(reply.length).toBeLessThanOrEqual(1903);
+    expect(reply.endsWith("...")).toBe(true);
+  });
+
+  it("help text includes the for-me command", async () => {
+    const scheduler = makeScheduler();
+    await start(scheduler);
+    const msg = makeMessage({ content: "!yeti help" });
+    mockEventHandlers["messageCreate"](msg);
+    await vi.waitFor(() => {
+      expect(msg.reply).toHaveBeenCalled();
+    });
+    expect(msg.reply).toHaveBeenCalledWith(expect.stringContaining("!yeti for-me"));
   });
 
   it("help text includes the recent command", async () => {
