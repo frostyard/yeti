@@ -29,6 +29,7 @@ The `/health`, `/status`, `/login`, `POST /login`, and `/auth/*` routes are acce
 | `GET` | `/auth/github` | Redirect to GitHub OAuth authorization page. Sets a CSRF state cookie |
 | `GET` | `/auth/callback` | OAuth callback. Exchanges code for user identity, checks org membership, sets `yeti_session` cookie |
 | `GET` | `/auth/logout` | Clears session cookie and redirects to `/login` |
+| `POST` | `/webhooks/github` | GitHub webhook receiver. HMAC-SHA256 verified via `X-Hub-Signature-256` header. Returns 404 when `webhookSecret` is not configured |
 
 ### Dashboard (Auth Required)
 
@@ -76,8 +77,8 @@ The `/health`, `/status`, `/login`, `POST /login`, and `/auth/*` routes are acce
 
 | Method | Path | Description |
 |--------|------|-------------|
-| `GET` | `/config` | Config editor page (HTML form). Supports `?saved=1` flash message |
-| `POST` | `/config` | Update config fields via form submission. Triggers live reload. Redirects to `/config?saved=1` |
+| `GET` | `/config` | Config editor page (HTML form). Supports `?saved=1` flash message and `?tab=<id>` to select a tab |
+| `POST` | `/config` | Update config fields via form submission. Triggers live reload. Redirects to `/config?saved=1&tab=<id>` |
 | `GET` | `/config/api` | Current config as JSON with sensitive fields masked (auth token, Discord bot token show `****<last 4 chars>`) |
 
 ---

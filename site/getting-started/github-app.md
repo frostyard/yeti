@@ -23,7 +23,7 @@ A GitHub App gives Yeti a separate bot identity (e.g., `yeti[bot]`). PRs created
    |---|---|
    | **App name** | `yeti` (or any name you prefer) |
    | **Homepage URL** | Your Yeti dashboard URL, e.g., `http://your-host:9384` |
-   | **Webhook** | **Uncheck** "Active" --- Yeti polls, it doesn't use webhooks |
+   | **Webhook** | Leave unchecked initially. Enable later if you want [near-real-time triggers](#webhooks-optional) |
 
 3. Under **Permissions > Repository permissions**, set:
 
