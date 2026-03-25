@@ -80,7 +80,7 @@ See [Modules](modules.md) for detailed descriptions of each module. Key relation
 - **`claude.ts`** multi-backend AI dispatch (3 bounded queues) + git worktree helpers
 - **`db.ts`** SQLite with `tasks`, `job_runs`, `job_logs` tables — see [Database Schema](database-schema.md)
 - **`server.ts`** HTTP dashboard + API routes + webhook endpoint
-- **`webhooks.ts`** GitHub webhook handler (HMAC-verified, routes label/check events to job triggers)
+- **`webhooks.ts`** GitHub webhook handler (HMAC-verified, routes issues/check_run/pull_request_review/pull_request events to job triggers and queue cache updates)
 - **`log.ts`** level-gated logging captured to DB via `AsyncLocalStorage`
 - **`error-reporter.ts`** deduplicating error reporter (GitHub issues + Discord, 30-min cooldown)
 - **`images.ts`** extracts/downloads images and file attachments for AI context
