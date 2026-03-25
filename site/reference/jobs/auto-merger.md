@@ -16,6 +16,8 @@ The auto-merger watches open PRs and squash-merges those that meet specific crit
 
 ## Trigger
 
+The auto-merger runs on its polling interval and can also be triggered immediately by a GitHub webhook when a `pull_request_review` event with an `approved` state is received for an eligible PR. This means approved PRs can be merged within seconds rather than waiting for the next poll cycle.
+
 Open PRs matching one of three categories:
 
 1. **Dependabot PRs** -- authored by `dependabot[bot]`
