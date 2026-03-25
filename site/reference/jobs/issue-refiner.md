@@ -46,15 +46,17 @@ The refiner processes an issue when any of these conditions are met:
 3. Instructs Claude to read `yeti/OVERVIEW.md` and linked docs for codebase context
 4. Claude reads the relevant source files identified from the issue before planning (plans are grounded in actual code, not assumptions)
 5. **Step 1 — Evaluate:** Claude evaluates whether the issue provides enough detail for a confident plan -- if underspecified, it outputs a `### Clarifying Questions` section with specific questions and instructs the user to respond as a comment
-6. **Step 2 — Plan:** Claude produces a detailed implementation plan (text only, no code changes) for aspects that are sufficiently clear. For each file, the plan specifies what changes are needed and **why** (tied back to the issue requirement), along with:
+6. **Step 2 — Draft:** Claude drafts an initial implementation plan (text only, no code changes) for aspects that are sufficiently clear. For each file, the plan specifies what changes are needed and **why** (tied back to the issue requirement), along with:
     - **Implementation order** with rationale (e.g., types before consumers)
     - **Dependencies** between changes
     - **Risks and edge cases**
     - **Testing approach** (unit/integration/manual, with specific test file names)
-7. Claude chooses the narrowest reasonable interpretation of ambiguous issues and notes assumptions explicitly
-8. Posts an `## Implementation Plan` comment on the issue
-9. Transitions labels: removes `Needs Refinement`, adds `Needs Plan Review` or `Ready`
-10. For `[ci-unrelated]` issues: also adds `Refined` to skip human approval
+7. **Step 3 — Self-critique:** Claude performs two rounds of structured self-critique against four dimensions: unverified assumptions (did it actually read the files it referenced?), scope discipline (is anything beyond what the issue requires?), ordering and dependencies (would a developer hit errors following the steps in order?), and risk honesty (are failure modes omitted to keep the plan tidy?). After each round, the plan is revised to address every weakness found.
+8. **Step 4 — Final plan:** Claude outputs only the final revised plan, without intermediate drafts or critique notes
+9. Claude chooses the narrowest reasonable interpretation of ambiguous issues and notes assumptions explicitly
+10. Posts an `## Implementation Plan` comment on the issue
+11. Transitions labels: removes `Needs Refinement`, adds `Needs Plan Review` or `Ready`
+12. For `[ci-unrelated]` issues: also adds `Refined` to skip human approval
 
 !!! note "Review loop re-entry"
     When `reviewLoop` is enabled, plan-reviewer can re-add `Needs Refinement` to trigger another refinement cycle. The issue-refiner handles this the same way as human-initiated re-refinement — it reads prior comments (including the review) and updates the plan.
