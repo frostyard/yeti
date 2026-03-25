@@ -502,6 +502,31 @@ export function buildNav(theme: Theme, username?: string | null): string {
 
 export const THEME_SCRIPT = `<script>function setTheme(v){document.cookie="yeti_theme="+v+";Path=/;SameSite=Strict;Max-Age=31536000";if(v==="system"){document.documentElement.removeAttribute("data-theme")}else{document.documentElement.setAttribute("data-theme",v)}}</script>`;
 
+export const TOAST_SCRIPT = `<script>
+(function(){
+  var es=new EventSource("/notifications/stream");
+  es.onmessage=function(e){
+    try{
+      var d=JSON.parse(e.data);
+      var t=document.createElement("div");
+      t.className="toast toast-"+d.level;
+      t.textContent=d.message;
+      document.body.appendChild(t);
+      setTimeout(function(){t.remove()},5000);
+      var tb=document.querySelector("tbody");
+      if(tb){
+        var tr=document.createElement("tr");
+        tr.className="level-"+d.level;
+        tr.innerHTML="<td>just now</td><td>"+d.jobName+"</td><td>"+(d.url?"<a href=\\""+d.url+"\\" target=\\"_blank\\">"+d.message+"</a>":d.message)+"</td><td>"+d.level+"</td>";
+        tb.prepend(tr);
+        var empty=document.querySelector(".empty");
+        if(empty)empty.remove();
+      }
+    }catch(ex){}
+  };
+})();
+</script>`;
+
 export function discordLabel(discord: {
   configured: boolean;
   connected: boolean;
