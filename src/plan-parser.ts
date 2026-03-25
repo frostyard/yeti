@@ -1,3 +1,5 @@
+export const PLAN_HEADER = "## Implementation Plan";
+
 export interface PlanPhase {
   phaseNumber: number;
   title: string;
@@ -49,7 +51,7 @@ export function parsePlan(planComment: string): ParsedPlan {
  */
 export function findPlanComment(comments: { body: string }[]): string | null {
   for (let i = comments.length - 1; i >= 0; i--) {
-    if (comments[i].body.includes("## Implementation Plan")) {
+    if (comments[i].body.includes(PLAN_HEADER)) {
       return comments[i].body;
     }
   }
