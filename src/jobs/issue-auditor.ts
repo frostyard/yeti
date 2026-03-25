@@ -5,9 +5,7 @@ import * as log from "../log.js";
 import { reportError } from "../error-reporter.js";
 import { notify } from "../notify.js";
 import { extractFingerprint, REPORT_HEADER as YETI_ERROR_REPORT_HEADER } from "./triage-yeti-errors.js";
-import { findPlanComment, parsePlan } from "../plan-parser.js";
-
-const PLAN_HEADER = "## Implementation Plan";
+import { PLAN_HEADER, findPlanComment, parsePlan } from "../plan-parser.js";
 
 type IssueState =
   | "refined"

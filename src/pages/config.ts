@@ -130,7 +130,7 @@ ${htmlOpenTag(theme)}
     <h2>Jobs &amp; Repos</h2>
     <label for="enabledJobs">Enabled Jobs (comma-separated)</label>
     <input type="text" name="enabledJobs" id="enabledJobs" value="${escapeHtml(Array.isArray(cfg.enabledJobs) ? (cfg.enabledJobs as string[]).join(", ") : "")}">
-    <div class="field-note">Valid jobs: issue-refiner, issue-worker, ci-fixer, review-addresser, doc-maintainer, auto-merger, repo-standards, improvement-identifier, issue-auditor, triage-yeti-errors, plan-reviewer, mkdocs-update</div>
+    <div class="field-note">Valid jobs: issue-refiner, issue-worker, ci-fixer, review-addresser, doc-maintainer, auto-merger, repo-standards, improvement-identifier, issue-auditor, triage-yeti-errors, plan-reviewer, prompt-evaluator, mkdocs-update</div>
     <div class="field-note">Empty means no jobs will run.</div>
 
     <label for="allowedRepos">Allowed Repos (comma-separated short names)</label>
@@ -191,7 +191,7 @@ ${htmlOpenTag(theme)}
     <table class="config-table">
       <thead><tr><th>Job</th><th>Backend</th><th>Model</th></tr></thead>
       <tbody>
-        ${["issue-refiner", "issue-worker", "ci-fixer", "review-addresser", "doc-maintainer", "improvement-identifier", "plan-reviewer", "mkdocs-update", "triage-yeti-errors", "discord"].map(job => {
+        ${["issue-refiner", "issue-worker", "ci-fixer", "review-addresser", "doc-maintainer", "improvement-identifier", "plan-reviewer", "prompt-evaluator", "mkdocs-update", "triage-yeti-errors", "discord"].map(job => {
           const jobCfg = (cfg.jobAi as Record<string, { backend?: string; model?: string }> | undefined)?.[job] ?? {};
           return `<tr>
             <td>${escapeHtml(job)}</td>

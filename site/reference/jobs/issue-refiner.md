@@ -44,11 +44,17 @@ The refiner processes an issue when any of these conditions are met:
 1. Creates an isolated git worktree for the repository
 2. Reads the issue body, all comments, and any referenced images
 3. Instructs Claude to read `yeti/OVERVIEW.md` and linked docs for codebase context
-4. Claude evaluates whether the issue provides enough detail for a confident plan -- if underspecified, it outputs a `### Clarifying Questions` section with specific questions and instructs the user to respond as a comment
-5. Claude produces the plan (text only, no code changes) for aspects that are sufficiently clear
-6. Posts an `## Implementation Plan` comment on the issue
-7. Transitions labels: removes `Needs Refinement`, adds `Needs Plan Review` or `Ready`
-8. For `[ci-unrelated]` issues: also adds `Refined` to skip human approval
+4. Claude reads the relevant source files identified from the issue before planning (plans are grounded in actual code, not assumptions)
+5. **Step 1 — Evaluate:** Claude evaluates whether the issue provides enough detail for a confident plan -- if underspecified, it outputs a `### Clarifying Questions` section with specific questions and instructs the user to respond as a comment
+6. **Step 2 — Plan:** Claude produces a detailed implementation plan (text only, no code changes) for aspects that are sufficiently clear. For each file, the plan specifies what changes are needed and **why** (tied back to the issue requirement), along with:
+    - **Implementation order** with rationale (e.g., types before consumers)
+    - **Dependencies** between changes
+    - **Risks and edge cases**
+    - **Testing approach** (unit/integration/manual, with specific test file names)
+7. Claude chooses the narrowest reasonable interpretation of ambiguous issues and notes assumptions explicitly
+8. Posts an `## Implementation Plan` comment on the issue
+9. Transitions labels: removes `Needs Refinement`, adds `Needs Plan Review` or `Ready`
+10. For `[ci-unrelated]` issues: also adds `Refined` to skip human approval
 
 !!! note "Review loop re-entry"
     When `reviewLoop` is enabled, plan-reviewer can re-add `Needs Refinement` to trigger another refinement cycle. The issue-refiner handles this the same way as human-initiated re-refinement — it reads prior comments (including the review) and updates the plan.

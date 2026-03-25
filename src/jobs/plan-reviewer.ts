@@ -6,8 +6,7 @@ import * as log from "../log.js";
 import * as db from "../db.js";
 import { reportError } from "../error-reporter.js";
 import { notify } from "../notify.js";
-
-const PLAN_HEADER = "## Implementation Plan";
+import { PLAN_HEADER } from "../plan-parser.js";
 const REVIEW_HEADER = "## Plan Review";
 
 function buildReviewPrompt(

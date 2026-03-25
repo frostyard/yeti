@@ -65,6 +65,14 @@ Optional. Enables "Sign in with GitHub" on the dashboard login page. All three f
 | `githubAppClientSecret` | `string` | `""` | `YETI_GITHUB_APP_CLIENT_SECRET` | No | OAuth client secret (sensitive — masked in API/dashboard) |
 | `externalUrl` | `string` | `""` | `YETI_EXTERNAL_URL` | No | Public URL for OAuth callback, e.g., `https://yeti.example.com` |
 
+## Webhooks
+
+Optional. Enables GitHub webhook support for near-real-time job triggers. See [GitHub App Setup — Webhooks](../getting-started/github-app.md#webhooks-optional) for setup steps.
+
+| Field | Type | Default | Env Var | Live Reload | Description |
+|-------|------|---------|---------|:-----------:|-------------|
+| `webhookSecret` | `string` | `""` | `YETI_WEBHOOK_SECRET` | No | HMAC-SHA256 secret for verifying GitHub webhook payloads (sensitive — masked in API/dashboard) |
+
 ## Job Control
 
 | Field | Type | Default | Env Var | Live Reload | Description |
@@ -165,6 +173,7 @@ A more complete configuration with intervals, schedules, and integrations:
   "githubAppClientId": "Iv1.abc123...",
   "githubAppClientSecret": "your-client-secret",
   "externalUrl": "https://yeti.example.com",
+  "webhookSecret": "your-webhook-secret",
   "maxClaudeWorkers": 2,
   "claudeTimeoutMs": 1200000,
   "maxCopilotWorkers": 1,
@@ -201,6 +210,8 @@ A more complete configuration with intervals, schedules, and integrations:
   "jobAi": {
     "plan-reviewer": { "backend": "copilot" }
   },
+  "reviewLoop": false,
+  "maxPlanRounds": 3,
   "logLevel": "debug",
   "logRetentionDays": 14,
   "logRetentionPerJob": 20

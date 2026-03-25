@@ -123,6 +123,7 @@ Most configuration changes take effect without restarting the service. When you 
 - `maxCodexWorkers`, `codexTimeoutMs`
 - `jobAi`
 - `includeForks`
+- `reviewLoop`, `maxPlanRounds`
 - `logLevel`
 - `logRetentionDays`, `logRetentionPerJob`
 - `queueScanIntervalMs`
@@ -134,6 +135,7 @@ Most configuration changes take effect without restarting the service. When you 
 - `discordBotToken`, `discordChannelId` --- the Discord bot connects once at startup
 - `githubAppId`, `githubAppInstallationId`, `githubAppPrivateKeyPath` --- see [GitHub App Setup](github-app.md)
 - `githubAppClientId`, `githubAppClientSecret`, `externalUrl` --- see [GitHub App Setup --- OAuth](github-app.md#oauth-for-dashboard-optional)
+- `webhookSecret` --- see [GitHub App Setup --- Webhooks](github-app.md#webhooks-optional)
 
 ## Next steps
 

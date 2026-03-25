@@ -125,8 +125,9 @@ If none of these apply, the PR requires manual merge.
 **Queue shows stale data:**
 
 - The queue is populated by the label scanner, which runs every 5 minutes (`queueScanIntervalMs`).
+- If [webhooks](../getting-started/github-app.md#webhooks-optional) are configured, the queue cache updates in real-time when labels are added or removed on GitHub.
 - Trigger a manual refresh by visiting `/queue` --- the page fetches fresh data on load.
-- If labels were changed outside Yeti (manually on GitHub), wait for the next scan cycle.
+- If labels were changed outside Yeti (manually on GitHub) and webhooks are not configured, wait for the next scan cycle.
 
 ---
 
@@ -223,9 +224,28 @@ ls ~/.yeti/worktrees/*/*/
 
 ---
 
+## Webhooks not triggering
+
+**Jobs don't run immediately after labeling an issue:**
+
+1. Is `webhookSecret` set in config? The endpoint returns 404 without it.
+2. Is the webhook active in your GitHub App settings? Check **Settings > Developer settings > GitHub Apps > your app > Webhook**.
+3. Are the right events subscribed? You need **Issues** and **Check runs**.
+4. Check GitHub's webhook delivery log (App settings > Advanced > Recent Deliveries) for failed deliveries or signature mismatches.
+5. Verify Yeti's external URL is reachable from GitHub. The webhook URL is auto-configured on startup.
+
+**Webhook events arrive but jobs are skipped:**
+
+- The job must be in `enabledJobs`. Webhook events for disabled jobs are silently ignored.
+- If the job is already running, the event is skipped. Polling catches it on the next cycle.
+- The repo must be in `allowedRepos` (or `allowedRepos` must be `null`).
+
+---
+
 ## Getting more information
 
 - **Dashboard logs:** `/logs` with filtering by job name, status, and search text.
 - **System logs:** `journalctl -u yeti -f` for live tailing.
+- **Log level:** Set `logLevel` in config to control verbosity. Values: `debug` (default), `info`, `warn`, `error`. Debug-level logs are suppressed when a higher level is set. The `error` level always executes (it triggers notifications).
 - **Health check:** `curl localhost:9384/health` for a quick alive check.
 - **Status endpoint:** `curl localhost:9384/status` for detailed JSON with job schedules, uptime, queue state, and integration status.

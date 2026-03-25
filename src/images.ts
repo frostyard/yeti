@@ -132,41 +132,44 @@ export async function downloadImages(
       const controller = new AbortController();
       const timeout = setTimeout(() => controller.abort(), DOWNLOAD_TIMEOUT);
 
-      const resp = await fetch(img.url, {
-        headers,
-        signal: controller.signal,
-      });
-      clearTimeout(timeout);
+      try {
+        const resp = await fetch(img.url, {
+          headers,
+          signal: controller.signal,
+        });
 
-      if (!resp.ok) {
-        log.warn(`[images] Failed to download ${img.url}: HTTP ${resp.status}`);
-        continue;
+        if (!resp.ok) {
+          log.warn(`[images] Failed to download ${img.url}: HTTP ${resp.status}`);
+          continue;
+        }
+
+        const contentType = resp.headers.get("content-type") ?? "";
+        if (!contentType.startsWith("image/")) {
+          log.warn(`[images] Skipping ${img.url}: not an image (${contentType})`);
+          continue;
+        }
+
+        const contentLength = resp.headers.get("content-length");
+        if (contentLength && parseInt(contentLength, 10) > MAX_IMAGE_SIZE) {
+          log.warn(`[images] Skipping ${img.url}: exceeds ${MAX_IMAGE_SIZE} byte limit`);
+          continue;
+        }
+
+        const buffer = Buffer.from(await resp.arrayBuffer());
+        if (buffer.length > MAX_IMAGE_SIZE) {
+          log.warn(`[images] Skipping ${img.url}: exceeds ${MAX_IMAGE_SIZE} byte limit`);
+          continue;
+        }
+
+        const ext = getExtension(contentType);
+        const filename = `img-${i + 1}${ext}`;
+        const filePath = path.join(destDir, filename);
+        fs.writeFileSync(filePath, buffer);
+
+        results.push({ localPath: `${IMAGE_DIR}/${filename}`, alt: img.alt });
+      } finally {
+        clearTimeout(timeout);
       }
-
-      const contentType = resp.headers.get("content-type") ?? "";
-      if (!contentType.startsWith("image/")) {
-        log.warn(`[images] Skipping ${img.url}: not an image (${contentType})`);
-        continue;
-      }
-
-      const contentLength = resp.headers.get("content-length");
-      if (contentLength && parseInt(contentLength, 10) > MAX_IMAGE_SIZE) {
-        log.warn(`[images] Skipping ${img.url}: exceeds ${MAX_IMAGE_SIZE} byte limit`);
-        continue;
-      }
-
-      const buffer = Buffer.from(await resp.arrayBuffer());
-      if (buffer.length > MAX_IMAGE_SIZE) {
-        log.warn(`[images] Skipping ${img.url}: exceeds ${MAX_IMAGE_SIZE} byte limit`);
-        continue;
-      }
-
-      const ext = getExtension(contentType);
-      const filename = `img-${i + 1}${ext}`;
-      const filePath = path.join(destDir, filename);
-      fs.writeFileSync(filePath, buffer);
-
-      results.push({ localPath: `${IMAGE_DIR}/${filename}`, alt: img.alt });
     } catch (err) {
       log.warn(`[images] Failed to download ${img.url}: ${err}`);
     }
@@ -254,46 +257,49 @@ export async function downloadAttachments(
       const controller = new AbortController();
       const timeout = setTimeout(() => controller.abort(), DOWNLOAD_TIMEOUT);
 
-      const resp = await fetch(att.url, {
-        headers,
-        signal: controller.signal,
-      });
-      clearTimeout(timeout);
-
-      if (!resp.ok) {
-        log.warn(`[images] Failed to download attachment ${att.url}: HTTP ${resp.status}`);
-        continue;
-      }
-
-      const contentType = resp.headers.get("content-type") ?? "";
-      if (isBinaryContentType(contentType)) {
-        log.warn(`[images] Skipping attachment ${att.url}: binary content type (${contentType})`);
-        continue;
-      }
-
-      const contentLength = resp.headers.get("content-length");
-      if (contentLength && parseInt(contentLength, 10) > MAX_ATTACHMENT_SIZE) {
-        log.warn(`[images] Skipping attachment ${att.url}: exceeds ${MAX_ATTACHMENT_SIZE} byte limit`);
-        continue;
-      }
-
-      const buffer = Buffer.from(await resp.arrayBuffer());
-      if (buffer.length > MAX_ATTACHMENT_SIZE) {
-        log.warn(`[images] Skipping attachment ${att.url}: exceeds ${MAX_ATTACHMENT_SIZE} byte limit`);
-        continue;
-      }
-
-      // Validate UTF-8
-      let text: string;
       try {
-        text = new TextDecoder("utf-8", { fatal: true }).decode(buffer);
-      } catch {
-        log.warn(`[images] Skipping attachment ${att.url}: not valid UTF-8`);
-        continue;
-      }
+        const resp = await fetch(att.url, {
+          headers,
+          signal: controller.signal,
+        });
 
-      const { text: content, truncated } = truncateContent(text);
-      results.push({ filename: att.filename, content, truncated });
+        if (!resp.ok) {
+          log.warn(`[images] Failed to download attachment ${att.url}: HTTP ${resp.status}`);
+          continue;
+        }
+
+        const contentType = resp.headers.get("content-type") ?? "";
+        if (isBinaryContentType(contentType)) {
+          log.warn(`[images] Skipping attachment ${att.url}: binary content type (${contentType})`);
+          continue;
+        }
+
+        const contentLength = resp.headers.get("content-length");
+        if (contentLength && parseInt(contentLength, 10) > MAX_ATTACHMENT_SIZE) {
+          log.warn(`[images] Skipping attachment ${att.url}: exceeds ${MAX_ATTACHMENT_SIZE} byte limit`);
+          continue;
+        }
+
+        const buffer = Buffer.from(await resp.arrayBuffer());
+        if (buffer.length > MAX_ATTACHMENT_SIZE) {
+          log.warn(`[images] Skipping attachment ${att.url}: exceeds ${MAX_ATTACHMENT_SIZE} byte limit`);
+          continue;
+        }
+
+        // Validate UTF-8
+        let text: string;
+        try {
+          text = new TextDecoder("utf-8", { fatal: true }).decode(buffer);
+        } catch {
+          log.warn(`[images] Skipping attachment ${att.url}: not valid UTF-8`);
+          continue;
+        }
+
+        const { text: content, truncated } = truncateContent(text);
+        results.push({ filename: att.filename, content, truncated });
+      } finally {
+        clearTimeout(timeout);
+      }
     } catch (err) {
       log.warn(`[images] Failed to download attachment ${att.url}: ${err}`);
     }
