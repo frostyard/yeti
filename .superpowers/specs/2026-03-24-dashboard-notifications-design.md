@@ -82,8 +82,9 @@ Created alongside existing tables in `db.ts` initialization.
 
 DB functions to add:
 
-- `insertNotification(jobName, message, url?)` — returns the inserted row's `id`
+- `insertNotification(jobName, message, url?)` — returns the full inserted row (id, job_name, message, url, created_at) so the emitter has the complete payload for SSE broadcast
 - `getRecentNotifications(limit = 50)` — newest first
+- `getNotificationsSince(afterId: number)` — returns notifications with `id > afterId`, oldest first (for SSE replay on reconnect)
 - `pruneOldNotifications(days = 7)` — delete older than N days
 
 ### 3. Event Emission
@@ -110,9 +111,9 @@ DB functions to add:
   data: <JSON payload>
   ```
 
-- SSE `id` field enables `Last-Event-ID` on reconnect — server can replay missed notifications from the DB
-- Keepalive: send `: keepalive\n\n` comment every 30 seconds
-- On graceful shutdown (SIGINT/SIGTERM): close all active SSE connections
+- SSE `id` field enables `Last-Event-ID` on reconnect — on new connection, if `Last-Event-ID` header is present, query `getNotificationsSince(id)` and stream the backlog before subscribing to live events
+- Keepalive: send `: keepalive\n\n` comment every 30 seconds via per-client `setInterval`; clear the interval in the `close` event handler and during shutdown
+- On graceful shutdown (SIGINT/SIGTERM): clear all keepalive intervals and close all active SSE connections
 - Set `emitter.setMaxListeners()` appropriately to avoid Node warnings
 
 **SSE JSON payload shape:**
@@ -142,7 +143,7 @@ Added to the shared page layout in `src/pages/layout.ts` (so toasts work on all 
 **Route:** `GET /notifications`
 
 - New page builder in `src/pages/notifications.ts`
-- New nav link "Notifications" in the dashboard header (in `layout.ts`)
+- New nav link "Notifications" in the dashboard header (in `layout.ts`), placed between "Logs" and "Config" in the nav order
 - Displays the last 50 notifications from the DB, newest first
 - Table columns: timestamp, job name, message, link
 - Protected by `requireAuth()`
