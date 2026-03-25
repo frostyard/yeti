@@ -148,10 +148,11 @@ and stdout byte count for observability. Timed-out processes throw
 `ClaudeTimeoutError` (carries diagnostic fields: `lastOutput`, `lastStderr`,
 `outputBytes`, `cwd`) which the error reporter includes in GitHub issue reports.
 
-**`db.ts`** — SQLite database at `~/.yeti/yeti.db`. Three tables: `tasks`
+**`db.ts`** — SQLite database at `~/.yeti/yeti.db`. Four tables: `tasks`
 (tracks every job invocation, linked to `job_runs` via `run_id`), `job_runs`
-(tracks scheduled job executions), and `job_logs` (captures log output per run
-via `AsyncLocalStorage` context). See [Database Schema](database-schema.md).
+(tracks scheduled job executions), `job_logs` (captures log output per run
+via `AsyncLocalStorage` context), and `notifications` (recent notification
+history for the dashboard). See [Database Schema](database-schema.md).
 
 **`server.ts`** — Minimal `http.Server` with an embedded HTML/CSS/JS dashboard.
 Routes:
@@ -279,4 +280,4 @@ when Discord is not connected at announcement time.
 
 ## Dashboard (`src/pages/`)
 
-The web dashboard is a first-class consumer of job, config, and queue data. Page builders in `src/pages/` render HTML for the dashboard routes in `server.ts`. `layout.ts` exports a `siteTitle()` helper that builds page titles from `GITHUB_OWNERS` (e.g. "yeti — frostyard — Queue"), reading the config at call time for live-reload compatibility. Navigation: Dashboard → Jobs → Queue → Logs → Config. The Jobs page (`/jobs`) lists all known jobs with descriptions, enabled/disabled state, AI backend, model override, schedule, and Run/Pause controls. `createServer()` accepts a `JobInfo[]` array from `main.ts` so the Jobs page can show schedule info for all jobs (including disabled ones not registered with the scheduler). Any changes to config fields, job states, queue categories, or log/task schemas must be reflected in the corresponding page builders — the dashboard is not optional.
+The web dashboard is a first-class consumer of job, config, and queue data. Page builders in `src/pages/` render HTML for the dashboard routes in `server.ts`. `layout.ts` exports a `siteTitle()` helper that builds page titles from `GITHUB_OWNERS` (e.g. "yeti — frostyard — Queue"), reading the config at call time for live-reload compatibility. It also exports `TOAST_SCRIPT` — client-side JavaScript that connects to the `/notifications/stream` SSE endpoint and renders incoming notifications as auto-dismissing toast popups on every dashboard page. Navigation: Dashboard → Jobs → Queue → Logs → Config → Notifications. The Jobs page (`/jobs`) lists all known jobs with descriptions, enabled/disabled state, AI backend, model override, schedule, and Run/Pause controls. `createServer()` accepts a `JobInfo[]` array from `main.ts` so the Jobs page can show schedule info for all jobs (including disabled ones not registered with the scheduler). Any changes to config fields, job states, queue categories, or log/task schemas must be reflected in the corresponding page builders — the dashboard is not optional.
