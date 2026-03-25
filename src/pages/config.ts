@@ -1,5 +1,5 @@
 import type { Theme } from "./layout.js";
-import { PAGE_CSS, escapeHtml, htmlOpenTag, buildNav, THEME_SCRIPT, siteTitle } from "./layout.js";
+import { PAGE_CSS, escapeHtml, htmlOpenTag, buildNav, THEME_SCRIPT, TOAST_SCRIPT, siteTitle } from "./layout.js";
 import { getConfigForDisplay, LOG_LEVELS } from "../config.js";
 import * as config from "../config.js";
 import { isOAuthConfigured } from "../oauth.js";
@@ -93,7 +93,7 @@ ${htmlOpenTag(theme)}
 <body>
   <h1>yeti</h1>
   ${buildNav(theme, username)}
-  ${THEME_SCRIPT}
+  ${THEME_SCRIPT}${TOAST_SCRIPT}
   ${saved ? '<div class="banner">Configuration saved and applied.</div>' : ""}
   ${authDisabled ? '<div class="warning-banner">Authentication is disabled. Set an auth token to protect this interface.</div>' : ""}
   ${tabBar}

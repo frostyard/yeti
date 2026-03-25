@@ -1,5 +1,5 @@
 import type { Theme } from "./layout.js";
-import { PAGE_CSS, htmlOpenTag, buildNav, THEME_SCRIPT, siteTitle, formatRelativeTime, formatCountdown } from "./layout.js";
+import { PAGE_CSS, htmlOpenTag, buildNav, THEME_SCRIPT, TOAST_SCRIPT, siteTitle, formatRelativeTime, formatCountdown } from "./layout.js";
 import { msUntilHour } from "../scheduler.js";
 
 const JOB_DESCRIPTIONS: Record<string, string> = {
@@ -137,7 +137,7 @@ ${htmlOpenTag(theme)}
 <body>
   <h1>Jobs</h1>
   ${buildNav(theme, username)}
-  ${THEME_SCRIPT}
+  ${THEME_SCRIPT}${TOAST_SCRIPT}
   <table>
     <thead><tr><th>Job</th><th></th><th>Backend</th><th>Model</th><th>Schedule</th><th>Status</th><th>Last Run</th><th>Next Run</th><th>Logs</th><th></th></tr></thead>
     <tbody>

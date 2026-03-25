@@ -1,5 +1,5 @@
 import type { Theme } from "./layout.js";
-import { PAGE_CSS, escapeHtml, formatDuration, htmlOpenTag, buildNav, THEME_SCRIPT, siteTitle } from "./layout.js";
+import { PAGE_CSS, escapeHtml, formatDuration, htmlOpenTag, buildNav, THEME_SCRIPT, TOAST_SCRIPT, siteTitle } from "./layout.js";
 import type { JobRun, JobLog, Task } from "../db.js";
 
 function logLevelClass(level: string): string {
@@ -48,7 +48,7 @@ ${htmlOpenTag(theme)}
 <body>
   <h1>yeti</h1>
   ${buildNav(theme, username)}
-  ${THEME_SCRIPT}
+  ${THEME_SCRIPT}${TOAST_SCRIPT}
   <h2>Job Runs</h2>
   <form method="get" action="/logs" class="search-bar">
     <input type="text" name="search" placeholder="Search by repo or issue number\u2026" value="${escapeHtml(search ?? "")}" />
@@ -154,7 +154,7 @@ ${htmlOpenTag(theme)}
 <body>
   <h1>yeti</h1>
   ${buildNav(theme, username)}
-  ${THEME_SCRIPT}
+  ${THEME_SCRIPT}${TOAST_SCRIPT}
   <h2>${escapeHtml(shortRepo)}#${itemNumber}</h2>
   <div style="margin-bottom:1rem;font-size:0.85rem">
     <a href="https://github.com/${encodeURI(repo)}/issues/${itemNumber}">View on GitHub</a>
@@ -224,7 +224,7 @@ ${htmlOpenTag(theme)}
 <body>
   <h1>yeti</h1>
   ${buildNav(theme, username)}
-  ${THEME_SCRIPT}
+  ${THEME_SCRIPT}${TOAST_SCRIPT}
   <h2>${escapeHtml(run.job_name)}</h2>
   <dl class="meta">
     <dt>Run ID</dt>

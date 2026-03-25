@@ -414,6 +414,15 @@ export const PAGE_CSS = `
       border-bottom-color: var(--accent);
     }
     .tab-panel-hidden { display: none; }
+    /* Toast notifications */
+    #toast-container{position:fixed;bottom:1rem;right:1rem;z-index:1000;display:flex;flex-direction:column-reverse;gap:0.5rem;max-width:400px}
+    .toast{background:var(--bg-secondary);border:1px solid var(--border);border-left:4px solid var(--accent);border-radius:6px;padding:0.75rem 1rem;box-shadow:0 4px 12px rgba(0,0,0,0.15);cursor:pointer;animation:toast-in 0.3s ease-out;transition:opacity 0.3s}
+    .toast.level-warn{border-left-color:#f59e0b}
+    .toast.level-error{border-left-color:#ef4444}
+    .toast .toast-job{font-size:0.75rem;color:var(--text-secondary);margin-bottom:0.25rem}
+    .toast .toast-msg{font-size:0.875rem;color:var(--text)}
+    .toast.dismissing{opacity:0}
+    @keyframes toast-in{from{transform:translateX(100%);opacity:0}to{transform:translateX(0);opacity:1}}
 `;
 
 export function escapeHtml(s: string): string {
@@ -497,36 +506,32 @@ export function buildNav(theme: Theme, username?: string | null): string {
   const userHtml = username
     ? `<span style="font-size:0.85rem;color:var(--text-secondary)">Logged in as ${escapeHtml(username)} &middot; <a href="/auth/logout">Logout</a></span>`
     : "";
-  return `<nav><a href="/">Dashboard</a><a href="/repos">Repos</a><a href="/jobs">Jobs</a><a href="/queue">Queue</a><a href="/logs">Logs</a><a href="/config">Config</a>${userHtml}<select id="theme-select" onchange="setTheme(this.value)">${selectHtml}</select></nav>`;
+  return `<nav><a href="/">Dashboard</a><a href="/repos">Repos</a><a href="/jobs">Jobs</a><a href="/queue">Queue</a><a href="/logs">Logs</a><a href="/notifications">Notifications</a><a href="/config">Config</a>${userHtml}<select id="theme-select" onchange="setTheme(this.value)">${selectHtml}</select></nav>`;
 }
 
 export const THEME_SCRIPT = `<script>function setTheme(v){document.cookie="yeti_theme="+v+";Path=/;SameSite=Strict;Max-Age=31536000";if(v==="system"){document.documentElement.removeAttribute("data-theme")}else{document.documentElement.setAttribute("data-theme",v)}}</script>`;
 
-export const TOAST_SCRIPT = `<script>
+export const TOAST_SCRIPT = `<div id="toast-container"></div><script>
 (function(){
+  if(!window.EventSource)return;
   var es=new EventSource("/notifications/stream");
   es.onmessage=function(e){
-    try{
-      var d=JSON.parse(e.data);
-      var t=document.createElement("div");
-      t.className="toast toast-"+d.level;
-      t.textContent=d.message;
-      document.body.appendChild(t);
-      setTimeout(function(){t.remove()},5000);
-      var tb=document.querySelector("tbody");
-      if(tb){
-        var tr=document.createElement("tr");
-        tr.className="level-"+d.level;
-        tr.innerHTML="<td>just now</td><td>"+d.jobName+"</td><td>"+(d.url?"<a href=\\""+d.url+"\\" target=\\"_blank\\">"+d.message+"</a>":d.message)+"</td><td>"+d.level+"</td>";
-        tb.prepend(tr);
-        var empty=document.querySelector(".empty");
-        if(empty)empty.remove();
-      }
-    }catch(ex){}
+    try{var d=JSON.parse(e.data);showToast(d)}catch(err){}
   };
+  function showToast(n){
+    var c=document.getElementById("toast-container");
+    var t=document.createElement("div");
+    t.className="toast"+(n.level&&n.level!=="info"?" level-"+n.level:"");
+    t.innerHTML='<div class="toast-job">'+esc(n.jobName)+'</div><div class="toast-msg">'+esc(n.message)+'</div>';
+    if(n.url){t.onclick=function(){window.open(n.url,"_blank")}}
+    t.addEventListener("click",function(){dismiss(t)});
+    c.appendChild(t);
+    setTimeout(function(){dismiss(t)},8000);
+  }
+  function dismiss(t){t.classList.add("dismissing");setTimeout(function(){t.remove()},300)}
+  function esc(s){var d=document.createElement("div");d.textContent=s;return d.innerHTML}
 })();
 </script>`;
-
 export function discordLabel(discord: {
   configured: boolean;
   connected: boolean;
