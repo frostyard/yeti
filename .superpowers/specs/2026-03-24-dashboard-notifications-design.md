@@ -29,17 +29,17 @@ Replace the current string-based `notify()` signature with a structured type:
 export interface Notification {
   jobName: string;
   message: string;
-  url: string;
+  url?: string;  // optional — system notifications (rate limits, startup) have no URL
 }
 
 export function notify(n: Notification): void {
-  // 1. Insert into notifications table
+  // 1. Insert into notifications table (try/catch to prevent recursive loops — see §3)
   // 2. Broadcast to SSE clients via EventEmitter
   // 3. Forward to Discord (compose text from structured fields)
 }
 ```
 
-All ~10-12 existing `notify()` call sites across jobs are updated from:
+**Job call sites (~10-12)** are updated from:
 ```typescript
 notify(`[issue-worker] Created PR #${prNumber} for ${fullName}#${issue.number}\n${gh.pullUrl(fullName, prNumber)}`);
 ```
@@ -52,74 +52,120 @@ notify({
 });
 ```
 
-Discord output is composed inside `notify()` from the structured fields, maintaining the same format users see today.
+**Non-job callers** also migrate to the structured type:
+
+- `src/log.ts` — error-level forwarding: `{ jobName: "system", message: "..." }`
+- `src/github.ts` — rate-limit notifications: `{ jobName: "system", message: "..." }`
+- `src/startup-announce.ts` — startup notice: `{ jobName: "system", message: "..." }`
+- `src/jobs/issue-auditor.ts` — summary without URL: `{ jobName: "issue-auditor", message: "..." }`
+
+**Discord output** is composed inside `notify()` as:
+
+```text
+[${n.jobName}] ${n.message}
+${n.url}        // omitted when url is undefined
+```
 
 ### 2. Storage: `notifications` Table
 
 New table in `yeti.db`:
 
-| Column       | Type       | Description                        |
-|-------------|------------|------------------------------------|
-| `id`        | INTEGER PK | Auto-increment                     |
-| `job_name`  | TEXT       | Job that emitted the notification  |
-| `message`   | TEXT       | Human-readable description         |
-| `url`       | TEXT       | GitHub URL (issue or PR link)      |
-| `created_at`| TEXT       | ISO 8601 timestamp                 |
+| Column | Type | Description |
+| --- | --- | --- |
+| `id` | INTEGER PK | Auto-increment |
+| `job_name` | TEXT | Job that emitted the notification |
+| `message` | TEXT | Human-readable description |
+| `url` | TEXT | GitHub URL (nullable) |
+| `created_at` | TEXT | Timestamp via `datetime('now')` (matches existing tables) |
 
 Created alongside existing tables in `db.ts` initialization.
+
+DB functions to add:
+
+- `insertNotification(jobName, message, url?)` — returns the inserted row's `id`
+- `getRecentNotifications(limit = 50)` — newest first
+- `pruneOldNotifications(days = 7)` — delete older than N days
 
 ### 3. Event Emission
 
 `notify.ts` gains an in-memory `EventEmitter` that fires on every notification:
 
-- `notify()` inserts the row into SQLite, then emits the event
+- `notify()` inserts the row into SQLite, then emits the event with the full row (including `id` and `created_at`)
 - `server.ts` subscribes to the emitter to push to SSE clients
 - Discord forwarding continues as before
+
+**Error handling:** The DB insert is wrapped in try/catch. If it fails, log the error directly to stderr (not via `log.error()`, which itself calls `notify()`) and continue with Discord delivery. This prevents recursive loops.
 
 ### 4. SSE Endpoint
 
 **Route:** `GET /notifications/stream`
 
-- Protected by `requireAuth()`
-- Holds open HTTP connections with `Content-Type: text/event-stream`
-- On each notification event, sends `data: <JSON>` to all connected clients
-- Standard SSE keepalive via periodic comment lines
+- Protected by `requireAuth()` — works via cookies (`yeti_token` / `yeti_session`). Note: the browser `EventSource` API does not support custom headers, so cookie-based auth is required. This is already supported by the existing auth middleware.
+- Response headers: `Content-Type: text/event-stream`, `Cache-Control: no-cache`, `Connection: keep-alive`, `X-Accel-Buffering: no` (for nginx reverse proxy compatibility)
+- Active connections tracked in a `Set<ServerResponse>`; listener removed and response ended on client `close` event
+- On each notification event, sends to all connected clients:
+
+  ```text
+  id: <notification.id>
+  data: <JSON payload>
+  ```
+
+- SSE `id` field enables `Last-Event-ID` on reconnect — server can replay missed notifications from the DB
+- Keepalive: send `: keepalive\n\n` comment every 30 seconds
+- On graceful shutdown (SIGINT/SIGTERM): close all active SSE connections
+- Set `emitter.setMaxListeners()` appropriately to avoid Node warnings
+
+**SSE JSON payload shape:**
+```json
+{
+  "id": 42,
+  "jobName": "issue-refiner",
+  "message": "Plan produced for org/repo#15",
+  "url": "https://github.com/org/repo/issues/15",
+  "createdAt": "2026-03-24 14:30:00"
+}
+```
 
 ### 5. Client-Side Toasts
 
-Added to the dashboard HTML (shared across all pages):
+Added to the shared page layout in `src/pages/layout.ts` (so toasts work on all dashboard pages):
 
 - `EventSource` connects to `/notifications/stream`
 - On message, renders a toast popup in the bottom-right corner
 - Toast auto-dismisses after ~8 seconds, click to dismiss early
-- Clicking the toast body opens the GitHub URL in a new tab
+- Clicking the toast body opens the GitHub URL in a new tab (when URL is present)
 - Simple CSS animation for slide-in/fade-out
+- Toasts stack vertically if multiple arrive in quick succession
 
 ### 6. Recent Notifications Page
 
 **Route:** `GET /notifications`
 
 - New page builder in `src/pages/notifications.ts`
-- New nav link "Notifications" in the dashboard header
+- New nav link "Notifications" in the dashboard header (in `layout.ts`)
 - Displays the last 50 notifications from the DB, newest first
 - Table columns: timestamp, job name, message, link
 - Protected by `requireAuth()`
 
 ### 7. Pruning
 
-- On startup: delete notifications older than 7 days
-- While running: `setInterval` every 24 hours performs the same cleanup
+- On startup in `main.ts`: delete notifications older than 7 days (alongside existing `pruneOldLogs` call)
+- While running: `setInterval` every 24 hours in `main.ts` performs the same cleanup (alongside existing log pruning interval)
 - Hardcoded 7-day retention, no config knob
 
 ## Affected Files
 
 | File | Change |
 |------|--------|
-| `src/notify.ts` | New `Notification` type, `EventEmitter`, SQLite insert, restructured `notify()` |
-| `src/db.ts` | New `notifications` table creation, insert/query/prune functions |
-| `src/server.ts` | New `/notifications/stream` SSE route, `/notifications` page route, subscribe to emitter, pruning interval, nav link |
+| `src/notify.ts` | New `Notification` type, `EventEmitter`, SQLite insert, restructured `notify()`, error-safe DB write |
+| `src/db.ts` | New `notifications` table creation, `insertNotification()`, `getRecentNotifications()`, `pruneOldNotifications()` |
+| `src/server.ts` | New `/notifications/stream` SSE route, `/notifications` page route, subscribe to emitter, SSE connection tracking and cleanup on shutdown |
+| `src/pages/layout.ts` | Toast container HTML/CSS/JS, `EventSource` client code, "Notifications" nav link |
 | `src/pages/notifications.ts` | New file — notifications list page builder |
-| `src/pages/dashboard.ts` | Add toast container and `EventSource` JS to shared page layout |
+| `src/main.ts` | Startup pruning call, 24h pruning interval (alongside existing log pruning) |
+| `src/log.ts` | Update `notify()` call to structured type (`jobName: "system"`) |
+| `src/github.ts` | Update `notify()` calls to structured type (`jobName: "system"`) |
+| `src/startup-announce.ts` | Update `notify()` call to structured type (`jobName: "system"`) |
 | `src/jobs/issue-refiner.ts` | Update `notify()` calls to structured type |
 | `src/jobs/plan-reviewer.ts` | Update `notify()` calls to structured type |
 | `src/jobs/issue-worker.ts` | Update `notify()` calls to structured type |
@@ -130,12 +176,12 @@ Added to the dashboard HTML (shared across all pages):
 | `src/jobs/auto-merger.ts` | Update `notify()` calls to structured type |
 | `src/jobs/review-addresser.ts` | Update `notify()` calls to structured type |
 | `src/jobs/prompt-evaluator.ts` | Update `notify()` calls to structured type |
-| `src/main.ts` | Startup pruning call |
+| `src/jobs/issue-auditor.ts` | Update `notify()` call to structured type (no URL) |
 
 ## Testing
 
-- Unit tests for `notify()`: verify SQLite insert, EventEmitter emission, Discord forwarding
+- Unit tests for `notify()`: verify SQLite insert, EventEmitter emission, Discord forwarding, error-safe DB write (no recursive loop)
 - Unit tests for DB functions: insert, query (limit/order), prune by age
-- Unit tests for SSE endpoint: connection handling, event delivery
+- Unit tests for SSE endpoint: connection handling, event delivery, cleanup on disconnect
 - Unit tests for notification page builder: HTML output
 - Existing job tests updated to match new `notify()` signature
