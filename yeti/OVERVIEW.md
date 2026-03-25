@@ -27,7 +27,7 @@ src/
 ├── error-reporter.ts    Deduplicating GitHub issue-based error reporter (filters ShutdownError, RateLimitError)
 ├── images.ts            Image/attachment extraction + download for issue/PR context
 ├── version.ts           Build-time injected version string
-├── plan-parser.ts       Parses multi-PR implementation plans into phases
+├── plan-parser.ts       Parses multi-PR implementation plans into phases; exports PLAN_HEADER constant
 ├── startup-announce.ts  Announces new deployments via notify (version-change detection)
 ├── shutdown.ts          Graceful shutdown flag + ShutdownError class (shared across modules)
 ├── test-helpers.ts      Test factories (mockRepo, mockIssue, mockPR)
@@ -84,7 +84,7 @@ See [Modules](modules.md) for detailed descriptions of each module. Key relation
 - **`log.ts`** level-gated logging captured to DB via `AsyncLocalStorage`
 - **`error-reporter.ts`** deduplicating error reporter (GitHub issues + Discord, 30-min cooldown)
 - **`images.ts`** extracts/downloads images and file attachments for AI context
-- **`plan-parser.ts`** parses multi-PR implementation plans into phases
+- **`plan-parser.ts`** parses multi-PR implementation plans into phases; exports shared `PLAN_HEADER` constant
 - **`notify.ts`** / **`discord.ts`** notification dispatch and Discord bot commands
 - **`startup-announce.ts`** announces new deployments; **`shutdown.ts`** shared shutdown flag
 
