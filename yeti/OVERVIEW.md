@@ -39,7 +39,8 @@ src/
 │   ├── logs.ts          Log list, detail, and issue logs page HTML builders
 │   ├── config.ts        Config editor page HTML builder (tabbed: General, Scheduling, AI, Integrations, Security)
 │   ├── login.ts         Login page HTML builder
-│   └── layout.ts        Shared layout (header, theme, siteTitle, formatters)
+│   ├── notifications.ts Notifications page HTML builder (recent notification history)
+│   └── layout.ts        Shared layout (header, theme, siteTitle, formatters, TOAST_SCRIPT)
 └── jobs/
     ├── issue-refiner.ts        Discovers issues needing plans via comment analysis
     ├── plan-reviewer.ts        Adversarial plan review using configurable AI backend
@@ -215,10 +216,12 @@ and stdout byte count for observability. Timed-out processes throw
 `ClaudeTimeoutError` (carries diagnostic fields: `lastOutput`, `lastStderr`,
 `outputBytes`, `cwd`) which the error reporter includes in GitHub issue reports.
 
-**`db.ts`** — SQLite database at `~/.yeti/yeti.db`. Three tables: `tasks`
+**`db.ts`** — SQLite database at `~/.yeti/yeti.db`. Four tables: `tasks`
 (tracks every job invocation, linked to `job_runs` via `run_id`), `job_runs`
-(tracks scheduled job executions), and `job_logs` (captures log output per run
-via `AsyncLocalStorage` context). See [Database Schema](database-schema.md).
+(tracks scheduled job executions), `job_logs` (captures log output per run
+via `AsyncLocalStorage` context), and `notifications` (stores recent
+notifications with `id`, `job_name`, `message`, `url`, `level`, `created_at`).
+See [Database Schema](database-schema.md).
 
 **`server.ts`** — Minimal `http.Server` with an embedded HTML/CSS/JS dashboard.
 Routes:
@@ -248,6 +251,8 @@ Routes:
 - `GET /logs/issue` — Issue-specific logs page (`?repo=...&number=...`)
 - `GET /config` / `POST /config` — Config viewer/editor (tabbed HTML form with General, Scheduling, AI Backends, Integrations, Security tabs; supports `?tab=` param for direct tab linking; progressive enhancement with JS tab switching and `<a>` fallback)
 - `GET /config/api` — JSON config (sensitive fields masked)
+- `GET /notifications` — Notifications history page (recent notifications from DB, rendered by `src/pages/notifications.ts`)
+- `GET /notifications/stream` — SSE endpoint; pushes `notification` events to connected dashboard clients in real time. `closeSSEConnections()` is exported for graceful shutdown cleanup.
 - `POST /webhooks/github` — GitHub webhook endpoint (HMAC-SHA256 verified, no auth required — see `webhooks.ts`)
 
 Supports dark/light/system themes. Auth is enabled when `authToken` is set
@@ -330,13 +335,13 @@ stored version (same-version restart / crash recovery). Checks
 `discordStatus().connected` and logs a warning (rather than a success message)
 when Discord is not connected at announcement time.
 
-**`notify.ts`** — Notification dispatcher. Forwards to `discord.ts` so callers only need one import. All internal modules that send notifications import from `notify.ts`. Jobs announce key outcomes via `notify()`: PR creation (issue-worker, improvement-identifier, doc-maintainer, mkdocs-update), PR merge (auto-merger), plan production/update (issue-refiner), plan review (plan-reviewer), CI fix push and merge conflict resolution (ci-fixer), and review addressing (review-addresser). Messages use a `[job-name]` prefix for scannability and include GitHub links (via `issueUrl`/`pullUrl` from `github.ts`) that Discord auto-embeds.
+**`notify.ts`** — Notification dispatcher. Exports the `Notification` interface (`{ job_name, message, url?, level }`) and `NotificationLevel` type (`"info" | "warn" | "error"`). The `notify(n: Notification)` function persists the notification to the `notifications` DB table, emits it on `notificationEmitter` (a Node.js `EventEmitter` that `server.ts` subscribes to for SSE fan-out), and forwards to Discord. Callers use `notify()` as the single import for all notification concerns. Jobs announce key outcomes via `notify()`: PR creation (issue-worker, improvement-identifier, doc-maintainer, mkdocs-update), PR merge (auto-merger), plan production/update (issue-refiner), plan review (plan-reviewer), CI fix push and merge conflict resolution (ci-fixer), and review addressing (review-addresser). Messages use a `[job-name]` prefix for scannability and include GitHub links (via `issueUrl`/`pullUrl` from `github.ts`) that Discord auto-embeds.
 
 **`discord.ts`** — Discord bot integration using discord.js. Connects as a bot user, sends notifications to a configured channel, and handles `!yeti` commands from authorised users. Commands: `status`, `jobs`, `trigger <job>`, `pause <job>`, `resume <job>`, `issue <repo> <title>`, `look <repo>#<number>`, `assign <repo>#<number>`, `recent [job]`, `help`. Requires `discordBotToken`, `discordChannelId`, and `discordAllowedUsers` in config. Only processes messages from the configured channel and from users in the allow-list. Uses `console.log` for its own error output to avoid recursive notify loops. The scheduler reference is injected at startup to enable job control commands. Exports a `ready()` function that returns a `Promise<void>` resolving when the bot's WebSocket handshake completes and the channel is available (10-second timeout; resolves immediately if Discord is not configured). Used by `main.ts` to ensure notifications can be delivered before the deployment announcement. See [Discord Setup](discord-setup.md).
 
 ### Dashboard (`src/pages/`)
 
-The web dashboard is a first-class consumer of job, config, and queue data. Page builders in `src/pages/` render HTML for the dashboard routes in `server.ts`. `layout.ts` exports a `siteTitle()` helper that builds page titles from `GITHUB_OWNERS` (e.g. "yeti — frostyard — Queue"), reading the config at call time for live-reload compatibility. Navigation: Dashboard → Jobs → Queue → Logs → Config. The Jobs page (`/jobs`) lists all known jobs with descriptions, enabled/disabled state, AI backend, model override, schedule, and Run/Pause controls. `createServer()` accepts a `JobInfo[]` array from `main.ts` so the Jobs page can show schedule info for all jobs (including disabled ones not registered with the scheduler). Any changes to config fields, job states, queue categories, or log/task schemas must be reflected in the corresponding page builders — the dashboard is not optional.
+The web dashboard is a first-class consumer of job, config, and queue data. Page builders in `src/pages/` render HTML for the dashboard routes in `server.ts`. `layout.ts` exports a `siteTitle()` helper that builds page titles from `GITHUB_OWNERS` (e.g. "yeti — frostyard — Queue"), reading the config at call time for live-reload compatibility. It also exports `TOAST_SCRIPT` — client-side JavaScript that connects to the `/notifications/stream` SSE endpoint and renders incoming notifications as auto-dismissing toast popups on every dashboard page. Navigation: Dashboard → Jobs → Queue → Logs → Config → Notifications. The Jobs page (`/jobs`) lists all known jobs with descriptions, enabled/disabled state, AI backend, model override, schedule, and Run/Pause controls. `createServer()` accepts a `JobInfo[]` array from `main.ts` so the Jobs page can show schedule info for all jobs (including disabled ones not registered with the scheduler). Any changes to config fields, job states, queue categories, or log/task schemas must be reflected in the corresponding page builders — the dashboard is not optional.
 
 ## Jobs
 
