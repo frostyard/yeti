@@ -138,6 +138,36 @@ describe("issue-refiner", () => {
     expect(prompt).toContain("Root cause: missing null check");
   });
 
+  it("buildNewPlanPrompt includes variant structural elements", async () => {
+    const issue = mockIssue({ body: "Add dark mode support", labels: [{ name: "Needs Refinement" }] });
+    mockGh.listOpenIssues.mockResolvedValueOnce([issue]);
+
+    await run([repo]);
+
+    const prompt = mockClaude.runAI.mock.calls[0][0] as string;
+    // Role framing
+    expect(prompt).toContain("senior software engineer");
+    // Source-file-reading instruction
+    expect(prompt).toContain("read the relevant source files");
+    // Two-step structure
+    expect(prompt).toContain("## Step 1");
+    expect(prompt).toContain("## Step 2");
+    // Anti-scope-creep
+    expect(prompt).toContain("Do NOT include changes that are not required by the issue");
+    // Testing approach requirement
+    expect(prompt).toContain("Testing approach");
+    // Dependencies section requirement
+    expect(prompt).toContain("Dependencies");
+    // Actionable clarifying questions guidance
+    expect(prompt).toContain("suggest options where possible");
+    // Narrowest-interpretation guidance
+    expect(prompt).toContain("narrowest reasonable interpretation");
+    // Per-file "why" requirement
+    expect(prompt).toContain("Why the change is needed");
+    // Partial-planning behavior
+    expect(prompt).toContain("Only produce the implementation plan for aspects that are sufficiently clear");
+  });
+
   it("empty output — logs warning but still adds Ready label", async () => {
     const issue = mockIssue({ body: "Test issue body", labels: [{ name: "Needs Refinement" }] });
     mockGh.listOpenIssues.mockResolvedValueOnce([issue]);
