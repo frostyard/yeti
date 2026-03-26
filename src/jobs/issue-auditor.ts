@@ -28,15 +28,14 @@ export async function classifyIssue(
   const openPR = await gh.getOpenPRForIssue(fullName, issue.number);
   if (openPR) return "in-progress";
 
+  // Fetch comments once for both yeti-error triage and plan-state analysis
+  const comments = await gh.getIssueComments(fullName, issue.number);
+
   // [yeti-error] without investigation report → triage handles
   if (extractFingerprint(issue.title) !== null) {
-    const comments = await gh.getIssueComments(fullName, issue.number);
     const hasReport = comments.some((c) => c.body.includes(YETI_ERROR_REPORT_HEADER));
     if (!hasReport) return "needs-triage";
   }
-
-  // Fetch comments to check plan state
-  const comments = await gh.getIssueComments(fullName, issue.number);
 
   // Find the last Yeti plan comment (matching refiner's stricter check)
   const lastPlanIdx = comments.findLastIndex(
