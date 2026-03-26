@@ -152,31 +152,39 @@ function loadConfig() {
   const authToken =
     process.env["YETI_AUTH_TOKEN"] ?? file.authToken ?? "";
 
-  const maxClaudeWorkers = parseInt(
+  const parsedMaxClaudeWorkers = parseInt(
     process.env["YETI_MAX_CLAUDE_WORKERS"] ?? String(file.maxClaudeWorkers ?? 2),
     10,
   );
+  const maxClaudeWorkers =
+    Number.isFinite(parsedMaxClaudeWorkers) && parsedMaxClaudeWorkers >= 0
+      ? parsedMaxClaudeWorkers
+      : 2;
 
-  const claudeTimeoutMs = Math.max(
-    60_000,
-    parseInt(
-      process.env["YETI_CLAUDE_TIMEOUT_MS"] ?? String(file.claudeTimeoutMs ?? 20 * 60 * 1000),
-      10,
-    ),
+  const parsedClaudeTimeoutMs = parseInt(
+    process.env["YETI_CLAUDE_TIMEOUT_MS"] ?? String(file.claudeTimeoutMs ?? 20 * 60 * 1000),
+    10,
   );
+  const claudeTimeoutMs = Number.isFinite(parsedClaudeTimeoutMs)
+    ? Math.max(60_000, parsedClaudeTimeoutMs)
+    : 20 * 60 * 1000;
 
-  const maxCopilotWorkers = parseInt(
+  const parsedMaxCopilotWorkers = parseInt(
     process.env["YETI_MAX_COPILOT_WORKERS"] ?? String(file.maxCopilotWorkers ?? 1),
     10,
   );
+  const maxCopilotWorkers =
+    Number.isFinite(parsedMaxCopilotWorkers) && parsedMaxCopilotWorkers >= 0
+      ? parsedMaxCopilotWorkers
+      : 1;
 
-  const copilotTimeoutMs = Math.max(
-    60_000,
-    parseInt(
-      process.env["YETI_COPILOT_TIMEOUT_MS"] ?? String(file.copilotTimeoutMs ?? 20 * 60 * 1000),
-      10,
-    ),
+  const parsedCopilotTimeoutMs = parseInt(
+    process.env["YETI_COPILOT_TIMEOUT_MS"] ?? String(file.copilotTimeoutMs ?? 20 * 60 * 1000),
+    10,
   );
+  const copilotTimeoutMs = Number.isFinite(parsedCopilotTimeoutMs)
+    ? Math.max(60_000, parsedCopilotTimeoutMs)
+    : 20 * 60 * 1000;
 
   const parsedMaxCodexWorkers = parseInt(
     process.env["YETI_MAX_CODEX_WORKERS"] ?? String(file.maxCodexWorkers ?? 1),
@@ -187,13 +195,13 @@ function loadConfig() {
       ? parsedMaxCodexWorkers
       : 1;
 
-  const codexTimeoutMs = Math.max(
-    60_000,
-    parseInt(
-      process.env["YETI_CODEX_TIMEOUT_MS"] ?? String(file.codexTimeoutMs ?? 20 * 60 * 1000),
-      10,
-    ),
+  const parsedCodexTimeoutMs = parseInt(
+    process.env["YETI_CODEX_TIMEOUT_MS"] ?? String(file.codexTimeoutMs ?? 20 * 60 * 1000),
+    10,
   );
+  const codexTimeoutMs = Number.isFinite(parsedCodexTimeoutMs)
+    ? Math.max(60_000, parsedCodexTimeoutMs)
+    : 20 * 60 * 1000;
 
   const envLogLevel = process.env["YETI_LOG_LEVEL"];
   const rawLogLevel = envLogLevel && (LOG_LEVELS as readonly string[]).includes(envLogLevel)
