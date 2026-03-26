@@ -1,7 +1,5 @@
 import type { NotificationRow } from "../db.js";
-import { PAGE_CSS, buildNav, htmlOpenTag, siteTitle, THEME_SCRIPT, TOAST_SCRIPT, escapeHtml, formatRelativeTime } from "./layout.js";
-
-export type Theme = "system" | "light" | "dark";
+import { PAGE_CSS, buildNav, htmlOpenTag, siteTitle, THEME_SCRIPT, TOAST_SCRIPT, escapeHtml, formatRelativeTime, type Theme } from "./layout.js";
 
 export function buildNotificationsPage(
   notifications: NotificationRow[],
