@@ -22,6 +22,9 @@ When `reviewLoop` is enabled in config, the reviewer can also send plans back to
 
 Issues with the `Needs Plan Review` label that have an unreviewed plan comment (no thumbsup reaction from Yeti on the plan comment).
 
+!!! note "Blocking clarifying questions skip review"
+    Plans that contain blocking clarifying questions (`### Clarifying Questions` or `### Clarifying Questions (blocking)`) never receive the `Needs Plan Review` label in the first place. The issue-refiner withholds the label so the issue waits for human input instead of entering review. Only actionable plans (no clarifying questions, or only non-blocking ones) proceed to plan review.
+
 ## Labels
 
 | Label | Action |

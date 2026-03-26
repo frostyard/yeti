@@ -40,7 +40,7 @@ The auditor classifies each open issue into one of six states:
 | `refined` | Has the `Refined` label (being processed by issue-worker) |
 | `in-progress` | Has an open Yeti PR (`yeti/issue-*` or `yeti/improve-*`) |
 | `needs-triage` | Is a `[yeti-error]` issue without an investigation report |
-| `needs-refinement` | No plan exists, or plan exists with unreacted human feedback |
+| `needs-refinement` | No plan exists, plan exists with unreacted human feedback, or plan has blocking clarifying questions awaiting user response |
 | `ready` | Plan exists with all feedback addressed |
 | `stuck-multi-phase` | Has merged PRs but more phases remain without `Refined` label |
 
