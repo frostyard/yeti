@@ -1,6 +1,6 @@
 import crypto from "node:crypto";
 import { LABELS, ALLOWED_REPOS, GITHUB_OWNERS, SELF_REPO } from "./config.js";
-import { LABEL_TO_CATEGORY, populateQueueCache, removeQueueCacheEntry, removeQueueItem, updateQueueItemPriority, hasPriorityLabel } from "./github.js";
+import { LABEL_TO_CATEGORY, populateQueueCache, removeQueueCacheEntry, removeQueueItem, updateQueueItemPriority, hasPriorityLabel, isRepoNameAllowed } from "./github.js";
 import type { Scheduler } from "./scheduler.js";
 import * as log from "./log.js";
 
@@ -20,17 +20,14 @@ export function verifyWebhookSignature(secret: string, payload: Buffer, signatur
 // ── Repo filtering ──
 
 export function isRepoAllowed(repoFullName: string): boolean {
-  // Always allow SELF_REPO
-  if (repoFullName.toLowerCase() === SELF_REPO.toLowerCase()) return true;
-
   const repoName = repoFullName.split("/").pop()!.toLowerCase();
   const owner = repoFullName.split("/")[0];
 
-  if (ALLOWED_REPOS !== null) {
-    const allowSet = new Set(ALLOWED_REPOS.map((r) => r.toLowerCase()));
-    return allowSet.has(repoName);
-  }
+  // When an explicit allowlist is configured, use the shared check
+  if (ALLOWED_REPOS !== null) return isRepoNameAllowed(repoName);
 
+  // No allowlist — allow self-repo or any repo from configured owners
+  if (repoFullName.toLowerCase() === SELF_REPO.toLowerCase()) return true;
   return GITHUB_OWNERS.some((o) => o.toLowerCase() === owner.toLowerCase());
 }
 

@@ -126,14 +126,20 @@ export function clearRepoCache(): void {
   apiCache.invalidate("all-org-repos");
 }
 
+/** Check if a short repo name is in the ALLOWED_REPOS list (or is the self-repo). */
+export function isRepoNameAllowed(repoName: string): boolean {
+  const selfRepoShort = SELF_REPO.split("/").pop()!.toLowerCase();
+  if (repoName.toLowerCase() === selfRepoShort) return true;
+  if (ALLOWED_REPOS === null) return true;
+  const allowSet = new Set(ALLOWED_REPOS.map(r => r.toLowerCase()));
+  return allowSet.has(repoName.toLowerCase());
+}
+
 function filterRepos(repos: Repo[]): Repo[] {
   if (ALLOWED_REPOS === null) return repos;
 
-  const selfRepoShort = SELF_REPO.split("/").pop()!.toLowerCase();
-  const allowSet = new Set(ALLOWED_REPOS.map(r => r.toLowerCase()));
-  allowSet.add(selfRepoShort);
-
   // Warn about config entries that don't match any discovered repo
+  const selfRepoShort = SELF_REPO.split("/").pop()!.toLowerCase();
   const discoveredNames = new Set(repos.map(r => r.name.toLowerCase()));
   for (const name of ALLOWED_REPOS) {
     if (!discoveredNames.has(name.toLowerCase()) && name.toLowerCase() !== selfRepoShort) {
@@ -142,7 +148,7 @@ function filterRepos(repos: Repo[]): Repo[] {
     }
   }
 
-  return repos.filter(r => allowSet.has(r.name.toLowerCase()));
+  return repos.filter(r => isRepoNameAllowed(r.name));
 }
 
 // ── Category-based queue cache (populated by jobs as they classify items) ──

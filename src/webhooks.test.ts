@@ -46,6 +46,13 @@ vi.mock("./github.js", () => ({
   removeQueueItem: (...args: unknown[]) => mockRemoveQueueItem(...args),
   updateQueueItemPriority: (...args: unknown[]) => mockUpdateQueueItemPriority(...args),
   hasPriorityLabel: (labels: { name: string }[]) => labels.some((l) => l.name === "Priority"),
+  isRepoNameAllowed: (repoName: string) => {
+    const selfRepoShort = mockConfig.selfRepo.split("/").pop()!.toLowerCase();
+    if (repoName.toLowerCase() === selfRepoShort) return true;
+    if (mockConfig.allowedRepos === null) return true;
+    const allowSet = new Set(mockConfig.allowedRepos.map((r: string) => r.toLowerCase()));
+    return allowSet.has(repoName.toLowerCase());
+  },
 }));
 
 import { verifyWebhookSignature, handleWebhookEvent, isRepoAllowed } from "./webhooks.js";
