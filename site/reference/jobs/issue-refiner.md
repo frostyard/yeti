@@ -32,8 +32,8 @@ The refiner processes an issue when any of these conditions are met:
 |-------|--------|
 | `Needs Refinement` | Requires (for new plans on regular issues) |
 | `Needs Refinement` | Removes (after posting plan) |
-| `Needs Plan Review` | Sets (if plan-reviewer is enabled) |
-| `Ready` | Sets (if plan-reviewer is disabled) |
+| `Needs Plan Review` | Sets (if plan-reviewer is enabled and plan is actionable) |
+| `Ready` | Sets (if plan-reviewer is disabled and plan is actionable) |
 | `Ready` | Removes (when new feedback arrives) |
 | `Refined` | Sets (auto-refines `[ci-unrelated]` issues) |
 
@@ -45,8 +45,11 @@ The refiner processes an issue when any of these conditions are met:
 2. Reads the issue body, all comments, and any referenced images
 3. Instructs Claude to read `yeti/OVERVIEW.md` and linked docs for codebase context
 4. Claude reads the relevant source files identified from the issue before planning (plans are grounded in actual code, not assumptions)
-5. **Step 1 — Evaluate:** Claude evaluates whether the issue provides enough detail for a confident plan -- if underspecified, it outputs a `### Clarifying Questions` section with specific questions and instructs the user to respond as a comment
-6. **Step 2 — Draft:** Claude drafts an initial implementation plan (text only, no code changes) for aspects that are sufficiently clear. For each file, the plan specifies what changes are needed and **why** (tied back to the issue requirement), along with:
+5. **Step 1 — Evaluate:** Claude evaluates whether the issue provides enough detail for a confident plan. If underspecified, it outputs clarifying questions classified by severity:
+    - `### Clarifying Questions (blocking)` — Must be answered before a reliable plan can be written. When blocking questions are present, **no implementation plan is produced** and no workflow labels are added. The issue waits for human response.
+    - `### Clarifying Questions (non-blocking)` — The plan is fully implementable but Claude wants to confirm an assumption or preference. The full plan is included alongside the questions, and review proceeds normally.
+    - `### Clarifying Questions` (no suffix) — Treated as blocking by default.
+6. **Step 2 — Draft:** Claude drafts an initial implementation plan (text only, no code changes) when there are no blocking clarifying questions. For each file, the plan specifies what changes are needed and **why** (tied back to the issue requirement), along with:
     - **Implementation order** with rationale (e.g., types before consumers)
     - **Dependencies** between changes
     - **Risks and edge cases**
@@ -55,8 +58,8 @@ The refiner processes an issue when any of these conditions are met:
 8. **Step 4 — Final plan:** Claude outputs only the final revised plan, without intermediate drafts or critique notes
 9. Claude chooses the narrowest reasonable interpretation of ambiguous issues and notes assumptions explicitly
 10. Posts an `## Implementation Plan` comment on the issue
-11. Transitions labels: removes `Needs Refinement`, adds `Needs Plan Review` or `Ready`
-12. For `[ci-unrelated]` issues: also adds `Refined` to skip human approval
+11. Transitions labels: removes `Needs Refinement`. If the plan is actionable (no blocking clarifying questions), adds `Needs Plan Review` or `Ready`. If the plan contains blocking clarifying questions, no workflow label is added — the issue waits for human response.
+12. For `[ci-unrelated]` issues with actionable plans: also adds `Refined` to skip human approval
 
 !!! note "Review loop re-entry"
     When `reviewLoop` is enabled, plan-reviewer can re-add `Needs Refinement` to trigger another refinement cycle. The issue-refiner handles this the same way as human-initiated re-refinement — it reads prior comments (including the review) and updates the plan.
@@ -68,13 +71,15 @@ The refiner processes an issue when any of these conditions are met:
     - Address each feedback item individually (never silently drop feedback; explain disagreements)
     - Preserve plan sections not affected by the feedback to avoid regressions
     - Stay within the original issue scope (out-of-scope suggestions go in a separate `### Out of Scope` section)
-    - Output a `### Clarifying Questions` section if any feedback is ambiguous or contradictory, rather than guessing
+    - Read every source file that the feedback references before revising plan sections
+    - Output a `### Clarifying Questions` section (blocking or non-blocking) if any feedback is ambiguous or contradictory, rather than guessing
+    - Perform a verification step: check all feedback was addressed, no plan items were accidentally removed, and implementation order is still correct
     - Include a testing approach for verifying the changes
 3. Claude produces an updated plan
 4. **Edits the existing plan comment** in-place (does not create a new comment)
 5. If Claude includes a `### Note` section, it is posted as a separate comment
 6. Reacts with thumbsup to each addressed feedback comment
-7. Re-adds `Needs Plan Review` or `Ready`
+7. If the updated plan is actionable, re-adds `Needs Plan Review` or `Ready`. If the plan contains blocking clarifying questions, no workflow label is added.
 
 When no specific feedback is provided (e.g., a re-plan via label), the refiner asks Claude to re-evaluate the plan for missing files, edge cases, implementation order, and testing sufficiency.
 

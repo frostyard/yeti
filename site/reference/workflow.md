@@ -10,6 +10,8 @@ The complete journey of an issue through Yeti, from the first flake of an idea t
 stateDiagram-v2
     [*] --> Created: New issue
     Created --> Planning: Add "Needs Refinement" label
+    Planning --> AwaitingClarification: Blocking clarifying questions
+    AwaitingClarification --> Planning: Human responds to questions
     Planning --> PlanReview: plan-reviewer enabled
     Planning --> HumanReview: plan-reviewer disabled
     PlanReview --> HumanReview: Review posted, "Ready" added
@@ -41,6 +43,21 @@ For environments where Mermaid is not available:
                           |     Planning      |  <-- issue-refiner generates plan
                           +---------+---------+
                                     |
+                    +---------------+---------------+
+                    |                               |
+            Blocking clarifying              Plan is actionable
+              questions found                       |
+                    |                               |
+          +---------v---------+                     |
+          | Awaiting Human    |                     |
+          | Clarification     |                     |
+          +---------+---------+                     |
+                    |                               |
+              Human responds                        |
+              (triggers re-plan)                    |
+                    |                               |
+              (back to Planning)                    |
+                                                    |
                     +---------------+---------------+
                     |                               |
             plan-reviewer               plan-reviewer
@@ -123,9 +140,10 @@ The refiner reads the issue, any existing comments, and the repository's `yeti/O
 **Label transitions:**
 
 - Removes `Needs Refinement`
-- Adds `Needs Plan Review` (if plan-reviewer is enabled) **or** `Ready` (if disabled)
+- If the plan is **actionable** (no blocking clarifying questions): adds `Needs Plan Review` (if plan-reviewer is enabled) **or** `Ready` (if disabled)
+- If the plan has **blocking clarifying questions**: no workflow label is added. The issue waits for the human to respond to the questions as a comment, which triggers a new refinement cycle.
 
-For `[ci-unrelated]` issues, the refiner also auto-adds `Refined` to skip human approval entirely.
+For `[ci-unrelated]` issues with actionable plans, the refiner also auto-adds `Refined` to skip human approval entirely.
 
 ### 3. Plan Review (plan-reviewer, optional)
 
