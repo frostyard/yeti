@@ -100,7 +100,7 @@ See [Jobs](jobs.md) for detailed behavior of each.
 
 | Job | Trigger | Interval | Summary |
 |-----|---------|----------|---------|
-| `issue-refiner` | Issues labelled `Needs Refinement` | 5 min | Posts implementation plans using a four-step prompt (evaluate plannability → draft plan → two rounds of self-critique against unverified assumptions, scope discipline, ordering correctness, and risk honesty → produce final revised plan); asks clarifying questions for underspecified issues; enforces anti-scope-creep and narrowest-interpretation guards; refines plans based on unreacted human feedback; responds to follow-up questions on issues with open PRs |
+| `issue-refiner` | Issues labelled `Needs Refinement` | 5 min | Posts implementation plans using a four-step prompt (evaluate plannability → draft plan → two rounds of self-critique against unverified assumptions, scope discipline, ordering correctness, and risk honesty → produce final revised plan); asks clarifying questions for underspecified issues; enforces anti-scope-creep and narrowest-interpretation guards; refines plans via structured prompt (grounded file reads, per-comment processing, scope guard, conflict flagging, post-revision verification); responds to follow-up questions on issues with open PRs |
 | `plan-reviewer` | Issues labelled `Needs Plan Review` | 10 min | Adversarial review of implementation plans using configurable AI backend |
 | `issue-worker` | Label `Refined` | 5 min | Implements the issue, creates a PR |
 | `ci-fixer` | Any open PR with failing checks | 10 min | Resolves merge conflicts, fixes CI failures |
