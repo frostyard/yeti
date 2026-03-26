@@ -5,7 +5,7 @@ import * as log from "../log.js";
 import { reportError } from "../error-reporter.js";
 import { notify } from "../notify.js";
 import { extractFingerprint, REPORT_HEADER as YETI_ERROR_REPORT_HEADER } from "./triage-yeti-errors.js";
-import { PLAN_HEADER, findPlanComment, parsePlan } from "../plan-parser.js";
+import { PLAN_HEADER, findPlanComment, parsePlan, isPlanActionable } from "../plan-parser.js";
 
 type IssueState =
   | "refined"
@@ -64,6 +64,12 @@ export async function classifyIssue(
       // Treat as unreacted to be safe
       return "needs-refinement";
     }
+  }
+
+  // Plan has blocking clarifying questions awaiting user response
+  const planBody = comments[lastPlanIdx].body;
+  if (!isPlanActionable(planBody)) {
+    return "needs-refinement";
   }
 
   // Check for stuck multi-phase issues

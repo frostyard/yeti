@@ -80,6 +80,7 @@ vi.mock("./triage-yeti-errors.js", () => ({
 import { run } from "./issue-refiner.js";
 import { reportError } from "../error-reporter.js";
 import { extractFingerprint } from "./triage-yeti-errors.js";
+import { ENABLED_JOBS } from "../config.js";
 
 describe("issue-refiner", () => {
   const repo = mockRepo();
@@ -169,8 +170,9 @@ describe("issue-refiner", () => {
     expect(prompt).toContain("narrowest reasonable interpretation");
     // Per-file "why" requirement
     expect(prompt).toContain("Why the change is needed");
-    // Partial-planning behavior
-    expect(prompt).toContain("Only produce the implementation plan for aspects that are sufficiently clear");
+    // Blocking/non-blocking clarifying questions classification
+    expect(prompt).toContain("### Clarifying Questions (blocking)");
+    expect(prompt).toContain("### Clarifying Questions (non-blocking)");
     // Replan self-critique dimensions
     expect(prompt).toContain("Unverified assumptions");
     expect(prompt).toContain("Scope discipline");
@@ -475,6 +477,89 @@ describe("issue-refiner", () => {
 
     expect(mockClaude.createWorktree).not.toHaveBeenCalled();
     expect(mockGh.commentOnIssue).not.toHaveBeenCalled();
+  });
+
+  describe("clarifying questions gating", () => {
+    it("plan with blocking clarifying questions skips review label (plan-reviewer enabled)", async () => {
+      (ENABLED_JOBS as string[]).push("plan-reviewer");
+      const issue = mockIssue({ body: "Vague issue", labels: [{ name: "Needs Refinement" }] });
+      mockGh.listOpenIssues.mockResolvedValueOnce([issue]);
+      mockClaude.runAI.mockResolvedValue("### Clarifying Questions\n\n1. Should X do A or B?");
+
+      await run([repo]);
+
+      expect(mockGh.addLabel).not.toHaveBeenCalledWith(repo.fullName, issue.number, "Needs Plan Review");
+      expect(mockGh.addLabel).not.toHaveBeenCalledWith(repo.fullName, issue.number, "Ready");
+      expect(mockGh.removeLabel).toHaveBeenCalledWith(repo.fullName, issue.number, "Needs Refinement");
+      (ENABLED_JOBS as string[]).length = 0;
+    });
+
+    it("normal plan triggers review label (plan-reviewer enabled)", async () => {
+      (ENABLED_JOBS as string[]).push("plan-reviewer");
+      const issue = mockIssue({ body: "Clear issue", labels: [{ name: "Needs Refinement" }] });
+      mockGh.listOpenIssues.mockResolvedValueOnce([issue]);
+      mockClaude.runAI.mockResolvedValue("## Plan\nDo the thing");
+
+      await run([repo]);
+
+      expect(mockGh.addLabel).toHaveBeenCalledWith(repo.fullName, issue.number, "Needs Plan Review");
+      (ENABLED_JOBS as string[]).length = 0;
+    });
+
+    it("plan with clarifying questions + partial plan content still skips review", async () => {
+      (ENABLED_JOBS as string[]).push("plan-reviewer");
+      const issue = mockIssue({ body: "Semi-clear issue", labels: [{ name: "Needs Refinement" }] });
+      mockGh.listOpenIssues.mockResolvedValueOnce([issue]);
+      mockClaude.runAI.mockResolvedValue("## Plan\nDo stuff\n\n### Clarifying Questions\n\n1. What about X?");
+
+      await run([repo]);
+
+      expect(mockGh.addLabel).not.toHaveBeenCalledWith(repo.fullName, issue.number, "Needs Plan Review");
+      expect(mockGh.addLabel).not.toHaveBeenCalledWith(repo.fullName, issue.number, "Ready");
+      (ENABLED_JOBS as string[]).length = 0;
+    });
+
+    it("non-blocking clarifying questions still trigger review", async () => {
+      (ENABLED_JOBS as string[]).push("plan-reviewer");
+      const issue = mockIssue({ body: "Mostly clear issue", labels: [{ name: "Needs Refinement" }] });
+      mockGh.listOpenIssues.mockResolvedValueOnce([issue]);
+      mockClaude.runAI.mockResolvedValue("## Plan\nDo stuff\n\n### Clarifying Questions (non-blocking)\n\n1. Prefer A or B?");
+
+      await run([repo]);
+
+      expect(mockGh.addLabel).toHaveBeenCalledWith(repo.fullName, issue.number, "Needs Plan Review");
+      (ENABLED_JOBS as string[]).length = 0;
+    });
+
+    it("refinement with clarifying questions skips review label", async () => {
+      const issue = mockIssue({ body: "Test issue body" });
+      mockGh.listOpenIssues.mockResolvedValueOnce([issue]);
+
+      const planComment = { id: 501, body: "<!-- yeti-automated -->## Implementation Plan\n\nOriginal plan", login: "yeti-bot" };
+      const humanComment = { id: 502, body: "Please change approach", login: "reviewer" };
+      mockGh.getIssueComments.mockResolvedValue([planComment, humanComment]);
+      mockGh.getCommentReactions.mockResolvedValue([]);
+      mockClaude.runAI.mockResolvedValue("### Clarifying Questions\n\n1. Which approach?");
+
+      await run([repo]);
+
+      expect(mockGh.addLabel).not.toHaveBeenCalledWith(repo.fullName, issue.number, "Needs Plan Review");
+      expect(mockGh.addLabel).not.toHaveBeenCalledWith(repo.fullName, issue.number, "Ready");
+    });
+
+    it("ci-unrelated issue with clarifying questions does not auto-add Refined", async () => {
+      const issue = mockIssue({
+        title: "[ci-unrelated] CI failures unrelated to PR changes",
+        body: "CI failures detected",
+      });
+      mockGh.listOpenIssues.mockResolvedValueOnce([issue]);
+      mockClaude.runAI.mockResolvedValue("### Clarifying Questions\n\n1. Which CI pipeline?");
+
+      await run([repo]);
+
+      expect(mockGh.addLabel).not.toHaveBeenCalledWith(repo.fullName, issue.number, "Refined");
+      expect(mockGh.addLabel).not.toHaveBeenCalledWith(repo.fullName, issue.number, "Ready");
+    });
   });
 
   it("re-plans when Needs Refinement label is present even if a plan already exists", async () => {

@@ -100,7 +100,7 @@ See [Jobs](jobs.md) for detailed behavior of each.
 
 | Job | Trigger | Interval | Summary |
 |-----|---------|----------|---------|
-| `issue-refiner` | Issues labelled `Needs Refinement` | 5 min | Posts implementation plans using a four-step prompt (evaluate plannability → draft plan → two rounds of self-critique against unverified assumptions, scope discipline, ordering correctness, and risk honesty → produce final revised plan); asks clarifying questions for underspecified issues; enforces anti-scope-creep and narrowest-interpretation guards; refines plans via structured prompt (grounded file reads, per-comment processing, scope guard, conflict flagging, post-revision verification); responds to follow-up questions on issues with open PRs |
+| `issue-refiner` | Issues labelled `Needs Refinement` | 5 min | Posts implementation plans using a four-step prompt (evaluate plannability → draft plan → two rounds of self-critique against unverified assumptions, scope discipline, ordering correctness, and risk honesty → produce final revised plan); asks clarifying questions for underspecified issues using blocking/non-blocking classification; gates review on plan actionability (blocking questions skip review and wait for human input); enforces anti-scope-creep and narrowest-interpretation guards; refines plans via structured prompt (grounded file reads, per-comment processing, scope guard, conflict flagging, post-revision verification); responds to follow-up questions on issues with open PRs |
 | `plan-reviewer` | Issues labelled `Needs Plan Review` | 10 min | Adversarial review of implementation plans using configurable AI backend |
 | `issue-worker` | Label `Refined` | 5 min | Implements the issue, creates a PR |
 | `ci-fixer` | Any open PR with failing checks | 10 min | Resolves merge conflicts, fixes CI failures |
@@ -130,9 +130,9 @@ not labels. Six labels are used:
 
 ```
 Issues:
-  Needs Refinement label →  (refiner posts plan)         →  Needs Plan Review added (if plan-reviewer enabled) or Ready added
+  Needs Refinement label →  (refiner posts plan)         →  Needs Plan Review added (if plan-reviewer enabled and plan actionable) or Ready added (if actionable) or no label (if blocking questions — waits for human)
   Needs Plan Review label → (plan-reviewer critiques)    →  Ready added (default) or Needs Refinement (if reviewLoop + NEEDS REVISION + under maxPlanRounds)
-  Unreacted feedback     →  (refiner refines plan)       →  Needs Plan Review or Ready label re-added
+  Unreacted feedback     →  (refiner refines plan)       →  Needs Plan Review or Ready (if actionable) or no label (if blocking questions)
   Open PR + follow-up Q  →  (refiner posts response)     →  👍 reactions added (no label changes)
   Refined label          →  (worker creates PR)          →  Refined removed, Ready removed, In Review added
   [yeti-error] title    →  (triage-yeti-errors)        →  investigation report posted

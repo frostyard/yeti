@@ -8,7 +8,7 @@ import { reportError } from "../error-reporter.js";
 import { notify } from "../notify.js";
 import { processTextForImages } from "../images.js";
 import { extractFingerprint, REPORT_HEADER as YETI_ERROR_REPORT_HEADER } from "./triage-yeti-errors.js";
-import { PLAN_HEADER } from "../plan-parser.js";
+import { PLAN_HEADER, isPlanActionable } from "../plan-parser.js";
 
 function isCiUnrelatedIssue(issue: gh.Issue): boolean {
   return issue.title.startsWith("[ci-unrelated]");
@@ -194,11 +194,13 @@ function buildNewPlanPrompt(fullName: string, issue: gh.Issue, comments: gh.Issu
     ``,
     `After listing your clarifying questions, instruct the user to respond to them as a comment on the GitHub issue so that the next refinement cycle can incorporate their answers and produce a complete plan.`,
     ``,
-    `Only produce the implementation plan for aspects that are sufficiently clear. If nothing is clear enough to plan, output only the clarifying questions and the instruction to respond.`,
+    `When you have clarifying questions, classify them:`,
+    `- Use \`### Clarifying Questions (blocking)\` if any question must be answered before a reliable plan can be written. Output only the questions — no implementation plan, even a partial one. A partial plan built on unverified assumptions adds noise, wastes review compute, and creates false confidence. The user will respond to your questions as a comment; the next refinement cycle will then produce a complete, grounded plan.`,
+    `- Use \`### Clarifying Questions (non-blocking)\` if the plan is fully implementable but you want to confirm an assumption or preference. Include the full implementation plan alongside the questions — review will proceed.`,
     ``,
-    `## Steps 2–4 apply only to aspects that are sufficiently clear to plan.`,
-    `## If nothing is plannable, skip directly to output and produce only the`,
-    `## clarifying questions from Step 1.`,
+    `## Steps 2–4 apply only when there are no blocking clarifying questions.`,
+    `## If the issue has blocking questions, skip directly to output and produce`,
+    `## only the clarifying questions from Step 1.`,
     ``,
     `## Step 2: Draft an initial implementation plan`,
     ``,
@@ -284,14 +286,18 @@ async function processIssue(repo: Repo, issue: gh.Issue): Promise<void> {
       log.warn(`[issue-refiner] Empty plan output for ${fullName}#${issue.number}`);
     }
 
-    if (ENABLED_JOBS.includes("plan-reviewer")) {
-      await gh.addLabel(fullName, issue.number, LABELS.needsPlanReview);
-    } else {
-      await gh.addLabel(fullName, issue.number, LABELS.ready);
+    const actionable = isPlanActionable(planOutput);
+    if (actionable) {
+      if (ENABLED_JOBS.includes("plan-reviewer")) {
+        await gh.addLabel(fullName, issue.number, LABELS.needsPlanReview);
+      } else {
+        await gh.addLabel(fullName, issue.number, LABELS.ready);
+      }
     }
+    // If not actionable: no label — issue waits for human response.
     await gh.removeLabel(fullName, issue.number, LABELS.needsRefinement);
 
-    if (isCiUnrelatedIssue(issue)) {
+    if (isCiUnrelatedIssue(issue) && actionable) {
       await gh.addLabel(fullName, issue.number, LABELS.refined);
       log.info(`[issue-refiner] Auto-refined ci-unrelated issue ${fullName}#${issue.number}`);
     }
@@ -328,11 +334,14 @@ async function processRefinement(
     const comments = await gh.getIssueComments(fullName, issue.number);
     const lastPlanIdx = comments.findLastIndex((c) => c.body.includes(PLAN_HEADER));
 
+    let refinedOutput = "";
+
     if (lastPlanIdx === -1) {
       log.warn(`[issue-refiner] No plan comment found for ${fullName}#${issue.number}, posting fresh plan`);
       const imageContext = await processTextForImages([issue.body, ...comments.map((c) => c.body)], wtPath);
       const prompt = buildNewPlanPrompt(fullName, issue, comments) + imageContext;
       const planOutput = await claude.resolveEnqueue(aiOptions)(() => claude.runAI(prompt, wtPath!, aiOptions), gh.hasPriorityLabel(issue.labels));
+      refinedOutput = planOutput;
 
       if (planOutput.trim()) {
         await gh.commentOnIssue(fullName, issue.number, `${PLAN_HEADER}\n\n${planOutput}`);
@@ -348,6 +357,7 @@ async function processRefinement(
       const imageContext = await processTextForImages([issue.body], wtPath);
       const prompt = buildRefinementPrompt(fullName, issue, planComment.body, feedback) + imageContext;
       const planOutput = await claude.resolveEnqueue(aiOptions)(() => claude.runAI(prompt, wtPath!, aiOptions), gh.hasPriorityLabel(issue.labels));
+      refinedOutput = planOutput;
 
       if (planOutput.trim()) {
         // Check for "### Note" section to post separately
@@ -374,11 +384,15 @@ async function processRefinement(
       await gh.addReaction(fullName, comment.id, "+1");
     }
 
-    if (ENABLED_JOBS.includes("plan-reviewer")) {
-      await gh.addLabel(fullName, issue.number, LABELS.needsPlanReview);
-    } else {
-      await gh.addLabel(fullName, issue.number, LABELS.ready);
+    const actionable = isPlanActionable(refinedOutput);
+    if (actionable) {
+      if (ENABLED_JOBS.includes("plan-reviewer")) {
+        await gh.addLabel(fullName, issue.number, LABELS.needsPlanReview);
+      } else {
+        await gh.addLabel(fullName, issue.number, LABELS.ready);
+      }
     }
+    // If not actionable: no label — issue waits for human response.
     db.recordTaskComplete(taskId);
   } catch (err) {
     db.recordTaskFailed(taskId, String(err));

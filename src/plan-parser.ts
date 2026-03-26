@@ -44,6 +44,19 @@ export function parsePlan(planComment: string): ParsedPlan {
 }
 
 /**
+ * Returns false if the plan contains blocking clarifying questions,
+ * indicating the planner needs user input before a review is useful.
+ *
+ * - `### Clarifying Questions (non-blocking)` → actionable (review proceeds)
+ * - `### Clarifying Questions (blocking)` → not actionable (skip review)
+ * - `### Clarifying Questions` (no suffix) → not actionable (safe default)
+ */
+export function isPlanActionable(planOutput: string): boolean {
+  if (/^###\s+Clarifying Questions\s+\(non-blocking\)/m.test(planOutput)) return true;
+  return !/^###\s+Clarifying Questions/m.test(planOutput);
+}
+
+/**
  * Find the most recent plan comment in a list of issue comments.
  * Looks for comments containing `## Implementation Plan` (uses includes
  * rather than startsWith so it still matches when the Yeti visible header

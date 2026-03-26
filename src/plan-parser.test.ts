@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { parsePlan, findPlanComment } from "./plan-parser.js";
+import { parsePlan, findPlanComment, isPlanActionable } from "./plan-parser.js";
 
 describe("parsePlan", () => {
   it("parses a multi-PR plan with 3 phases", () => {
@@ -156,5 +156,35 @@ describe("findPlanComment", () => {
   it("returns null for empty comments", () => {
     const result = findPlanComment([]);
     expect(result).toBeNull();
+  });
+});
+
+describe("isPlanActionable", () => {
+  it("returns true for a normal plan with no clarifying questions", () => {
+    expect(isPlanActionable("## Plan\nDo stuff\n\n### Risks\nNone")).toBe(true);
+  });
+
+  it("returns true for empty string", () => {
+    expect(isPlanActionable("")).toBe(true);
+  });
+
+  it("returns false for output with unqualified clarifying questions (safe default)", () => {
+    expect(isPlanActionable("### Clarifying Questions\n\n1. Should X do A or B?")).toBe(false);
+  });
+
+  it("returns false for blocking clarifying questions", () => {
+    expect(isPlanActionable("### Clarifying Questions (blocking)\n\n1. What is the scope?")).toBe(false);
+  });
+
+  it("returns true for non-blocking clarifying questions", () => {
+    expect(isPlanActionable("## Plan\nDo stuff\n\n### Clarifying Questions (non-blocking)\n\n1. Prefer A or B?")).toBe(true);
+  });
+
+  it("returns false when clarifying questions appear after plan content", () => {
+    expect(isPlanActionable("## Plan\nDo stuff\n\n### Clarifying Questions\n\n1. What about X?")).toBe(false);
+  });
+
+  it("returns true when header appears inside a blockquote (not at line start)", () => {
+    expect(isPlanActionable("> ### Clarifying Questions\n> 1. Something?")).toBe(true);
   });
 });
