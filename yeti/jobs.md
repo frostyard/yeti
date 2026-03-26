@@ -64,7 +64,20 @@ Three modes:
 - Finds human comments posted after the latest plan comment
 - Checks each comment for a 👍 reaction from Yeti (tracked items)
 - If unreacted comments exist, creates a worktree on branch `yeti/plan-<N>-<hex4>`
-- Asks Claude to produce an updated plan addressing the feedback
+- Asks Claude to produce an updated plan addressing the feedback, using a
+  structured refinement prompt that enforces:
+  - **Grounding**: Claude must read every source file referenced by feedback
+    or proposed for change before revising those plan sections
+  - **Per-comment processing**: Each feedback comment is addressed one at a
+    time in order — quote, explain the change, or escalate to clarifying questions
+  - **Scope guard**: No new files, dependencies, refactors, or "while we're
+    at it" improvements beyond what feedback requested; out-of-scope
+    suggestions are captured in a separate section
+  - **Conflict handling**: Contradictory feedback is flagged in clarifying
+    questions rather than silently choosing a side
+  - **Verification step**: After revision, Claude re-checks that every
+    comment was addressed, no risks were accidentally removed, and
+    implementation order remains correct
 - **Edits the original plan comment in-place** (rather than posting a new one),
   keeping context concise as plans are refined iteratively
 - Reacts 👍 to each addressed comment
