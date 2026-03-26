@@ -228,6 +228,19 @@ describe("issue-auditor", () => {
     expect(mockNotify).not.toHaveBeenCalled();
   });
 
+  it("does not add Ready when plan has blocking clarifying questions", async () => {
+    const issue = mockIssue({ labels: [] });
+    mockGh.listOpenIssues.mockResolvedValueOnce([issue]);
+    mockGh.getIssueComments.mockResolvedValue([
+      { id: 100, body: "<!-- yeti-automated -->\n## Implementation Plan\n\n### Clarifying Questions\n\n1. Should we do X?", login: "yeti-bot[bot]" },
+    ]);
+    mockGh.listMergedPRsForIssue.mockResolvedValue([]);
+
+    await run([repo]);
+
+    expect(mockGh.addLabel).not.toHaveBeenCalledWith(repo.fullName, issue.number, "Ready");
+  });
+
   it("removes stale In Review label from non-in-progress issues", async () => {
     const issue = mockIssue({ labels: [{ name: "In Review" }] });
     mockGh.listOpenIssues.mockResolvedValueOnce([issue]);
@@ -296,6 +309,24 @@ describe("issue-auditor", () => {
       const issue = mockIssue();
       mockGh.getIssueComments.mockResolvedValue([
         { id: 100, body: "<!-- yeti-automated -->\n## Implementation Plan\nDo something", login: "yeti-bot[bot]" },
+      ]);
+      mockGh.listMergedPRsForIssue.mockResolvedValue([]);
+      expect(await classifyIssue(repo, issue)).toBe("ready");
+    });
+
+    it("returns needs-refinement when plan has blocking clarifying questions", async () => {
+      const issue = mockIssue();
+      mockGh.getIssueComments.mockResolvedValue([
+        { id: 100, body: "<!-- yeti-automated -->\n## Implementation Plan\n\n### Clarifying Questions\n\n1. Should we do X?", login: "yeti-bot[bot]" },
+      ]);
+      mockGh.listMergedPRsForIssue.mockResolvedValue([]);
+      expect(await classifyIssue(repo, issue)).toBe("needs-refinement");
+    });
+
+    it("returns ready when plan has non-blocking clarifying questions", async () => {
+      const issue = mockIssue();
+      mockGh.getIssueComments.mockResolvedValue([
+        { id: 100, body: "<!-- yeti-automated -->\n## Implementation Plan\nDo something\n\n### Clarifying Questions (non-blocking)\n\n1. Prefer A or B?", login: "yeti-bot[bot]" },
       ]);
       mockGh.listMergedPRsForIssue.mockResolvedValue([]);
       expect(await classifyIssue(repo, issue)).toBe("ready");
