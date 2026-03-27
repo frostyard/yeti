@@ -338,6 +338,18 @@ Individual jobs can be paused and resumed via the dashboard (`POST /pause/:job`)
 or pre-configured via `pausedJobs` in `config.json`. Paused jobs skip their
 scheduled ticks but can still be triggered manually.
 
+### Git Identity for Direct Commits
+
+All jobs normally commit via `runAI()`, which delegates to the Claude/Copilot/Codex
+CLI — these handle git identity internally. The one exception is
+`ensureClaudeMdDocBlock()` in doc-maintainer, which commits directly via
+`claude.git()`. Because the `yeti` system user has no global git config, direct
+`git commit` calls must pass inline identity flags:
+`git -c user.email=yeti@users.noreply.github.com -c user.name=Yeti commit ...`.
+The `GIT_COMMIT_CLAUDEMD` constant in `doc-maintainer.ts` centralizes this. Any
+future code path that commits directly (bypassing AI backends) needs the same
+treatment.
+
 ### Commit Tag
 
 Doc-maintainer commits include `[doc-maintainer]` in the message. This is used
