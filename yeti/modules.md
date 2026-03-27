@@ -230,8 +230,13 @@ issue-auditor to identify plan comments (centralized to eliminate duplicate
 definitions). Looks for `### PR N:` or `### Phase N:` headers to split a plan
 into phases. Also provides `findPlanComment()` to locate the most recent plan
 comment in an issue's comment history (uses `includes` rather than `startsWith`
-so it still matches when the Yeti visible header is prepended). Used by
-issue-worker to implement multi-phase plans sequentially.
+so it still matches when the Yeti visible header is prepended). `isPlanActionable()`
+checks whether a plan contains blocking clarifying questions: returns `false` for
+`### Clarifying Questions` or `### Clarifying Questions (blocking)`, `true` for
+`### Clarifying Questions (non-blocking)` or no questions section. Used by
+issue-refiner (to gate label assignment), issue-auditor (to classify issues with
+blocking questions as `needs-refinement`), and issue-worker to implement
+multi-phase plans sequentially.
 
 **`log.ts`** — Timestamped console logging with four levels: `debug`, `info`,
 `warn`, `error`. Each level (except `error`) is gated by the `LOG_LEVEL` config
