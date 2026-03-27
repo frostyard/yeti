@@ -319,9 +319,7 @@ describe("doc-maintainer", () => {
 
   describe("CLAUDE.md documentation block", () => {
     it("creates CLAUDE.md with documentation block when file doesn't exist", async () => {
-      mockFs.existsSync.mockImplementation((p: string) =>
-        !String(p).endsWith("CLAUDE.md"),
-      );
+      mockFs.existsSync.mockReturnValue(false);
 
       await ensureClaudeMdDocBlock("/tmp/worktree");
 
@@ -437,9 +435,7 @@ describe("doc-maintainer", () => {
     });
 
     it("commit message does not contain [doc-maintainer]", async () => {
-      mockFs.existsSync.mockImplementation((p: string) =>
-        !String(p).endsWith("CLAUDE.md"),
-      );
+      mockFs.existsSync.mockReturnValue(false);
 
       await ensureClaudeMdDocBlock("/tmp/worktree");
 
@@ -451,11 +447,21 @@ describe("doc-maintainer", () => {
     });
 
     it("CLAUDE.md change causes job to continue past SHA skip", async () => {
-      // First call to existsSync for CLAUDE.md returns false (triggers creation),
-      // subsequent calls return true
-      mockFs.existsSync.mockImplementation((p: string) =>
-        !String(p).endsWith("CLAUDE.md"),
-      );
+      // CLAUDE.md doesn't exist initially (triggers creation), but .plans
+      // and other paths use default behavior
+      let claudeMdCreated = false;
+      mockFs.existsSync.mockImplementation((p: string) => {
+        if (String(p).endsWith("CLAUDE.md")) {
+          if (!claudeMdCreated) {
+            claudeMdCreated = true;
+            return false;
+          }
+          return true;
+        }
+        // .plans dir doesn't exist (no plans written in this test)
+        if (String(p).includes(".plans")) return false;
+        return true;
+      });
 
       // After ensureClaudeMdDocBlock commits, HEAD is now different
       mockClaude.getHeadSha.mockResolvedValue("newsha-after-claudemd");

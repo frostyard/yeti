@@ -67,7 +67,7 @@ export async function ensureClaudeMdDocBlock(wtPath: string): Promise<boolean> {
   }
 
   // No ## Documentation section exists — append the full block
-  const newContent = content.trimEnd() + "\n" + CLAUDE_MD_DOC_SECTION;
+  const newContent = content.trimEnd() + CLAUDE_MD_DOC_SECTION;
   fs.writeFileSync(filePath, newContent);
   await claude.git(["add", "CLAUDE.md"], wtPath);
   await claude.git(["commit", "-m", "docs: ensure CLAUDE.md documentation block"], wtPath);
@@ -133,7 +133,7 @@ async function processRepo(repo: Repo): Promise<void> {
     return;
   }
 
-  // Step 2: Check if maintenance is needed
+  // Step 2: Create worktree and ensure CLAUDE.md documentation block
   const branchName = `yeti/docs-${claude.datestamp()}-${claude.randomSuffix()}`;
   const taskId = db.recordTaskStart("doc-maintainer", fullName, 0, null);
   let wtPath: string | undefined;
@@ -144,6 +144,7 @@ async function processRepo(repo: Repo): Promise<void> {
 
     await ensureClaudeMdDocBlock(wtPath);
 
+    // Step 3: Check if maintenance is needed (SHA comparison)
     const headSha = await claude.getHeadSha(wtPath);
     const lastDocSha = await claude.getLastDocMaintainerSha(wtPath);
 
@@ -153,7 +154,7 @@ async function processRepo(repo: Repo): Promise<void> {
       return;
     }
 
-    // Step 3: Fetch recently-closed issues with implementation plans
+    // Step 4: Fetch recently-closed issues with implementation plans
     const sinceDate = lastDocSha
       ? await claude.getCommitDate(wtPath, lastDocSha)
       : new Date(Date.now() - 7 * 24 * 60 * 60 * 1000); // fallback: 7 days
@@ -189,7 +190,7 @@ async function processRepo(repo: Repo): Promise<void> {
       log.info(`[doc-maintainer] Wrote ${plans.length} plan(s) to .plans/ for ${fullName}`);
     }
 
-    // Step 4: Generate/update documentation
+    // Step 5: Generate/update documentation
     log.info(`[doc-maintainer] Generating docs for ${fullName}`);
     const prompt = buildDocPrompt(fullName, plans.length);
     const aiOptions = JOB_AI["doc-maintainer"];
@@ -206,7 +207,7 @@ async function processRepo(repo: Repo): Promise<void> {
       }
     }
 
-    // Step 5: Push and create PR
+    // Step 6: Push and create PR
     if (await claude.hasNewCommits(wtPath, repo.defaultBranch) && await claude.hasTreeDiff(wtPath, repo.defaultBranch)) {
       const description = await claude.generateDocsPRDescription(wtPath, repo.defaultBranch, aiOptions);
       await claude.pushBranch(wtPath, branchName);
