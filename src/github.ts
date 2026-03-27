@@ -5,7 +5,7 @@ import { notify } from "./notify.js";
 import { reportError } from "./error-reporter.js";
 
 const RATE_LIMIT_RE = /rate limit/i;
-const TRANSIENT_RE = /\b(400|500|502|503|504|ETIMEDOUT|ECONNRESET|ECONNREFUSED|connection reset)\b|Could not resolve to a|TLS handshake timeout|Something went wrong|stream error/i;
+const TRANSIENT_RE = /\b(400|500|502|503|504|ETIMEDOUT|ECONNRESET|ECONNREFUSED|connection reset)\b|Could not resolve to a|TLS handshake timeout|Something went wrong|stream error|unexpected EOF/i;
 const MAX_RETRIES = 3;
 
 // ── Circuit breaker (rate limit protection) ──

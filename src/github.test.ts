@@ -280,6 +280,27 @@ describe("gh retry logic", () => {
     expect(attempt).toBe(3);
   });
 
+  it("retries on unexpected EOF", async () => {
+    let attempt = 0;
+    mockExecFile.mockImplementation((_cmd: string, _args: string[], _opts: any, cb: any) => {
+      attempt++;
+      if (attempt < 3) {
+        const msg = 'Post "https://api.github.com/graphql": unexpected EOF';
+        cb(new Error(msg), "", msg);
+      } else {
+        cb(null, "[]", "");
+      }
+    });
+
+    const promise = listRepos();
+
+    await vi.advanceTimersByTimeAsync(1000);
+    await vi.advanceTimersByTimeAsync(2000);
+
+    await promise;
+    expect(attempt).toBe(3);
+  });
+
   it("rejects immediately on non-transient errors", async () => {
     mockExecFile.mockImplementation((_cmd: string, _args: string[], _opts: any, cb: any) => {
       cb(new Error("permission denied"), "", "permission denied");
