@@ -333,7 +333,7 @@ describe("doc-maintainer", () => {
       );
       expect(mockClaude.git).toHaveBeenCalledWith(["add", "CLAUDE.md"], "/tmp/worktree");
       expect(mockClaude.git).toHaveBeenCalledWith(
-        ["commit", "-m", "docs: ensure CLAUDE.md documentation block"],
+        ["-c", "user.email=yeti@users.noreply.github.com", "-c", "user.name=Yeti", "commit", "-m", "docs: ensure CLAUDE.md documentation block"],
         "/tmp/worktree",
       );
     });
@@ -440,10 +440,53 @@ describe("doc-maintainer", () => {
       await ensureClaudeMdDocBlock("/tmp/worktree");
 
       const commitCall = mockClaude.git.mock.calls.find(
-        (call: string[][]) => call[0][0] === "commit",
+        (call: string[][]) => call[0].includes("commit"),
       );
       expect(commitCall).toBeDefined();
-      expect(commitCall![0][2]).not.toContain("[doc-maintainer]");
+      const args = commitCall![0];
+      const msgIndex = args.indexOf("-m") + 1;
+      expect(args[msgIndex]).not.toContain("[doc-maintainer]");
+    });
+
+    it("git commit includes user identity via -c flags when creating CLAUDE.md", async () => {
+      mockFs.existsSync.mockReturnValue(false);
+      await ensureClaudeMdDocBlock("/tmp/worktree");
+      const commitCall = mockClaude.git.mock.calls.find(
+        (call: string[][]) => call[0].includes("commit"),
+      );
+      expect(commitCall![0]).toEqual(
+        ["-c", "user.email=yeti@users.noreply.github.com", "-c", "user.name=Yeti", "commit", "-m", "docs: ensure CLAUDE.md documentation block"],
+      );
+    });
+
+    it("git commit includes user identity via -c flags when appending full section", async () => {
+      mockFs.readFileSync.mockReturnValue("# CLAUDE.md\n\n## Build\nnpm run build\n");
+      await ensureClaudeMdDocBlock("/tmp/worktree");
+      const commitCall = mockClaude.git.mock.calls.find(
+        (call: string[][]) => call[0].includes("commit"),
+      );
+      expect(commitCall![0]).toEqual(
+        ["-c", "user.email=yeti@users.noreply.github.com", "-c", "user.name=Yeti", "commit", "-m", "docs: ensure CLAUDE.md documentation block"],
+      );
+    });
+
+    it("git commit includes user identity via -c flags when appending missing directive", async () => {
+      const existing = [
+        "# CLAUDE.md",
+        "",
+        "## Documentation",
+        "",
+        "**update documentation** After any change to source code, update relevant documentation in CLAUDE.md, README.md and the yeti/ folder. A task is not complete without reviewing and updating relevant documentation.",
+        "",
+      ].join("\n");
+      mockFs.readFileSync.mockReturnValue(existing);
+      await ensureClaudeMdDocBlock("/tmp/worktree");
+      const commitCall = mockClaude.git.mock.calls.find(
+        (call: string[][]) => call[0].includes("commit"),
+      );
+      expect(commitCall![0]).toEqual(
+        ["-c", "user.email=yeti@users.noreply.github.com", "-c", "user.name=Yeti", "commit", "-m", "docs: ensure CLAUDE.md documentation block"],
+      );
     });
 
     it("CLAUDE.md change causes job to continue past SHA skip", async () => {
