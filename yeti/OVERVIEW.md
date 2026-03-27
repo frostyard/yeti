@@ -210,7 +210,8 @@ crash) have their worktrees cleaned up and are marked `failed`.
 The `gh` CLI wrapper retries up to 3 times with exponential backoff (1s, 2s,
 4s) on transient errors (400, 500, 502, 503, 504, timeouts, connection resets,
 "Could not resolve to a", "TLS handshake timeout", "Something went wrong",
-"stream error" — HTTP/2 stream cancellations).
+"stream error" — HTTP/2 stream cancellations, "unexpected EOF" — connection
+drops mid-response).
 Rate limit errors are handled separately: they trip a circuit breaker that
 blocks all GitHub API calls for 60 seconds, throwing `RateLimitError`
 immediately without retry. A notification is sent when the
