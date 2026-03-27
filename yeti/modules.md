@@ -45,7 +45,8 @@ initialized from the `pausedJobs` config array on startup.
 directly). Wraps `execFile("gh", ...)` with exponential-backoff retry on
 transient errors (400, 500, 502, 503, 504, ETIMEDOUT, ECONNRESET, ECONNREFUSED,
 connection reset, "Could not resolve to a", "TLS handshake timeout",
-"Something went wrong", "stream error" — up to 3 attempts with 1s/2s/4s delays). Rate limit
+"Something went wrong", "stream error", "unexpected EOF" — up to 3 attempts
+with 1s/2s/4s delays). Rate limit
 errors are not retried — they trip a **circuit breaker** that blocks all API
 calls for 60 seconds (throws `RateLimitError`). Includes GraphQL pagination for
 resolved review thread filtering. Uses a generic `TTLCache` for API response
