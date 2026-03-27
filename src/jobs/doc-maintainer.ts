@@ -15,6 +15,9 @@ const YETI_DIR_DIRECTIVE = `**yeti/ directory** The \`yeti/\` directory contains
 
 const CLAUDE_MD_DOC_SECTION = `\n## Documentation\n\n${UPDATE_DOC_DIRECTIVE}\n\n${YETI_DIR_DIRECTIVE}\n`;
 
+/** Git args for committing CLAUDE.md changes with explicit identity (the yeti system user has no global git config). */
+const GIT_COMMIT_CLAUDEMD = ["-c", "user.email=yeti@users.noreply.github.com", "-c", "user.name=Yeti", "commit", "-m", "docs: ensure CLAUDE.md documentation block"];
+
 /**
  * Ensures CLAUDE.md contains the standard ## Documentation block with both
  * required directives. Returns true if the file was modified and committed.
@@ -27,7 +30,7 @@ export async function ensureClaudeMdDocBlock(wtPath: string): Promise<boolean> {
     const content = `# CLAUDE.md\n\nThis file provides guidance to Claude Code when working with code in this repository.\n${CLAUDE_MD_DOC_SECTION}`;
     fs.writeFileSync(filePath, content);
     await claude.git(["add", "CLAUDE.md"], wtPath);
-    await claude.git(["commit", "-m", "docs: ensure CLAUDE.md documentation block"], wtPath);
+    await claude.git([...GIT_COMMIT_CLAUDEMD], wtPath);
     return true;
   }
 
@@ -62,7 +65,7 @@ export async function ensureClaudeMdDocBlock(wtPath: string): Promise<boolean> {
     const newContent = content.slice(0, sectionEnd) + insertion + content.slice(sectionEnd);
     fs.writeFileSync(filePath, newContent);
     await claude.git(["add", "CLAUDE.md"], wtPath);
-    await claude.git(["commit", "-m", "docs: ensure CLAUDE.md documentation block"], wtPath);
+    await claude.git([...GIT_COMMIT_CLAUDEMD], wtPath);
     return true;
   }
 
@@ -70,7 +73,7 @@ export async function ensureClaudeMdDocBlock(wtPath: string): Promise<boolean> {
   const newContent = content.trimEnd() + CLAUDE_MD_DOC_SECTION;
   fs.writeFileSync(filePath, newContent);
   await claude.git(["add", "CLAUDE.md"], wtPath);
-  await claude.git(["commit", "-m", "docs: ensure CLAUDE.md documentation block"], wtPath);
+  await claude.git([...GIT_COMMIT_CLAUDEMD], wtPath);
   return true;
 }
 
