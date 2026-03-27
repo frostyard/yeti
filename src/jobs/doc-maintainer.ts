@@ -9,6 +9,71 @@ import { reportError } from "../error-reporter.js";
 import { notify } from "../notify.js";
 import { findPlanComment } from "../plan-parser.js";
 
+const UPDATE_DOC_DIRECTIVE = `**update documentation** After any change to source code, update relevant documentation in CLAUDE.md, README.md and the yeti/ folder. A task is not complete without reviewing and updating relevant documentation.`;
+
+const YETI_DIR_DIRECTIVE = `**yeti/ directory** The \`yeti/\` directory contains documentation written for AI consumption and context enhancement, not primarily for humans. Jobs like \`doc-maintainer\` and \`issue-worker\` instruct the AI to read \`yeti/OVERVIEW.md\` and related files for codebase context before performing tasks. Write content in this directory to be maximally useful to an AI agent understanding the codebase — detailed architecture, patterns, and decision rationale rather than user-facing guides.`;
+
+const CLAUDE_MD_DOC_SECTION = `\n## Documentation\n\n${UPDATE_DOC_DIRECTIVE}\n\n${YETI_DIR_DIRECTIVE}\n`;
+
+/**
+ * Ensures CLAUDE.md contains the standard ## Documentation block with both
+ * required directives. Returns true if the file was modified and committed.
+ * Commit message deliberately omits [doc-maintainer] to preserve SHA logic.
+ */
+export async function ensureClaudeMdDocBlock(wtPath: string): Promise<boolean> {
+  const filePath = path.join(wtPath, "CLAUDE.md");
+
+  if (!fs.existsSync(filePath)) {
+    const content = `# CLAUDE.md\n\nThis file provides guidance to Claude Code when working with code in this repository.\n${CLAUDE_MD_DOC_SECTION}`;
+    fs.writeFileSync(filePath, content);
+    await claude.git(["add", "CLAUDE.md"], wtPath);
+    await claude.git(["commit", "-m", "docs: ensure CLAUDE.md documentation block"], wtPath);
+    return true;
+  }
+
+  const content = fs.readFileSync(filePath, "utf-8");
+
+  // Find the ## Documentation section
+  const docHeadingMatch = content.match(/^## Documentation\s*$/m);
+
+  if (docHeadingMatch) {
+    const sectionStart = docHeadingMatch.index!;
+    const afterHeading = sectionStart + docHeadingMatch[0].length;
+    // Find next ## heading or EOF
+    const nextHeadingMatch = content.slice(afterHeading).match(/^## /m);
+    const sectionEnd = nextHeadingMatch
+      ? afterHeading + nextHeadingMatch.index!
+      : content.length;
+    const section = content.slice(sectionStart, sectionEnd);
+
+    const hasUpdate = section.includes("**update documentation**");
+    const hasYetiDir = section.includes("**yeti/ directory**");
+
+    if (hasUpdate && hasYetiDir) {
+      return false;
+    }
+
+    // Append missing directives before the next section
+    const missing: string[] = [];
+    if (!hasUpdate) missing.push(UPDATE_DOC_DIRECTIVE);
+    if (!hasYetiDir) missing.push(YETI_DIR_DIRECTIVE);
+    const insertion = "\n" + missing.join("\n\n") + "\n";
+
+    const newContent = content.slice(0, sectionEnd) + insertion + content.slice(sectionEnd);
+    fs.writeFileSync(filePath, newContent);
+    await claude.git(["add", "CLAUDE.md"], wtPath);
+    await claude.git(["commit", "-m", "docs: ensure CLAUDE.md documentation block"], wtPath);
+    return true;
+  }
+
+  // No ## Documentation section exists — append the full block
+  const newContent = content.trimEnd() + CLAUDE_MD_DOC_SECTION;
+  fs.writeFileSync(filePath, newContent);
+  await claude.git(["add", "CLAUDE.md"], wtPath);
+  await claude.git(["commit", "-m", "docs: ensure CLAUDE.md documentation block"], wtPath);
+  return true;
+}
+
 function buildDocPrompt(fullName: string, planCount = 0): string {
   const lines = [
     `You are maintaining documentation for the repository ${fullName}.`,
@@ -68,7 +133,7 @@ async function processRepo(repo: Repo): Promise<void> {
     return;
   }
 
-  // Step 2: Check if maintenance is needed
+  // Step 2: Create worktree and ensure CLAUDE.md documentation block
   const branchName = `yeti/docs-${claude.datestamp()}-${claude.randomSuffix()}`;
   const taskId = db.recordTaskStart("doc-maintainer", fullName, 0, null);
   let wtPath: string | undefined;
@@ -77,6 +142,9 @@ async function processRepo(repo: Repo): Promise<void> {
     wtPath = await claude.createWorktree(repo, branchName, "doc-maintainer");
     db.updateTaskWorktree(taskId, wtPath, branchName);
 
+    await ensureClaudeMdDocBlock(wtPath);
+
+    // Step 3: Check if maintenance is needed (SHA comparison)
     const headSha = await claude.getHeadSha(wtPath);
     const lastDocSha = await claude.getLastDocMaintainerSha(wtPath);
 
@@ -86,7 +154,7 @@ async function processRepo(repo: Repo): Promise<void> {
       return;
     }
 
-    // Step 3: Fetch recently-closed issues with implementation plans
+    // Step 4: Fetch recently-closed issues with implementation plans
     const sinceDate = lastDocSha
       ? await claude.getCommitDate(wtPath, lastDocSha)
       : new Date(Date.now() - 7 * 24 * 60 * 60 * 1000); // fallback: 7 days
@@ -122,7 +190,7 @@ async function processRepo(repo: Repo): Promise<void> {
       log.info(`[doc-maintainer] Wrote ${plans.length} plan(s) to .plans/ for ${fullName}`);
     }
 
-    // Step 4: Generate/update documentation
+    // Step 5: Generate/update documentation
     log.info(`[doc-maintainer] Generating docs for ${fullName}`);
     const prompt = buildDocPrompt(fullName, plans.length);
     const aiOptions = JOB_AI["doc-maintainer"];
@@ -139,7 +207,7 @@ async function processRepo(repo: Repo): Promise<void> {
       }
     }
 
-    // Step 5: Push and create PR
+    // Step 6: Push and create PR
     if (await claude.hasNewCommits(wtPath, repo.defaultBranch) && await claude.hasTreeDiff(wtPath, repo.defaultBranch)) {
       const description = await claude.generateDocsPRDescription(wtPath, repo.defaultBranch, aiOptions);
       await claude.pushBranch(wtPath, branchName);

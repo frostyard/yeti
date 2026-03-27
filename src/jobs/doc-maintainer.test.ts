@@ -24,6 +24,7 @@ vi.mock("../notify.js", () => ({
 const { mockFs, mockGh, mockClaude, mockDb, mockPlanParser } = vi.hoisted(() => ({
   mockFs: {
     existsSync: vi.fn(),
+    readFileSync: vi.fn(),
     mkdirSync: vi.fn(),
     writeFileSync: vi.fn(),
     rmSync: vi.fn(),
@@ -69,7 +70,7 @@ vi.mock("../claude.js", () => mockClaude);
 vi.mock("../db.js", () => mockDb);
 vi.mock("../plan-parser.js", () => mockPlanParser);
 
-import { run } from "./doc-maintainer.js";
+import { run, ensureClaudeMdDocBlock } from "./doc-maintainer.js";
 import { reportError } from "../error-reporter.js";
 
 describe("doc-maintainer", () => {
@@ -78,6 +79,10 @@ describe("doc-maintainer", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockFs.existsSync.mockReturnValue(true);
+    // Default: CLAUDE.md already has both directives so ensureClaudeMdDocBlock is a no-op
+    mockFs.readFileSync.mockReturnValue(
+      "# CLAUDE.md\n\n## Documentation\n\n**update documentation** text\n\n**yeti/ directory** text\n",
+    );
     mockGh.listPRs.mockResolvedValue([]);
     mockGh.createPR.mockResolvedValue(100);
     mockGh.listRecentlyClosedIssues.mockResolvedValue([]);
@@ -309,6 +314,163 @@ describe("doc-maintainer", () => {
 
       // Should write exactly 10 plan files (the cap)
       expect(mockFs.writeFileSync).toHaveBeenCalledTimes(10);
+    });
+  });
+
+  describe("CLAUDE.md documentation block", () => {
+    it("creates CLAUDE.md with documentation block when file doesn't exist", async () => {
+      mockFs.existsSync.mockReturnValue(false);
+
+      await ensureClaudeMdDocBlock("/tmp/worktree");
+
+      expect(mockFs.writeFileSync).toHaveBeenCalledWith(
+        "/tmp/worktree/CLAUDE.md",
+        expect.stringContaining("**update documentation**"),
+      );
+      expect(mockFs.writeFileSync).toHaveBeenCalledWith(
+        "/tmp/worktree/CLAUDE.md",
+        expect.stringContaining("**yeti/ directory**"),
+      );
+      expect(mockClaude.git).toHaveBeenCalledWith(["add", "CLAUDE.md"], "/tmp/worktree");
+      expect(mockClaude.git).toHaveBeenCalledWith(
+        ["commit", "-m", "docs: ensure CLAUDE.md documentation block"],
+        "/tmp/worktree",
+      );
+    });
+
+    it("appends full documentation section when CLAUDE.md exists without ## Documentation", async () => {
+      const existing = "# CLAUDE.md\n\n## Build\nnpm run build\n";
+      mockFs.readFileSync.mockReturnValue(existing);
+
+      const result = await ensureClaudeMdDocBlock("/tmp/worktree");
+
+      expect(result).toBe(true);
+      const written = mockFs.writeFileSync.mock.calls[0][1] as string;
+      expect(written).toContain("## Documentation");
+      expect(written).toContain("**update documentation**");
+      expect(written).toContain("**yeti/ directory**");
+      // Original content preserved
+      expect(written).toContain("## Build");
+    });
+
+    it("appends missing directive to existing ## Documentation section", async () => {
+      const existing = [
+        "# CLAUDE.md",
+        "",
+        "## Documentation",
+        "",
+        "**update documentation** After any change to source code, update relevant documentation in CLAUDE.md, README.md and the yeti/ folder. A task is not complete without reviewing and updating relevant documentation.",
+        "",
+        "## Build",
+        "npm run build",
+      ].join("\n");
+      mockFs.readFileSync.mockReturnValue(existing);
+
+      const result = await ensureClaudeMdDocBlock("/tmp/worktree");
+
+      expect(result).toBe(true);
+      const written = mockFs.writeFileSync.mock.calls[0][1] as string;
+      expect(written).toContain("**yeti/ directory**");
+      // Should not duplicate existing directive
+      expect(written.match(/\*\*update documentation\*\*/g)?.length).toBe(1);
+      // Build section should still exist
+      expect(written).toContain("## Build");
+    });
+
+    it("inserts missing directive at end of file when ## Documentation is the last section", async () => {
+      const existing = [
+        "# CLAUDE.md",
+        "",
+        "## Documentation",
+        "",
+        "**update documentation** After any change to source code, update relevant documentation.",
+      ].join("\n");
+      mockFs.readFileSync.mockReturnValue(existing);
+
+      const result = await ensureClaudeMdDocBlock("/tmp/worktree");
+
+      expect(result).toBe(true);
+      const written = mockFs.writeFileSync.mock.calls[0][1] as string;
+      expect(written).toContain("**yeti/ directory**");
+    });
+
+    it("skips modification when both directives present in ## Documentation section", async () => {
+      const existing = [
+        "# CLAUDE.md",
+        "",
+        "## Documentation",
+        "",
+        "**update documentation** After any change to source code, update relevant documentation in CLAUDE.md, README.md and the yeti/ folder. A task is not complete without reviewing and updating relevant documentation.",
+        "",
+        "**yeti/ directory** The `yeti/` directory contains documentation written for AI consumption.",
+        "",
+      ].join("\n");
+      mockFs.readFileSync.mockReturnValue(existing);
+
+      const result = await ensureClaudeMdDocBlock("/tmp/worktree");
+
+      expect(result).toBe(false);
+      expect(mockFs.writeFileSync).not.toHaveBeenCalled();
+      expect(mockClaude.git).not.toHaveBeenCalled();
+    });
+
+    it("does not treat directives outside ## Documentation as compliant", async () => {
+      const existing = [
+        "# CLAUDE.md",
+        "",
+        "## Notes",
+        "",
+        "**update documentation** some text here.",
+        "",
+        "**yeti/ directory** some text here.",
+        "",
+      ].join("\n");
+      mockFs.readFileSync.mockReturnValue(existing);
+
+      const result = await ensureClaudeMdDocBlock("/tmp/worktree");
+
+      expect(result).toBe(true);
+      const written = mockFs.writeFileSync.mock.calls[0][1] as string;
+      expect(written).toContain("## Documentation");
+    });
+
+    it("commit message does not contain [doc-maintainer]", async () => {
+      mockFs.existsSync.mockReturnValue(false);
+
+      await ensureClaudeMdDocBlock("/tmp/worktree");
+
+      const commitCall = mockClaude.git.mock.calls.find(
+        (call: string[][]) => call[0][0] === "commit",
+      );
+      expect(commitCall).toBeDefined();
+      expect(commitCall![0][2]).not.toContain("[doc-maintainer]");
+    });
+
+    it("CLAUDE.md change causes job to continue past SHA skip", async () => {
+      // CLAUDE.md doesn't exist initially (triggers creation), but .plans
+      // and other paths use default behavior
+      let claudeMdCreated = false;
+      mockFs.existsSync.mockImplementation((p: string) => {
+        if (String(p).endsWith("CLAUDE.md")) {
+          if (!claudeMdCreated) {
+            claudeMdCreated = true;
+            return false;
+          }
+          return true;
+        }
+        // .plans dir doesn't exist (no plans written in this test)
+        if (String(p).includes(".plans")) return false;
+        return true;
+      });
+
+      // After ensureClaudeMdDocBlock commits, HEAD is now different
+      mockClaude.getHeadSha.mockResolvedValue("newsha-after-claudemd");
+      mockClaude.getLastDocMaintainerSha.mockResolvedValue("abc123");
+
+      await run([repo]);
+
+      // Should continue to AI run since HEAD differs from last doc SHA
+      expect(mockClaude.runAI).toHaveBeenCalled();
     });
   });
 });

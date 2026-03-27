@@ -335,9 +335,15 @@ For each canonical (non-duplicate) issue:
 (default: 1 AM local time)
 
 - Skips if an open `yeti/docs-*` PR already exists for the repo
+- Creates a worktree on branch `yeti/docs-<YYYYMMDD>-<hex4>`
+- Before checking for code changes, ensures `CLAUDE.md` contains the
+  standard `## Documentation` block with `**update documentation**` and
+  `**yeti/ directory**` directives. If missing, adds them and commits
+  (commit message omits `[doc-maintainer]` so this maintenance commit is not
+  treated as a doc-maintainer run when locating the last `[doc-maintainer]`
+  commit)
 - Skips if HEAD matches the last `[doc-maintainer]` commit (no new code
   changes to document)
-- Creates a worktree on branch `yeti/docs-<YYYYMMDD>-<hex4>`
 - Before running Claude, fetches recently-closed issues that had
   implementation plans and writes them to a temporary `.plans/` directory
   in the worktree (capped at 10 plans, each truncated to 5,000 characters)
