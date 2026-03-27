@@ -338,6 +338,10 @@ For each canonical (non-duplicate) issue:
 - Skips if HEAD matches the last `[doc-maintainer]` commit (no new code
   changes to document)
 - Creates a worktree on branch `yeti/docs-<YYYYMMDD>-<hex4>`
+- Before checking for code changes, ensures `CLAUDE.md` contains the
+  standard `## Documentation` block with `**update documentation**` and
+  `**yeti/ directory**` directives. If missing, adds them and commits
+  (commit message omits `[doc-maintainer]` to preserve SHA skip logic)
 - Before running Claude, fetches recently-closed issues that had
   implementation plans and writes them to a temporary `.plans/` directory
   in the worktree (capped at 10 plans, each truncated to 5,000 characters)
