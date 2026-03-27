@@ -498,6 +498,7 @@ audit with targeted label fixes.
 | `needs-triage` | Is `[yeti-error]` or has game-ID, without investigation report | None — triage jobs handle |
 | `needs-refinement` | No plan comment exists | None — issue-refiner handles |
 | `needs-refinement` | Has plan but unreacted human feedback exists | None — issue-refiner handles |
+| `needs-refinement` | Has plan with blocking clarifying questions (`isPlanActionable()` returns false) | None — waits for human input |
 | `ready` | Has plan, all feedback addressed | Verify "Ready" label; add if missing |
 | `stuck-multi-phase` | Has merged Yeti PRs, multi-phase plan, more phases remaining, no "Refined" label, no open PR | Add "Ready" label (human decides when to resume) |
 
