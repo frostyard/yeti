@@ -460,6 +460,13 @@ not manage their credentials.
 The Discord integration requires creating a Discord application, bot token, and private channel. See
 [Discord Setup](discord-setup.md) for the full walkthrough.
 
+## Vision
+
+See [Future Yeti — Vision](VISION.md) for the long-term architectural
+direction: orchestrator-based multi-agent execution, mechanical plan checking,
+wave-parallel task execution, and persistent per-repo state. Derived from
+research into GSD, CCPM, Symphony, PAUL, and GAAI harness patterns.
+
 ## Technology Stack
 
 - **Runtime**: Node.js 22
