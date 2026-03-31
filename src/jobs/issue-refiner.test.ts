@@ -178,6 +178,30 @@ describe("issue-refiner", () => {
     expect(prompt).toContain("Scope discipline");
     // Internal-only output instruction
     expect(prompt).toContain("Do not include your intermediate");
+    // Phantom reference detection (Step 1)
+    expect(prompt).toContain("planning around a phantom");
+    // Anti-gold-plating checklist (Step 2)
+    expect(prompt).toContain("### What NOT to plan");
+    // Confirm-before-reference rule
+    expect(prompt).toContain("confirmed to exist by reading it");
+    // Testing pattern conformance
+    expect(prompt).toContain("test framework, mock style, fixture conventions");
+    // Fifth self-critique check
+    expect(prompt).toContain("Completeness vs. gold-plating");
+    // Two rounds wording
+    expect(prompt).toContain("two rounds");
+    // Five checks count
+    expect(prompt).toContain("five checks");
+    // File count heuristic in scope discipline
+    expect(prompt).toContain("Count the files");
+    // Import graph tracing in ordering check
+    expect(prompt).toContain("import/dependency");
+    // Strengthened risk honesty prompts
+    expect(prompt).toContain("concurrent access");
+    // Revise plan to match reality
+    expect(prompt).toContain("revise the plan to match reality");
+    // Implementation order step-by-step constraint
+    expect(prompt).toContain("build and run tests after each step");
   });
 
   it("empty output — logs warning but still adds Ready label", async () => {

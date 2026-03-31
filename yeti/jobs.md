@@ -35,20 +35,28 @@ Three modes:
 - Creates a worktree on branch `yeti/plan-<N>-<hex4>`
 - Asks Claude for a fresh implementation plan using a four-step prompt structure:
   - **Step 1 — Evaluate plannability**: Assesses whether the issue provides
-    enough detail (desired behavior, acceptance criteria, scope clarity). If
-    underspecified, outputs `### Clarifying Questions` with concrete options
-    (e.g. "Should X behave like A or B?") instead of guessing. Supports
-    partial planning — only aspects that are sufficiently clear are planned.
+    enough detail (desired behavior, acceptance criteria, scope clarity) and
+    verifies that referenced functions, types, APIs, and file paths exist in
+    the codebase (phantom reference detection). If underspecified, outputs
+    `### Clarifying Questions` with concrete options (e.g. "Should X behave
+    like A or B?") instead of guessing. Supports partial planning — only
+    aspects that are sufficiently clear are planned.
   - **Step 2 — Draft the implementation plan**: Per-file changes with
-    rationale tied back to the issue, implementation order with justification,
-    inter-change dependencies, risks/edge cases, and testing approach (unit
-    vs integration vs manual, naming test files).
+    rationale tied back to the issue (file paths must be confirmed by reading),
+    implementation order with justification (each step must build/test
+    independently), inter-change dependencies, risks/edge cases (including
+    concurrency and boundary conditions), testing approach (unit vs
+    integration vs manual, naming test files, conforming to repo conventions),
+    and a "What NOT to plan" anti-gold-plating checklist.
   - **Step 3 — Self-critique and revise**: Two rounds of structured
-    self-critique against four dimensions: unverified assumptions (re-read
-    files referenced but not opened), scope discipline (cut anything beyond
-    issue requirements), ordering correctness (would step-by-step execution
-    succeed?), and risk honesty (surface omitted failure modes). The AI
-    revises the plan after each critique round.
+    self-critique against five dimensions: unverified assumptions (re-read
+    files referenced but not opened, revise plan to match reality), scope
+    discipline (cut anything beyond issue requirements, justify file count),
+    ordering correctness (trace import/dependency graph), risk honesty
+    (surface omitted failure modes including concurrency and edge cases),
+    and completeness vs. gold-plating (verify plan fully addresses the
+    issue without exceeding it). The AI revises the plan after each
+    critique round.
   - **Step 4 — Produce the final plan**: Outputs only the final revised
     plan. Internal drafts and critiques do not appear in the output.
   - **Anti-scope-creep guards**: The prompt explicitly forbids changes not
