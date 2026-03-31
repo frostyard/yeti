@@ -44,17 +44,18 @@ The refiner processes an issue when any of these conditions are met:
 1. Creates an isolated git worktree for the repository
 2. Reads the issue body, all comments, and any referenced images
 3. Instructs Claude to read `yeti/OVERVIEW.md` and linked docs for codebase context
-4. Claude reads the relevant source files identified from the issue before planning (plans are grounded in actual code, not assumptions)
+4. Claude reads the relevant source files identified from the issue before planning (plans are grounded in actual code, not assumptions). If the issue names functions, types, APIs, or file paths that don't exist in the codebase, Claude flags them immediately rather than planning around phantoms
 5. **Step 1 — Evaluate:** Claude evaluates whether the issue provides enough detail for a confident plan. If underspecified, it outputs clarifying questions classified by severity:
     - `### Clarifying Questions (blocking)` — Must be answered before a reliable plan can be written. When blocking questions are present, **no implementation plan is produced** and no workflow labels are added. The issue waits for human response.
     - `### Clarifying Questions (non-blocking)` — The plan is fully implementable but Claude wants to confirm an assumption or preference. The full plan is included alongside the questions, and review proceeds normally.
     - `### Clarifying Questions` (no suffix) — Treated as blocking by default.
-6. **Step 2 — Draft:** Claude drafts an initial implementation plan (text only, no code changes) when there are no blocking clarifying questions. For each file, the plan specifies what changes are needed and **why** (tied back to the issue requirement), along with:
-    - **Implementation order** with rationale (e.g., types before consumers)
+6. **Step 2 — Draft:** Claude drafts an initial implementation plan (text only, no code changes) when there are no blocking clarifying questions. File paths must be confirmed by reading them — never referencing a file not actually opened. For each file, the plan specifies what changes are needed and **why** (tied back to the issue requirement), along with:
+    - **Implementation order** with rationale (e.g., types before consumers). A developer following the plan step-by-step must be able to build and run tests after each step without errors
     - **Dependencies** between changes
-    - **Risks and edge cases**
-    - **Testing approach** (unit/integration/manual, with specific test file names)
-7. **Step 3 — Self-critique:** Claude performs two rounds of structured self-critique against four dimensions: unverified assumptions (did it actually read the files it referenced?), scope discipline (is anything beyond what the issue requires?), ordering and dependencies (would a developer hit errors following the steps in order?), and risk honesty (are failure modes omitted to keep the plan tidy?). After each round, the plan is revised to address every weakness found.
+    - **Risks and edge cases** including concurrency, error paths, and boundary conditions — not just the happy path
+    - **Testing approach** (unit/integration/manual, with specific test file names). Must follow the repo's existing testing patterns (framework, mock style, fixture conventions)
+    - **What NOT to plan:** No logging/metrics unless asked, no README/CHANGELOG updates unless required, no validation for impossible scenarios, no renaming or cleanup of adjacent code. Related improvements go in a `### Future Considerations` section instead
+7. **Step 3 — Self-critique:** Claude performs two rounds of structured self-critique against five dimensions: unverified assumptions (did it actually read the files it referenced — and if something doesn't exist or works differently, revise the plan to match reality?), scope discipline (is anything beyond what the issue requires — and is the file count justified?), ordering and dependencies (would a developer hit errors following the steps — trace the import/dependency graph?), risk honesty (are failure modes omitted — specifically empty/null/malformed inputs, concurrent access, broken existing tests?), and completeness vs. gold-plating (does the plan solve the full issue without solving more than was asked?). After each round, the plan is revised to address every weakness found.
 8. **Step 4 — Final plan:** Claude outputs only the final revised plan, without intermediate drafts or critique notes
 9. Claude chooses the narrowest reasonable interpretation of ambiguous issues and notes assumptions explicitly
 10. Posts an `## Implementation Plan` comment on the issue
