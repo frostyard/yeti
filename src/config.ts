@@ -99,6 +99,13 @@ export interface ConfigFile {
   webhookSecret?: string;
 }
 
+/** Parse an integer from env var or config file value, with validation and optional minimum. */
+function parseIntConfig(envVal: string | undefined, fileVal: unknown, defaultVal: number, min?: number): number {
+  const parsed = parseInt(envVal ?? String(fileVal ?? defaultVal), 10);
+  if (!Number.isFinite(parsed)) return defaultVal;
+  return min !== undefined ? Math.max(min, parsed) : parsed;
+}
+
 function loadConfig() {
   let file: ConfigFile = {};
   try {
@@ -152,56 +159,12 @@ function loadConfig() {
   const authToken =
     process.env["YETI_AUTH_TOKEN"] ?? file.authToken ?? "";
 
-  const parsedMaxClaudeWorkers = parseInt(
-    process.env["YETI_MAX_CLAUDE_WORKERS"] ?? String(file.maxClaudeWorkers ?? 2),
-    10,
-  );
-  const maxClaudeWorkers =
-    Number.isFinite(parsedMaxClaudeWorkers) && parsedMaxClaudeWorkers >= 0
-      ? parsedMaxClaudeWorkers
-      : 2;
-
-  const parsedClaudeTimeoutMs = parseInt(
-    process.env["YETI_CLAUDE_TIMEOUT_MS"] ?? String(file.claudeTimeoutMs ?? 20 * 60 * 1000),
-    10,
-  );
-  const claudeTimeoutMs = Number.isFinite(parsedClaudeTimeoutMs)
-    ? Math.max(60_000, parsedClaudeTimeoutMs)
-    : 20 * 60 * 1000;
-
-  const parsedMaxCopilotWorkers = parseInt(
-    process.env["YETI_MAX_COPILOT_WORKERS"] ?? String(file.maxCopilotWorkers ?? 1),
-    10,
-  );
-  const maxCopilotWorkers =
-    Number.isFinite(parsedMaxCopilotWorkers) && parsedMaxCopilotWorkers >= 0
-      ? parsedMaxCopilotWorkers
-      : 1;
-
-  const parsedCopilotTimeoutMs = parseInt(
-    process.env["YETI_COPILOT_TIMEOUT_MS"] ?? String(file.copilotTimeoutMs ?? 20 * 60 * 1000),
-    10,
-  );
-  const copilotTimeoutMs = Number.isFinite(parsedCopilotTimeoutMs)
-    ? Math.max(60_000, parsedCopilotTimeoutMs)
-    : 20 * 60 * 1000;
-
-  const parsedMaxCodexWorkers = parseInt(
-    process.env["YETI_MAX_CODEX_WORKERS"] ?? String(file.maxCodexWorkers ?? 1),
-    10,
-  );
-  const maxCodexWorkers =
-    Number.isFinite(parsedMaxCodexWorkers) && parsedMaxCodexWorkers >= 0
-      ? parsedMaxCodexWorkers
-      : 1;
-
-  const parsedCodexTimeoutMs = parseInt(
-    process.env["YETI_CODEX_TIMEOUT_MS"] ?? String(file.codexTimeoutMs ?? 20 * 60 * 1000),
-    10,
-  );
-  const codexTimeoutMs = Number.isFinite(parsedCodexTimeoutMs)
-    ? Math.max(60_000, parsedCodexTimeoutMs)
-    : 20 * 60 * 1000;
+  const maxClaudeWorkers = parseIntConfig(process.env["YETI_MAX_CLAUDE_WORKERS"], file.maxClaudeWorkers, 2, 0);
+  const claudeTimeoutMs = parseIntConfig(process.env["YETI_CLAUDE_TIMEOUT_MS"], file.claudeTimeoutMs, 20 * 60 * 1000, 60_000);
+  const maxCopilotWorkers = parseIntConfig(process.env["YETI_MAX_COPILOT_WORKERS"], file.maxCopilotWorkers, 1, 0);
+  const copilotTimeoutMs = parseIntConfig(process.env["YETI_COPILOT_TIMEOUT_MS"], file.copilotTimeoutMs, 20 * 60 * 1000, 60_000);
+  const maxCodexWorkers = parseIntConfig(process.env["YETI_MAX_CODEX_WORKERS"], file.maxCodexWorkers, 1, 0);
+  const codexTimeoutMs = parseIntConfig(process.env["YETI_CODEX_TIMEOUT_MS"], file.codexTimeoutMs, 20 * 60 * 1000, 60_000);
 
   const envLogLevel = process.env["YETI_LOG_LEVEL"];
   const rawLogLevel = envLogLevel && (LOG_LEVELS as readonly string[]).includes(envLogLevel)

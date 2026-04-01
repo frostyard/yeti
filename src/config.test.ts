@@ -479,6 +479,75 @@ describe("config", () => {
     expect(display.maxPlanRounds).toBe(2); // floored
   });
 
+  it("worker and timeout config defaults are applied", async () => {
+    const mod = await import("./config.js");
+
+    fs.mkdirSync(path.dirname(mod.CONFIG_PATH), { recursive: true });
+    fs.writeFileSync(mod.CONFIG_PATH, JSON.stringify({}));
+
+    const display = mod.getConfigForDisplay();
+    expect(display.maxClaudeWorkers).toBe(2);
+    expect(display.claudeTimeoutMs).toBe(20 * 60 * 1000);
+    expect(display.maxCopilotWorkers).toBe(1);
+    expect(display.copilotTimeoutMs).toBe(20 * 60 * 1000);
+    expect(display.maxCodexWorkers).toBe(1);
+    expect(display.codexTimeoutMs).toBe(20 * 60 * 1000);
+  });
+
+  it("worker counts clamp to 0 minimum", async () => {
+    const mod = await import("./config.js");
+
+    fs.mkdirSync(path.dirname(mod.CONFIG_PATH), { recursive: true });
+    fs.writeFileSync(mod.CONFIG_PATH, JSON.stringify({ maxClaudeWorkers: -1 }));
+
+    const display = mod.getConfigForDisplay();
+    expect(display.maxClaudeWorkers).toBe(0);
+  });
+
+  it("timeout values clamp to 60_000 minimum", async () => {
+    const mod = await import("./config.js");
+
+    fs.mkdirSync(path.dirname(mod.CONFIG_PATH), { recursive: true });
+    fs.writeFileSync(mod.CONFIG_PATH, JSON.stringify({ claudeTimeoutMs: 1000 }));
+
+    const display = mod.getConfigForDisplay();
+    expect(display.claudeTimeoutMs).toBe(60_000);
+  });
+
+  it("non-numeric worker/timeout values fall back to defaults", async () => {
+    const mod = await import("./config.js");
+
+    fs.mkdirSync(path.dirname(mod.CONFIG_PATH), { recursive: true });
+    fs.writeFileSync(mod.CONFIG_PATH, JSON.stringify({
+      maxClaudeWorkers: "bogus",
+      claudeTimeoutMs: "not-a-number",
+    }));
+
+    const display = mod.getConfigForDisplay();
+    expect(display.maxClaudeWorkers).toBe(2);
+    expect(display.claudeTimeoutMs).toBe(20 * 60 * 1000);
+  });
+
+  it("worker/timeout env vars override config file values", async () => {
+    process.env["YETI_MAX_CLAUDE_WORKERS"] = "5";
+    process.env["YETI_CLAUDE_TIMEOUT_MS"] = "300000";
+
+    const mod = await import("./config.js");
+
+    fs.mkdirSync(path.dirname(mod.CONFIG_PATH), { recursive: true });
+    fs.writeFileSync(mod.CONFIG_PATH, JSON.stringify({
+      maxClaudeWorkers: 2,
+      claudeTimeoutMs: 1200000,
+    }));
+
+    const display = mod.getConfigForDisplay();
+    expect(display.maxClaudeWorkers).toBe(5);
+    expect(display.claudeTimeoutMs).toBe(300000);
+
+    delete process.env["YETI_MAX_CLAUDE_WORKERS"];
+    delete process.env["YETI_CLAUDE_TIMEOUT_MS"];
+  });
+
   it("offConfigChange removes listener", async () => {
     const mod = await import("./config.js");
 
