@@ -485,23 +485,25 @@ async function findUnreactedHumanComments(
   commentsAfterPlan: gh.IssueComment[],
   selfLogin: string,
 ): Promise<gh.IssueComment[]> {
-  const unreacted: gh.IssueComment[] = [];
-  for (const comment of commentsAfterPlan) {
-    if (gh.isYetiComment(comment.body)) continue;
-    if (comment.login.endsWith("[bot]")) continue;
-    try {
-      const reactions = await gh.getCommentReactions(fullName, comment.id);
-      const hasReaction = reactions.some(
-        (r) => r.user.login === selfLogin && r.content === "+1",
-      );
-      if (!hasReaction) {
-        unreacted.push(comment);
+  const humanComments = commentsAfterPlan.filter(
+    (comment) => !gh.isYetiComment(comment.body) && !comment.login.endsWith("[bot]"),
+  );
+
+  const results = await Promise.all(
+    humanComments.map(async (comment) => {
+      try {
+        const reactions = await gh.getCommentReactions(fullName, comment.id);
+        const hasReaction = reactions.some(
+          (r) => r.user.login === selfLogin && r.content === "+1",
+        );
+        return hasReaction ? null : comment;
+      } catch {
+        return comment;
       }
-    } catch {
-      unreacted.push(comment);
-    }
-  }
-  return unreacted;
+    }),
+  );
+
+  return results.filter((c): c is gh.IssueComment => c !== null);
 }
 
 export async function run(repos: Repo[]): Promise<void> {
