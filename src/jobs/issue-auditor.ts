@@ -49,20 +49,26 @@ export async function classifyIssue(
   const selfLogin = await gh.getSelfLogin();
   const commentsAfterPlan = comments.slice(lastPlanIdx + 1);
 
-  for (const comment of commentsAfterPlan) {
-    if (gh.isYetiComment(comment.body)) continue;
-    if (comment.login.endsWith("[bot]")) continue;
+  const humanComments = commentsAfterPlan.filter(
+    (comment) => !gh.isYetiComment(comment.body) && !comment.login.endsWith("[bot]"),
+  );
 
-    try {
-      const reactions = await gh.getCommentReactions(fullName, comment.id);
-      const hasReaction = reactions.some(
-        (r) => r.user.login === selfLogin && r.content === "+1",
-      );
-      if (!hasReaction) return "needs-refinement";
-    } catch {
-      // Treat as unreacted to be safe
-      return "needs-refinement";
-    }
+  const reactionResults = await Promise.all(
+    humanComments.map(async (comment) => {
+      try {
+        const reactions = await gh.getCommentReactions(fullName, comment.id);
+        return reactions.some(
+          (r) => r.user.login === selfLogin && r.content === "+1",
+        );
+      } catch {
+        // Treat as unreacted to be safe
+        return false;
+      }
+    }),
+  );
+
+  if (reactionResults.some((hasReaction) => !hasReaction)) {
+    return "needs-refinement";
   }
 
   // Plan has blocking clarifying questions awaiting user response

@@ -1119,17 +1119,21 @@ export async function getPRReviewComments(repo: string, prNumber: number): Promi
       }
     }
 
-    // Check which inline comments already have a 👍 from Yeti
-    for (const comment of comments) {
-      // Check for existing 👍 reaction from Yeti
-      let hasYetiReaction = false;
-      try {
-        const reactionsRaw = await gh(["api", `repos/${repo}/pulls/comments/${comment.id}/reactions`]);
-        const reactions = JSON.parse(reactionsRaw) as Reaction[];
-        hasYetiReaction = reactions.some((r) => r.user.login === selfLogin && r.content === "+1");
-      } catch { /* treat as no reaction */ }
-      if (hasYetiReaction) continue;
+    // Check which inline comments already have a 👍 from Yeti (parallel)
+    const inlineReactionChecks = await Promise.all(
+      comments.map(async (comment) => {
+        let hasYetiReaction = false;
+        try {
+          const reactionsRaw = await gh(["api", `repos/${repo}/pulls/comments/${comment.id}/reactions`]);
+          const reactions = JSON.parse(reactionsRaw) as Reaction[];
+          hasYetiReaction = reactions.some((r) => r.user.login === selfLogin && r.content === "+1");
+        } catch { /* treat as no reaction */ }
+        return { comment, hasYetiReaction };
+      }),
+    );
 
+    for (const { comment, hasYetiReaction } of inlineReactionChecks) {
+      if (hasYetiReaction) continue;
       const location = comment.line ? `${comment.path}:${comment.line}` : comment.path;
       parts.push(
         `Inline comment by @${comment.user.login} on ${location}:\n` +
@@ -1139,6 +1143,8 @@ export async function getPRReviewComments(repo: string, prNumber: number): Promi
     }
 
     // Add non-Yeti, non-bot issue-tab comments without 👍 from Yeti
+    // Separate comments that need reaction checks from those that don't
+    const humanIssueComments: typeof issueComments = [];
     for (const comment of issueComments) {
       if (!comment.body?.trim()) continue;
       if (comment.body.trim().toUpperCase() === "LGTM") continue;
@@ -1147,15 +1153,23 @@ export async function getPRReviewComments(repo: string, prNumber: number): Promi
         continue;
       }
       if (comment.user.login.endsWith("[bot]")) continue;
+      humanIssueComments.push(comment);
+    }
 
-      // Check for existing 👍 reaction from Yeti
-      let hasYetiReaction = false;
-      try {
-        const reactions = await getCommentReactions(repo, comment.id);
-        hasYetiReaction = reactions.some((r) => r.user.login === selfLogin && r.content === "+1");
-      } catch { /* treat as no reaction */ }
+    // Check reactions in parallel for human issue comments
+    const issueReactionChecks = await Promise.all(
+      humanIssueComments.map(async (comment) => {
+        let hasYetiReaction = false;
+        try {
+          const reactions = await getCommentReactions(repo, comment.id);
+          hasYetiReaction = reactions.some((r) => r.user.login === selfLogin && r.content === "+1");
+        } catch { /* treat as no reaction */ }
+        return { comment, hasYetiReaction };
+      }),
+    );
+
+    for (const { comment, hasYetiReaction } of issueReactionChecks) {
       if (hasYetiReaction) continue;
-
       parts.push(`Comment by @${comment.user.login}:\n${comment.body}`);
       commentIds.push(comment.id);
     }
