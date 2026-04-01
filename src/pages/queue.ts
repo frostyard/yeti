@@ -1,16 +1,6 @@
 import type { Theme } from "./layout.js";
-import { PAGE_CSS, escapeHtml, repoShortName, itemLogsUrl, formatRelativeTime, htmlOpenTag, buildNav, THEME_SCRIPT, TOAST_SCRIPT, siteTitle } from "./layout.js";
+import { PAGE_CSS, escapeHtml, repoShortName, itemLogsUrl, formatRelativeTime, htmlOpenTag, buildNav, THEME_SCRIPT, TOAST_SCRIPT, siteTitle, CATEGORY_DISPLAY } from "./layout.js";
 import type { QueueItem, QueueCategory } from "../github.js";
-
-const CATEGORY_DISPLAY: Record<QueueCategory, { label: string; color: string }> = {
-  "ready": { label: "Ready", color: "0e8a16" },
-  "needs-refinement": { label: "Needs Refinement", color: "d876e3" },
-  "refined": { label: "Refined", color: "0075ca" },
-  "needs-review-addressing": { label: "Needs Review Addressing", color: "e4e669" },
-  "auto-mergeable": { label: "Auto-Mergeable", color: "0e8a16" },
-  "needs-triage": { label: "Needs Triage", color: "d73a49" },
-  "needs-plan-review": { label: "Needs Plan Review", color: "c5def5" },
-};
 
 const CATEGORY_PRIORITY: Record<QueueCategory, number> = {
   "needs-review-addressing": 0,
