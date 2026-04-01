@@ -1,32 +1,13 @@
 import type { Theme } from "./layout.js";
-import { PAGE_CSS, escapeHtml, htmlOpenTag, buildNav, THEME_SCRIPT, TOAST_SCRIPT, siteTitle, itemLogsUrl, formatRelativeTime } from "./layout.js";
+import { PAGE_CSS, escapeHtml, htmlOpenTag, buildNav, THEME_SCRIPT, TOAST_SCRIPT, siteTitle, itemLogsUrl, formatRelativeTime, CATEGORY_DISPLAY } from "./layout.js";
 import type { QueueItem, QueueCategory } from "../github.js";
 import type { Repo } from "../config.js";
 import type { Task } from "../db.js";
 
-const CATEGORY_LABELS: Record<QueueCategory, string> = {
-  "ready": "Ready",
-  "needs-refinement": "Needs Refinement",
-  "refined": "Refined",
-  "needs-review-addressing": "Needs Review Addressing",
-  "auto-mergeable": "Auto-Mergeable",
-  "needs-triage": "Needs Triage",
-  "needs-plan-review": "Needs Plan Review",
-};
-
-const CATEGORY_COLORS: Record<QueueCategory, string> = {
-  "ready": "0e8a16",
-  "needs-refinement": "d876e3",
-  "refined": "0075ca",
-  "needs-review-addressing": "e4e669",
-  "auto-mergeable": "0e8a16",
-  "needs-triage": "d73a49",
-  "needs-plan-review": "c5def5",
-};
-
 function statusBadge(category: QueueCategory): string {
-  const label = CATEGORY_LABELS[category] ?? category;
-  const color = CATEGORY_COLORS[category] ?? "30363d";
+  const display = CATEGORY_DISPLAY[category] ?? { label: category, color: "30363d" };
+  const label = display.label;
+  const color = display.color;
   const bg = `#${color}`;
   const text = parseInt(color, 16) > 0x7fffff ? "#000" : "#fff";
   return `<span class="repo-badge" style="background:${bg};color:${text}">${escapeHtml(label)}</span>`;

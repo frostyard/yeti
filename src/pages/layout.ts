@@ -1,6 +1,17 @@
 import { GITHUB_OWNERS } from "../config.js";
+import type { QueueCategory } from "../github.js";
 
 export type Theme = "dark" | "light" | "system";
+
+export const CATEGORY_DISPLAY: Record<QueueCategory, { label: string; color: string }> = {
+  "ready": { label: "Ready", color: "0e8a16" },
+  "needs-refinement": { label: "Needs Refinement", color: "d876e3" },
+  "refined": { label: "Refined", color: "0075ca" },
+  "needs-review-addressing": { label: "Needs Review Addressing", color: "e4e669" },
+  "auto-mergeable": { label: "Auto-Mergeable", color: "0e8a16" },
+  "needs-triage": { label: "Needs Triage", color: "d73a49" },
+  "needs-plan-review": { label: "Needs Plan Review", color: "c5def5" },
+};
 
 const LIGHT_THEME_VARS = `
     --bg: #ffffff;
