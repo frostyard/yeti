@@ -13,7 +13,7 @@
   },
   "dependencies": {
     "better-sqlite3": "^12",
-    "discord.js": "^14.25.1"
+    "discord.js": "^14.26.2"
   },
   "devDependencies": {
     "@types/better-sqlite3": "^7",
