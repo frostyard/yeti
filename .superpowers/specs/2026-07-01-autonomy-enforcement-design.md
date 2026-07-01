@@ -138,3 +138,17 @@ All under vitest. Known caveat: `src/db.test.ts` fails locally under Node 26 (`b
 - No advisory-variant templates (skip semantics render them unnecessary).
 - No dashboard/config-UI display of tier (later polish).
 - No change to the `repo.autonomy` per-Repo field behavior (unused escape hatch; left as-is).
+
+---
+
+## Rollout notes (behavior changes for operators)
+
+Plan C makes the autonomy tier enforcing (previously cosmetic). Two operator-visible changes:
+
+1. **auto-merge now requires opt-in.** The default tier is `pr`, and `merge` requires `automerge`. So after this change, auto-merger **no longer merges any repo unless that repo is explicitly mapped to `automerge`** in `config.json` (`"autonomy": { "owner/repo": "automerge" }`). Operators who relied on default-config auto-merge must add the mapping. (Enforcement is intended and test-covered.)
+2. **Lower tiers make the bot progressively read-only.** `advisory` repos: comments/labels/reactions only (no issues/PRs/pushes/merges). `issues`: adds issue creation. `pr`: adds push + PR creation (human merges). Jobs whose primary action exceeds a repo's tier now **skip that repo** (logged), before spending AI.
+
+## Follow-ups (non-blocking, from final review)
+
+- Hoist issue-worker/review-addresser pre-flight gates from per-item to the per-repo loop (cosmetic: avoids repeated skip logs + a wasted list read at low tiers; no AI spend today).
+- Resolve the `repoAutonomy` (pre-flight, honors `repo.autonomy`) vs `fullNameAutonomy` (firewall, ignores it) asymmetry: `repo.autonomy` is never populated today so they always agree, but either drop the dead `Repo.autonomy` field or make the firewall share the precedence before anyone wires it.
