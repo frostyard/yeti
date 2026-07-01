@@ -1,12 +1,13 @@
 import fs from "node:fs";
 import path from "node:path";
-import { JOB_AI, SELF_REPO, WORK_DIR, type Repo } from "../config.js";
+import { JOB_AI, SELF_REPO, WORK_DIR, repoAutonomy, type Repo } from "../config.js";
 import * as gh from "../github.js";
 import * as claude from "../claude.js";
 import * as log from "../log.js";
 import * as db from "../db.js";
 import { reportError } from "../error-reporter.js";
 import { notify } from "../notify.js";
+import { renderPolicy, type Autonomy } from "../policy.js";
 
 // ── Prompt registry ──
 
@@ -259,103 +260,35 @@ export function buildReport(
 }
 
 // ── Prompt builders for the evaluation pipeline ──
+//
+// These three builders are the harness's own FIXED meta-prompts (they scaffold
+// the A/B evaluation itself) and are rendered from policy templates. By
+// contrast, `buildSimulatedPrompt` below is deliberately left inline: its text
+// IS the experiment variable under test (it reconstructs the prompt-under-test
+// from `promptSource` / `variant.variant`), not a fixed scaffold — migrating it
+// would defeat the point of the A/B harness.
 
-function buildTestInputPrompt(promptSource: string, purpose: string): string {
-  return [
-    `You are helping evaluate an AI prompt used in a GitHub automation system.`,
-    ``,
-    `The prompt's purpose: ${purpose}`,
-    ``,
-    `Here is the current prompt function source code:`,
-    ``,
-    "```typescript",
-    promptSource,
-    "```",
-    ``,
-    `Generate 4 diverse test cases (GitHub issues) to evaluate this prompt against.`,
-    `Include:`,
-    `- 2 realistic issues (one well-specified, one vague/underspecified)`,
-    `- 2 adversarial edge cases (e.g., overly broad scope, missing acceptance criteria, ambiguous requirements)`,
-    ``,
-    `Return JSON in this exact format:`,
-    "```json",
-    `{`,
-    `  "testCases": [`,
-    `    { "title": "Issue title", "body": "Issue body text" }`,
-    `  ]`,
-    `}`,
-    "```",
-    ``,
-    `Return ONLY the JSON, no other text.`,
-  ].join("\n");
+export function buildTestInputPrompt(autonomy: Autonomy, promptSource: string, purpose: string): string {
+  return renderPolicy("prompt-evaluator.test-input", autonomy, {
+    PROMPT_SOURCE: promptSource,
+    PURPOSE: purpose,
+  });
 }
 
-function buildVariantPrompt(promptSource: string, purpose: string): string {
-  return [
-    `You are a prompt engineer improving an AI prompt used in a GitHub automation system.`,
-    ``,
-    `The prompt's purpose: ${purpose}`,
-    ``,
-    `Here is the current prompt function source code:`,
-    ``,
-    "```typescript",
-    promptSource,
-    "```",
-    ``,
-    `Analyze this prompt for weaknesses and propose an improved version.`,
-    `Consider:`,
-    `- Does it handle underspecified inputs well?`,
-    `- Does it give clear, actionable instructions?`,
-    `- Does it avoid encouraging guessing or speculation?`,
-    `- Is the scope guidance clear?`,
-    `- Are there missing instructions that would improve output quality?`,
-    ``,
-    `Return JSON in this exact format:`,
-    "```json",
-    `{`,
-    `  "variant": "The complete improved prompt text (not the function, just the prompt string it would produce)",`,
-    `  "rationale": "Explanation of what was changed and why"`,
-    `}`,
-    "```",
-    ``,
-    `Return ONLY the JSON, no other text.`,
-  ].join("\n");
+export function buildVariantPrompt(autonomy: Autonomy, promptSource: string, purpose: string): string {
+  return renderPolicy("prompt-evaluator.variant", autonomy, {
+    PROMPT_SOURCE: promptSource,
+    PURPOSE: purpose,
+  });
 }
 
-function buildJudgePrompt(testCase: TestCase, currentOutput: string, variantOutput: string): string {
-  return [
-    `You are judging two AI outputs produced by different prompts for the same input.`,
-    ``,
-    `## Test Input (GitHub Issue)`,
-    `**Title:** ${testCase.title}`,
-    `**Body:** ${testCase.body}`,
-    ``,
-    `## Output A (Current Prompt)`,
-    currentOutput,
-    ``,
-    `## Output B (Variant Prompt)`,
-    variantOutput,
-    ``,
-    `Score each output on these criteria (1-5 scale):`,
-    `- **specificity**: Does it reference concrete files, functions, or patterns?`,
-    `- **actionability**: Could a developer implement from this output?`,
-    `- **scopeAwareness**: Does it avoid over-engineering or under-engineering?`,
-    `- **uncertainty**: Does it flag ambiguity instead of guessing? (5 = appropriately uncertain)`,
-    ``,
-    `Return JSON in this exact format:`,
-    "```json",
-    `{`,
-    `  "scores": {`,
-    `    "current": { "specificity": 3, "actionability": 3, "scopeAwareness": 3, "uncertainty": 3 },`,
-    `    "variant": { "specificity": 4, "actionability": 4, "scopeAwareness": 4, "uncertainty": 4 }`,
-    `  },`,
-    `  "winner": "variant",`,
-    `  "reasoning": "Brief explanation of why the winner is better"`,
-    `}`,
-    "```",
-    ``,
-    `Return ONLY the JSON, no other text.`,
-  ].join("\n");
+export function buildJudgePrompt(autonomy: Autonomy, testCase: TestCase, currentOutput: string, variantOutput: string): string {
+  return renderPolicy("prompt-evaluator.judge", autonomy, {
+    TEST_TITLE: testCase.title,
+    TEST_BODY: testCase.body,
+    CURRENT_OUTPUT: currentOutput,
+    VARIANT_OUTPUT: variantOutput,
+  });
 }
 
 // ── Main job ──
@@ -382,7 +315,7 @@ async function evaluatePrompt(entry: PromptEntry, repo: Repo): Promise<void> {
 
     // Step 2: Generate test inputs
     log.info(`[prompt-evaluator] Generating test inputs for ${entry.name}`);
-    const testInputPrompt = buildTestInputPrompt(promptSource, entry.purpose);
+    const testInputPrompt = buildTestInputPrompt(repoAutonomy(repo), promptSource, entry.purpose);
     const testInputOutput = await enqueue(() => claude.runAI(testInputPrompt, wtPath!, aiOptions));
     const testCases = parseTestInputs(testInputOutput).slice(0, REQUIRED_TEST_CASES);
     if (testCases.length < REQUIRED_TEST_CASES) {
@@ -393,7 +326,7 @@ async function evaluatePrompt(entry: PromptEntry, repo: Repo): Promise<void> {
 
     // Step 3: Generate variant
     log.info(`[prompt-evaluator] Generating variant for ${entry.name}`);
-    const variantPrompt = buildVariantPrompt(promptSource, entry.purpose);
+    const variantPrompt = buildVariantPrompt(repoAutonomy(repo), promptSource, entry.purpose);
     const variantOutput = await enqueue(() => claude.runAI(variantPrompt, wtPath!, aiOptions));
     const variant = parseVariant(variantOutput);
     if (!variant) {
@@ -423,7 +356,7 @@ async function evaluatePrompt(entry: PromptEntry, repo: Repo): Promise<void> {
     const results: EvalResult[] = [];
 
     for (const comp of comparisons) {
-      const judgePrompt = buildJudgePrompt(comp.testCase, comp.currentOutput, comp.variantOutput);
+      const judgePrompt = buildJudgePrompt(repoAutonomy(repo), comp.testCase, comp.currentOutput, comp.variantOutput);
       const judgeOutput = await enqueue(() => claude.runAI(judgePrompt, wtPath!, aiOptions));
       const judgment = parseJudgment(judgeOutput);
       if (judgment) {
