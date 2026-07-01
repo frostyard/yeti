@@ -53,7 +53,7 @@ async function processRepo(repo: Repo): Promise<void> {
     // Step 4: Push and create PR
     if (await claude.hasNewCommits(wtPath, repo.defaultBranch) && await claude.hasTreeDiff(wtPath, repo.defaultBranch)) {
       const description = await claude.generateDocsPRDescription(wtPath, repo.defaultBranch, aiOptions);
-      await claude.pushBranch(wtPath, branchName);
+      await claude.pushBranch(wtPath, branchName, fullName);
       const prNumber = await gh.createPR(
         fullName,
         branchName,

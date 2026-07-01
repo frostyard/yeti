@@ -154,7 +154,7 @@ async function processRepo(repo: Repo): Promise<void> {
       await claude.resolveEnqueue(aiOptions)(() => claude.runAI(implPrompt, implWt!, aiOptions));
 
       if (await claude.hasNewCommits(implWt, repo.defaultBranch) && await claude.hasTreeDiff(implWt, repo.defaultBranch)) {
-        await claude.pushBranch(implWt, implBranch);
+        await claude.pushBranch(implWt, implBranch, fullName);
         const prBody = improvement.body + FOOTER;
         const prNumber = await gh.createPR(fullName, implBranch, `refactor: ${improvement.title}`, prBody);
         log.info(`[improvement-identifier] Created PR for "${improvement.title}" in ${fullName}`);

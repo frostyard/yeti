@@ -28,6 +28,11 @@ vi.mock("./config.js", () => ({
   INCLUDE_FORKS: false,
   SKIPPED_ITEMS: [],
   PRIORITIZED_ITEMS: [],
+  // Firewall (capability.ts) reads these directly — default to the most
+  // permissive tier so pre-existing tests (which don't spy on
+  // assertCapability) keep exercising their original gh-call behavior.
+  DEFAULT_AUTONOMY: "automerge",
+  AUTONOMY_MAP: {} as Record<string, string>,
 }));
 
 vi.mock("./log.js", () => ({
@@ -47,6 +52,7 @@ vi.mock("./notify.js", () => ({
 import { notify } from "./notify.js";
 import * as config from "./config.js";
 import * as log from "./log.js";
+import * as capability from "./capability.js";
 
 import {
   listRepos,
@@ -54,6 +60,7 @@ import {
   searchIssues,
   createIssue,
   createPR,
+  mergePR,
   listIssuesByLabel,
   prChecksFailing,
   prChecksPassing,
@@ -594,6 +601,27 @@ describe("createPR", () => {
       "permission denied",
     );
   });
+
+  it("asserts createPR capability before creating", async () => {
+    mockExecFile.mockImplementation((_cmd: string, _args: string[], _opts: any, cb: any) => {
+      cb(null, "https://github.com/org/repo/pull/123\n", "");
+    });
+    const spy = vi.spyOn(capability, "assertCapability").mockImplementation(() => {});
+
+    await createPR("acme/r", "head", "title", "body");
+    expect(spy).toHaveBeenCalledWith("acme/r", "createPR");
+    spy.mockRestore();
+  });
+
+  it("propagates AutonomyError from the firewall (no PR created)", async () => {
+    const spy = vi.spyOn(capability, "assertCapability").mockImplementation(() => {
+      throw new capability.AutonomyError("acme/r", "createPR", "advisory");
+    });
+
+    await expect(createPR("acme/r", "head", "title", "body")).rejects.toBeInstanceOf(capability.AutonomyError);
+    expect(mockExecFile).not.toHaveBeenCalled();
+    spy.mockRestore();
+  });
 });
 
 describe("createIssue", () => {
@@ -627,6 +655,59 @@ describe("createIssue", () => {
 
     const issueNumber = await createIssue("org/repo", "title", "body", ["bug"]);
     expect(issueNumber).toBe(42);
+  });
+
+  it("asserts createIssue capability before creating", async () => {
+    mockExecFile.mockImplementation((_cmd: string, args: string[], _opts: any, cb: any) => {
+      if (args[0] === "label") {
+        cb(null, "", "");
+      } else {
+        cb(null, "https://github.com/org/repo/issues/99\n", "");
+      }
+    });
+    const spy = vi.spyOn(capability, "assertCapability").mockImplementation(() => {});
+
+    await createIssue("acme/r", "title", "body", ["bug"]);
+    expect(spy).toHaveBeenCalledWith("acme/r", "createIssue");
+    spy.mockRestore();
+  });
+
+  it("propagates AutonomyError from the firewall (no issue created)", async () => {
+    const spy = vi.spyOn(capability, "assertCapability").mockImplementation(() => {
+      throw new capability.AutonomyError("acme/r", "createIssue", "advisory");
+    });
+
+    await expect(createIssue("acme/r", "title", "body", ["bug"])).rejects.toBeInstanceOf(capability.AutonomyError);
+    expect(mockExecFile).not.toHaveBeenCalled();
+    spy.mockRestore();
+  });
+});
+
+describe("mergePR", () => {
+  beforeEach(() => {
+    mockExecFile.mockReset();
+    clearRateLimitState();
+  });
+
+  it("asserts merge capability before merging", async () => {
+    mockExecFile.mockImplementation((_cmd: string, _args: string[], _opts: any, cb: any) => {
+      cb(null, "", "");
+    });
+    const spy = vi.spyOn(capability, "assertCapability").mockImplementation(() => {});
+
+    await mergePR("acme/r", 7);
+    expect(spy).toHaveBeenCalledWith("acme/r", "merge");
+    spy.mockRestore();
+  });
+
+  it("propagates AutonomyError from the firewall (no merge performed)", async () => {
+    const spy = vi.spyOn(capability, "assertCapability").mockImplementation(() => {
+      throw new capability.AutonomyError("acme/r", "merge", "advisory");
+    });
+
+    await expect(mergePR("acme/r", 7)).rejects.toBeInstanceOf(capability.AutonomyError);
+    expect(mockExecFile).not.toHaveBeenCalled();
+    spy.mockRestore();
   });
 });
 

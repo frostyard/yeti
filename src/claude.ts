@@ -6,6 +6,7 @@ import path from "node:path";
 import { WORK_DIR, MAX_CLAUDE_WORKERS, CLAUDE_TIMEOUT_MS, MAX_COPILOT_WORKERS, COPILOT_TIMEOUT_MS, MAX_CODEX_WORKERS, CODEX_TIMEOUT_MS, type Repo } from "./config.js";
 import * as log from "./log.js";
 import { isShuttingDown, ShutdownError } from "./shutdown.js";
+import { assertCapability } from "./capability.js";
 
 /** Generate a short random suffix for branch names (4 hex chars). */
 export function randomSuffix(): string {
@@ -550,7 +551,8 @@ export function runAI(prompt: string, cwd: string, options?: AiOptions): Promise
   });
 }
 
-export async function pushBranch(wtPath: string, branchName: string): Promise<void> {
+export async function pushBranch(wtPath: string, branchName: string, fullName: string): Promise<void> {
+  assertCapability(fullName, "push");
   // Use HEAD refspec to support both detached HEAD (createWorktreeFromBranch)
   // and named branch (createWorktree) worktrees.
   await git(["push", "origin", `HEAD:refs/heads/${branchName}`], wtPath);

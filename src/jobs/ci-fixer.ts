@@ -45,7 +45,7 @@ async function resolveConflicts(repo: Repo, pr: gh.PR): Promise<boolean> {
 
     if (clean) {
       // Merge was auto-resolved by git — just push
-      await claude.pushBranch(wtPath, pr.headRefName);
+      await claude.pushBranch(wtPath, pr.headRefName, fullName);
       log.info(`[ci-fixer] Clean merge pushed for ${fullName}#${pr.number}`);
       notify({ jobName: "ci-fixer", message: `Resolved merge conflict for ${fullName}#${pr.number}`, url: gh.pullUrl(fullName, pr.number) });
       db.recordTaskComplete(taskId);
@@ -59,7 +59,7 @@ async function resolveConflicts(repo: Repo, pr: gh.PR): Promise<boolean> {
     await claude.resolveEnqueue(aiOptions)(() => claude.runAI(prompt, wtPath!, aiOptions), gh.hasPriorityLabel(pr.labels));
 
     if (await claude.hasNewCommits(wtPath, pr.headRefName) && await claude.hasTreeDiff(wtPath, pr.headRefName)) {
-      await claude.pushBranch(wtPath, pr.headRefName);
+      await claude.pushBranch(wtPath, pr.headRefName, fullName);
       try {
         const description = await claude.regeneratePRDescription(wtPath, pr.baseRefName, pr, aiOptions);
         await gh.updatePRBody(fullName, pr.number, description);
@@ -226,7 +226,7 @@ async function fixCI(repo: Repo, pr: gh.PR, failLog: string): Promise<void> {
     await claude.resolveEnqueue(aiOptions)(() => claude.runAI(prompt, wtPath!, aiOptions), gh.hasPriorityLabel(pr.labels));
 
     if (await claude.hasNewCommits(wtPath, pr.headRefName) && await claude.hasTreeDiff(wtPath, pr.headRefName)) {
-      await claude.pushBranch(wtPath, pr.headRefName);
+      await claude.pushBranch(wtPath, pr.headRefName, fullName);
       try {
         const description = await claude.regeneratePRDescription(wtPath, pr.baseRefName, pr, aiOptions);
         await gh.updatePRBody(fullName, pr.number, description);
@@ -335,7 +335,7 @@ async function revertPreviousUnrelatedFixes(
     await claude.resolveEnqueue(aiOptions)(() => claude.runAI(prompt, wtPath!, aiOptions), gh.hasPriorityLabel(pr.labels));
 
     if (await claude.hasNewCommits(wtPath, pr.headRefName) && await claude.hasTreeDiff(wtPath, pr.headRefName)) {
-      await claude.pushBranch(wtPath, pr.headRefName);
+      await claude.pushBranch(wtPath, pr.headRefName, fullName);
       log.info(`[ci-fixer] Reverted unrelated fixes for ${fullName}#${pr.number}`);
     }
 
@@ -375,7 +375,7 @@ async function mergeBaseIfBehind(repo: Repo, pr: gh.PR): Promise<void> {
     const { clean } = await claude.attemptMerge(wtPath, pr.baseRefName);
 
     if (clean) {
-      await claude.pushBranch(wtPath, pr.headRefName);
+      await claude.pushBranch(wtPath, pr.headRefName, fullName);
       log.info(`[ci-fixer] Merged ${pr.baseRefName} into ${pr.headRefName} for ${fullName}#${pr.number}`);
     } else {
       await claude.abortMerge(wtPath);

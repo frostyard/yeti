@@ -8,6 +8,11 @@ vi.mock("./config.js", () => ({
   COPILOT_TIMEOUT_MS: 20 * 60 * 1000,
   MAX_CODEX_WORKERS: 1,
   CODEX_TIMEOUT_MS: 20 * 60 * 1000,
+  // Firewall (capability.ts) reads these directly — default to the most
+  // permissive tier so pre-existing tests (which don't spy on
+  // assertCapability) keep exercising their original git-call behavior.
+  DEFAULT_AUTONOMY: "automerge",
+  AUTONOMY_MAP: {} as Record<string, string>,
 }));
 
 vi.mock("./log.js", () => ({
@@ -43,6 +48,7 @@ vi.mock("node:fs", () => ({
 import { enqueue, queueStatus, randomSuffix, datestamp, hasNewCommits, hasTreeDiff, generatePRDescription, generateDocsPRDescription, regeneratePRDescription, cancelCurrentTask, cancelQueuedTasks, createWorktree, createWorktreeFromBranch, pushBranch, ensureClone, ClaudeTimeoutError, runAI, copilotQueueStatus, enqueueCopilot, codexQueueStatus, enqueueCodex, AiTimeoutError, resolveEnqueue } from "./claude.js";
 import { ShutdownError } from "./shutdown.js";
 import * as shutdown from "./shutdown.js";
+import * as capability from "./capability.js";
 import fs from "node:fs";
 import { execFile, spawn } from "node:child_process";
 import type { ChildProcess } from "node:child_process";
@@ -930,9 +936,30 @@ describe("pushBranch", () => {
       return undefined as any;
     });
 
-    await pushBranch("/some/worktree", "yeti/improve-82cd");
+    await pushBranch("/some/worktree", "yeti/improve-82cd", "acme/r");
 
     expect(gitCalls).toEqual([["push", "origin", "HEAD:refs/heads/yeti/improve-82cd"]]);
+  });
+
+  it("asserts push capability before pushing", async () => {
+    mockExecFile.mockImplementation((_cmd, _args: any, _opts: any, cb: any) => {
+      cb(null, "", "");
+      return undefined as any;
+    });
+    const spy = vi.spyOn(capability, "assertCapability").mockImplementation(() => {});
+
+    await pushBranch("/wt", "branch", "acme/r");
+    expect(spy).toHaveBeenCalledWith("acme/r", "push");
+    spy.mockRestore();
+  });
+
+  it("propagates AutonomyError from the firewall (no push performed)", async () => {
+    const spy = vi.spyOn(capability, "assertCapability").mockImplementation(() => {
+      throw new capability.AutonomyError("acme/r", "push", "advisory");
+    });
+
+    await expect(pushBranch("/wt", "branch", "acme/r")).rejects.toBeInstanceOf(capability.AutonomyError);
+    spy.mockRestore();
   });
 });
 

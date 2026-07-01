@@ -195,7 +195,7 @@ async function processIssue(repo: Repo, issue: gh.Issue): Promise<void> {
     await claude.resolveEnqueue(aiOptions)(() => claude.runAI(prompt, wtPath!, aiOptions), gh.isItemPrioritized(fullName, issue.number) || gh.hasPriorityLabel(issue.labels));
 
     if (await claude.hasNewCommits(wtPath, repo.defaultBranch) && await claude.hasTreeDiff(wtPath, repo.defaultBranch)) {
-      await claude.pushBranch(wtPath, branchName);
+      await claude.pushBranch(wtPath, branchName, fullName);
       const description = await claude.generatePRDescription(
         wtPath, repo.defaultBranch, issue, aiOptions,
       );

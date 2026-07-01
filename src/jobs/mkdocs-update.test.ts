@@ -141,6 +141,7 @@ describe("mkdocs-update", () => {
     expect(mockClaude.pushBranch).toHaveBeenCalledWith(
       "/tmp/worktree",
       expect.stringContaining("yeti/mkdocs-update-"),
+      repo.fullName,
     );
     expect(mockGh.createPR).toHaveBeenCalledWith(
       repo.fullName,
