@@ -1,4 +1,5 @@
 import { LABELS, JOB_AI, repoAutonomy, type Repo } from "../config.js";
+import { can } from "../capability.js";
 import { renderPolicy, type Autonomy } from "../policy.js";
 import * as gh from "../github.js";
 import { isRateLimited } from "../github.js";
@@ -27,6 +28,11 @@ export function buildPrompt(
 }
 
 async function processPR(repo: Repo, pr: gh.PR, reviewData: gh.PRReviewData): Promise<void> {
+  if (!can(repo, "push")) {
+    log.info(`[review-addresser] skip ${repo.fullName} — tier below 'push' requirement`);
+    return;
+  }
+
   const fullName = repo.fullName;
   log.info(`[review-addresser] Processing PR #${pr.number} in ${fullName}`);
 

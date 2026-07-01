@@ -129,6 +129,17 @@ describe("review-addresser", () => {
     expect(mockDb.recordTaskComplete).toHaveBeenCalledWith(1);
   });
 
+  it("autonomy below 'push' — skips repo before any worktree/AI work", async () => {
+    const advisoryRepo = { ...mockRepo(), autonomy: "advisory" as const };
+    const pr = mockPR({ headRefName: "yeti/fix-123" });
+    mockGh.listPRs.mockResolvedValue([pr]);
+
+    await run([advisoryRepo]);
+
+    expect(mockClaude.createWorktreeFromBranch).not.toHaveBeenCalled();
+    expect(mockClaude.runAI).not.toHaveBeenCalled();
+  });
+
   it("no review comments — skips without creating worktree", async () => {
     const pr = mockPR({ headRefName: "yeti/fix-123" });
     mockGh.listPRs.mockResolvedValue([pr]);
