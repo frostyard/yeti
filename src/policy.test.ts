@@ -1,7 +1,11 @@
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import fs from "node:fs";
 import path from "node:path";
 import os from "node:os";
+
+vi.mock("./log.js", () => ({ info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() }));
+
+import * as log from "./log.js";
 import { substitute, resolvePolicyPath, renderPolicy, findMissingVars, countPolicyFiles } from "./policy.js";
 
 describe("substitute", () => {
@@ -138,6 +142,19 @@ describe("renderPolicy", () => {
 
   it("throws when no policy file exists and no fallback is given", () => {
     expect(() => renderPolicy("missing", "pr", {}, { dirs: [dir] })).toThrow(/missing/);
+  });
+
+  it("warns via log.warn when a template has an unsubstituted var", () => {
+    fs.writeFileSync(path.join(dir, "issue-worker-warn.md"), "Fix #${NUM} in ${REPO}");
+    renderPolicy("issue-worker-warn", "pr", { NUM: "7" }, { dirs: [dir] }); // REPO missing
+    expect(log.warn).toHaveBeenCalledWith(expect.stringContaining("${REPO}"));
+  });
+
+  it("does not warn when all vars are provided", () => {
+    vi.mocked(log.warn).mockClear();
+    fs.writeFileSync(path.join(dir, "issue-worker-nowarn.md"), "Fix #${NUM} in ${REPO}");
+    renderPolicy("issue-worker-nowarn", "pr", { NUM: "7", REPO: "acme/widget" }, { dirs: [dir] });
+    expect(log.warn).not.toHaveBeenCalled();
   });
 });
 

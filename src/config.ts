@@ -3,7 +3,12 @@ import os from "node:os";
 import fs from "node:fs";
 import type { Autonomy } from "./policy.js";
 
-const AUTONOMY_TIERS = ["advisory", "issues", "pr", "automerge"] as const;
+const AUTONOMY_TIERS = ["advisory", "issues", "pr", "automerge"] as const satisfies readonly Autonomy[];
+// Compile-time guard: if a tier is added to the Autonomy union but not to
+// AUTONOMY_TIERS above, this assignment fails to type-check.
+type _TierListComplete = Autonomy extends (typeof AUTONOMY_TIERS)[number] ? true : ["AUTONOMY_TIERS missing a tier in the Autonomy union"];
+const _tierListComplete: _TierListComplete = true;
+void _tierListComplete;
 
 function coerceAutonomy(value: unknown, context: string): Autonomy {
   if (typeof value === "string" && (AUTONOMY_TIERS as readonly string[]).includes(value)) {
