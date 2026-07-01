@@ -1,4 +1,5 @@
 import { JOB_AI, repoAutonomy, type Repo } from "../config.js";
+import { can } from "../capability.js";
 import * as gh from "../github.js";
 import { isRateLimited, RateLimitError } from "../github.js";
 import * as claude from "../claude.js";
@@ -434,6 +435,10 @@ export async function run(repos: Repo[]): Promise<void> {
 
   for (const repo of repos) {
     if (isRateLimited()) break;
+    if (!can(repo, "push")) {
+      log.info(`[ci-fixer] skip ${repo.fullName} — tier below 'push' requirement`);
+      continue;
+    }
     try {
       const prs = await gh.listPRs(repo.fullName);
       for (const pr of prs) {

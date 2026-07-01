@@ -155,6 +155,24 @@ describe("ci-fixer", () => {
     expect(mockReportError).not.toHaveBeenCalled();
   });
 
+  it("autonomy below 'push' — skips repo before any worktree/AI work", async () => {
+    const advisoryRepo = { ...mockRepo(), autonomy: "advisory" as const };
+    const pr = mockPR();
+    mockGh.listPRs.mockResolvedValue([pr]);
+    mockGh.getFailingCheck.mockResolvedValue({
+      name: "CI",
+      state: "FAILURE",
+      link: "https://github.com/org/repo/actions/runs/123",
+    });
+    mockGh.getFailedRunLog.mockResolvedValue("error: test failed");
+
+    await run([advisoryRepo]);
+
+    expect(mockGh.listPRs).not.toHaveBeenCalled();
+    expect(mockClaude.createWorktreeFromBranch).not.toHaveBeenCalled();
+    expect(mockClaude.runAI).not.toHaveBeenCalled();
+  });
+
   it("related failure — proceeds with fix as before", async () => {
     const pr = mockPR();
     mockGh.listPRs.mockResolvedValue([pr]);
