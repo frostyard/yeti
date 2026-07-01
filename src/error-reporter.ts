@@ -1,5 +1,6 @@
 import { SELF_REPO } from "./config.js";
 import { ClaudeTimeoutError } from "./claude.js";
+import { AutonomyError } from "./capability.js";
 import * as gh from "./github.js";
 import { isRateLimited, RateLimitError } from "./github.js";
 import * as log from "./log.js";
@@ -15,6 +16,13 @@ export async function reportError(
 ): Promise<void> {
   if (error instanceof ShutdownError) {
     log.info(`[${fingerprint}] ${context}: ${error.message} (shutdown — not reported)`);
+    return;
+  }
+
+  // AutonomyError is an expected policy denial (a job attempted an action its
+  // repo's tier disallows). Log and skip — never file a [yeti-error] issue.
+  if (error instanceof AutonomyError) {
+    log.warn(`[${fingerprint}] ${context}: ${error.message} (autonomy denial — not reported)`);
     return;
   }
 
