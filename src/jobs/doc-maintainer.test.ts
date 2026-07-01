@@ -231,6 +231,17 @@ describe("doc-maintainer", () => {
     );
   });
 
+  describe("autonomy pre-flight gate", () => {
+    it("skips before worktree/AI when repo tier is below 'createPR' (advisory)", async () => {
+      const advisoryRepo = { ...mockRepo(), autonomy: "advisory" as const };
+
+      await run([advisoryRepo]);
+
+      expect(mockClaude.createWorktree).not.toHaveBeenCalled();
+      expect(mockClaude.runAI).not.toHaveBeenCalled();
+    });
+  });
+
   describe("plan harvesting", () => {
     it("fetches plans from recently-closed issues and writes .plans/ directory", async () => {
       mockGh.listRecentlyClosedIssues.mockResolvedValue([
