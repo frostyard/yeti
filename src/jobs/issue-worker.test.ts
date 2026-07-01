@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { mockRepo, mockIssue, mockPR } from "../test-helpers.js";
+import * as planParser from "../plan-parser.js";
 
 vi.mock("../config.js", () => ({
   LABELS: {
@@ -546,5 +547,50 @@ describe("buildPrompt single-phase (policy template)", () => {
   it("substitutes image context when present", () => {
     const out = buildPrompt("pr", "acme/widget", issue, null, 1, 1, [], [], "## Attached Images\ndiagram.png");
     expect(out).toContain("## Attached Images");
+  });
+});
+
+describe("buildPrompt multi-phase (policy template)", () => {
+  const plan = {
+    preamble: "Overall approach.",
+    totalPhases: 2,
+    phases: [
+      { phaseNumber: 1, title: "Schema", description: "Add the table." },
+      { phaseNumber: 2, title: "API", description: "Expose the endpoint." },
+    ],
+  } as unknown as planParser.ParsedPlan;
+  const issue = { number: 7, title: "Fix bug", body: "It crashes.", labels: [] } as unknown as gh.Issue;
+  const mergedPRs = [{ number: 40, title: "Schema" }] as unknown as gh.PR[];
+
+  function expectedPhased(): string {
+    const currentPhase = 2, totalPhases = 2;
+    const phase = plan.phases[currentPhase - 1];
+    return [
+      `You are working on PR ${currentPhase} of ${totalPhases} for issue #${issue.number} in acme/widget.`,
+      `Issue: ${issue.title}`,
+      ``,
+      `If \`yeti/OVERVIEW.md\` exists, read it first (and any linked documents that seem relevant to the issue) for context about the codebase.`,
+      ``,
+      `## Full Plan`,
+      plan.preamble,
+      ...plan.phases.map((p) => `### PR ${p.phaseNumber}: ${p.title}\n${p.description}`),
+      ``,
+      `## Already Completed`,
+      mergedPRs.map((pr) => `- PR #${pr.number}: ${pr.title}`).join("\n"),
+      ``,
+      `## Your Task`,
+      `Implement ONLY the changes for PR ${currentPhase}: ${phase.title}`,
+      ``,
+      phase.description,
+      ``,
+      `Do NOT implement changes from other phases.`,
+      `Make commits with clear messages as you work.`,
+      "",
+    ].join("\n");
+  }
+
+  it("renders the phased variant identically to the pre-migration inline builder", () => {
+    const out = buildPrompt("pr", "acme/widget", issue, plan, 2, 2, mergedPRs, [], "");
+    expect(out.trimEnd()).toBe(expectedPhased().trimEnd());
   });
 });

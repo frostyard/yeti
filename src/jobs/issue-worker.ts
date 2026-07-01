@@ -33,66 +33,37 @@ export function buildPrompt(
   imageContext: string,
 ): string {
   if (totalPhases === 1 || !plan) {
-    const singlePhaseInline = () =>
-      [
-        `You are working on a GitHub issue for the repository ${fullName}.`,
-        `Issue #${issue.number}: ${issue.title}`,
-        ``,
-        issue.body,
-        ``,
-        ...comments.flatMap((c) => {
-          const label = gh.isYetiComment(c.body)
-            ? `Comment by @${c.login} (automated by Yeti):`
-            : `Comment by @${c.login}:`;
-          return [`---`, label, gh.stripYetiMarker(c.body), ``];
-        }),
-        `If \`yeti/OVERVIEW.md\` exists, read it first (and any linked documents that seem relevant to the issue) for context about the codebase.`,
-        ``,
-        `Please implement the changes needed to resolve this issue.`,
-        `Make commits with clear messages as you work.`,
-        imageContext,
-      ].join("\n");
-
-    return renderPolicy(
-      "issue-worker",
-      autonomy,
-      {
-        REPO: fullName,
-        NUM: String(issue.number),
-        TITLE: issue.title,
-        BODY: issue.body,
-        COMMENTS: formatComments(comments),
-        IMAGE_CONTEXT: imageContext,
-      },
-      { fallback: singlePhaseInline },
-    );
+    return renderPolicy("issue-worker", autonomy, {
+      REPO: fullName,
+      NUM: String(issue.number),
+      TITLE: issue.title,
+      BODY: issue.body,
+      COMMENTS: formatComments(comments),
+      IMAGE_CONTEXT: imageContext,
+    });
   }
 
   const phase = plan.phases[currentPhase - 1];
-  return [
-    `You are working on PR ${currentPhase} of ${totalPhases} for issue #${issue.number} in ${fullName}.`,
-    `Issue: ${issue.title}`,
-    ``,
-    `If \`yeti/OVERVIEW.md\` exists, read it first (and any linked documents that seem relevant to the issue) for context about the codebase.`,
-    ``,
-    `## Full Plan`,
-    plan.preamble,
-    ...plan.phases.map((p) => `### PR ${p.phaseNumber}: ${p.title}\n${p.description}`),
-    ``,
-    `## Already Completed`,
-    mergedPRs.length > 0
-      ? mergedPRs.map((pr) => `- PR #${pr.number}: ${pr.title}`).join("\n")
-      : `None yet — this is the first PR.`,
-    ``,
-    `## Your Task`,
-    `Implement ONLY the changes for PR ${currentPhase}: ${phase.title}`,
-    ``,
-    phase.description,
-    ``,
-    `Do NOT implement changes from other phases.`,
-    `Make commits with clear messages as you work.`,
-    imageContext,
-  ].join("\n");
+  const planPhases = plan.phases
+    .map((p) => `### PR ${p.phaseNumber}: ${p.title}\n${p.description}`)
+    .join("\n");
+  const completed = mergedPRs.length > 0
+    ? mergedPRs.map((pr) => `- PR #${pr.number}: ${pr.title}`).join("\n")
+    : `None yet — this is the first PR.`;
+
+  return renderPolicy("issue-worker.phased", autonomy, {
+    CURRENT_PHASE: String(currentPhase),
+    TOTAL_PHASES: String(totalPhases),
+    NUM: String(issue.number),
+    REPO: fullName,
+    TITLE: issue.title,
+    PREAMBLE: plan.preamble,
+    PLAN_PHASES: planPhases,
+    COMPLETED: completed,
+    PHASE_TITLE: phase.title,
+    PHASE_DESCRIPTION: phase.description,
+    IMAGE_CONTEXT: imageContext,
+  });
 }
 
 async function postPhaseProgressComment(
