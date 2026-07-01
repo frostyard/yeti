@@ -129,3 +129,17 @@ All tests run under vitest. Note the pre-existing environment caveat: `src/db.te
 - **Plan B — Migration** (`.superpowers/plans/…-step2-migration.md`): §3 job-by-job migration (pipeline, one characterization test each) + selective variants. Depends on Plan A.
 
 **Stretch (not planned yet):** read-only dashboard panel listing loaded policies with resolved path + effective tier.
+
+---
+
+## Follow-up (tracked): autonomy enforcement is not yet wired
+
+**Status as of Plan B completion (commit 04c91f3):** `repoAutonomy` is resolved and passed into `renderPolicy`, but it is used **only** to select a template — and no tier-suffixed variant templates exist yet, so every tier (`advisory`/`issues`/`pr`/`automerge`) resolves to the same base template. **No code path consults `repoAutonomy` to gate behavior** (prevent PR creation / push / merge). Real guards remain code-level and tier-unaware (tree-diff guard, auto-merger LGTM check).
+
+**Consequence:** Setting a repo to `advisory` today changes nothing behaviorally — the bot still opens PRs/pushes. The autonomy knob is currently **cosmetic**.
+
+**Do NOT advertise autonomy as behavior-affecting** (docs/dashboard/config UI) until the follow-up lands.
+
+**Follow-up work (a future plan — was Task 12, deliberately deferred):**
+1. Author tier-specific variant templates only where prompt wording must differ (e.g. `issue-worker-advisory.md`: "post your proposed fix as a comment; do not open a PR").
+2. Add code that consults `repoAutonomy(repo)` to gate side effects per `AgentMode` semantics: advisory → no issues/PRs; issues → issues only; pr → PRs (human merges); automerge → auto-merge on green. This is the piece that makes the knob real; template variants alone would be misleading.
