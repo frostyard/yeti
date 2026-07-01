@@ -1,5 +1,6 @@
 import { LABELS, JOB_AI, repoAutonomy, type Repo } from "../config.js";
 import { renderPolicy, type Autonomy } from "../policy.js";
+import { can } from "../capability.js";
 import * as gh from "../github.js";
 import { isRateLimited } from "../github.js";
 import * as claude from "../claude.js";
@@ -147,6 +148,11 @@ function buildPRBody(
 }
 
 async function processIssue(repo: Repo, issue: gh.Issue): Promise<void> {
+  if (!can(repo, "createPR")) {
+    log.info(`[issue-worker] skip ${repo.fullName} — tier below 'createPR' requirement`);
+    return;
+  }
+
   const fullName = repo.fullName;
   log.info(`[issue-worker] Processing ${fullName}#${issue.number}: ${issue.title}`);
 

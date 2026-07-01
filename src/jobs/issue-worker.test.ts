@@ -482,6 +482,19 @@ describe("issue-worker", () => {
     });
   });
 
+  describe("autonomy pre-flight gate", () => {
+    it("skips before worktree/AI when repo tier is below 'createPR' (advisory)", async () => {
+      const advisoryRepo = { ...mockRepo(), autonomy: "advisory" as const };
+      const issue = mockIssue({ labels: [{ name: "Refined" }] });
+      mockGh.listIssuesByLabel.mockResolvedValueOnce([issue]);
+
+      await run([advisoryRepo]);
+
+      expect(mockClaude.createWorktree).not.toHaveBeenCalled();
+      expect(mockClaude.runAI).not.toHaveBeenCalled();
+    });
+  });
+
   it("includes image context in prompt when images are found", async () => {
     const issue = mockIssue({
       body: "Fix this: ![bug](https://example.com/bug.png)",
