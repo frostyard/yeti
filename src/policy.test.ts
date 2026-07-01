@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import fs from "node:fs";
 import path from "node:path";
 import os from "node:os";
-import { substitute, resolvePolicyPath, renderPolicy } from "./policy.js";
+import { substitute, resolvePolicyPath, renderPolicy, findMissingVars } from "./policy.js";
 
 describe("substitute", () => {
   it("replaces ${VAR} placeholders with their values", () => {
@@ -23,6 +23,21 @@ describe("substitute", () => {
   it("treats a value's bare $ literally", () => {
     const out = substitute("cost=${C}", { C: "$5 and $$" });
     expect(out).toBe("cost=$5 and $$");
+  });
+});
+
+describe("findMissingVars", () => {
+  it("returns template placeholders not present in vars, distinct and in order", () => {
+    expect(findMissingVars("${A} ${B} ${A} ${C}", { A: "1" })).toEqual(["B", "C"]);
+  });
+
+  it("returns [] when every placeholder is provided", () => {
+    expect(findMissingVars("${A}-${B}", { A: "1", B: "2" })).toEqual([]);
+  });
+
+  it("does not flag ${...} that appears only inside a provided value", () => {
+    // BODY is provided, so even though its value contains ${X}, X is not a template placeholder
+    expect(findMissingVars("body=${BODY}", { BODY: "see ${X}" })).toEqual([]);
   });
 });
 
@@ -76,6 +91,21 @@ describe("resolvePolicyPath", () => {
     expect(resolvePolicyPath("s", "issues", [dirA])).toBe(path.join(dirA, "s-issues.md"));
     expect(resolvePolicyPath("s", "pr", [dirA])).toBe(path.join(dirA, "s-full.md"));
     expect(resolvePolicyPath("s", "automerge", [dirA])).toBe(path.join(dirA, "s-automerge.md"));
+  });
+
+  it("resolves a dotted variant name with the autonomy suffix", () => {
+    fs.writeFileSync(path.join(dirA, "issue-worker.phased.md"), "base");
+    fs.writeFileSync(path.join(dirA, "issue-worker.phased-full.md"), "full");
+    expect(resolvePolicyPath("issue-worker.phased", "pr", [dirA])).toBe(
+      path.join(dirA, "issue-worker.phased-full.md"),
+    );
+  });
+
+  it("falls back to the dotted base when the suffixed variant is absent", () => {
+    fs.writeFileSync(path.join(dirA, "issue-worker.phased.md"), "base");
+    expect(resolvePolicyPath("issue-worker.phased", "advisory", [dirA])).toBe(
+      path.join(dirA, "issue-worker.phased.md"),
+    );
   });
 });
 

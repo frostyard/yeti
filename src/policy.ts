@@ -47,6 +47,24 @@ export function substitute(template: string, vars: Record<string, string>): stri
 }
 
 /**
+ * Distinct ${VAR} names present in `template` but absent from `vars`, in
+ * first-seen order. Compares against the TEMPLATE's placeholders, not the
+ * rendered output, so a value that itself contains ${...} is never flagged.
+ */
+export function findMissingVars(template: string, vars: Record<string, string>): string[] {
+  const missing: string[] = [];
+  const seen = new Set<string>();
+  for (const m of template.matchAll(/\$\{(\w+)\}/g)) {
+    const key = m[1];
+    if (!(key in vars) && !seen.has(key)) {
+      seen.add(key);
+      missing.push(key);
+    }
+  }
+  return missing;
+}
+
+/**
  * Resolve a policy file by job name + autonomy across `dirs` in order,
  * first hit wins. Within each dir the autonomy-suffixed variant beats the base.
  * Returns the absolute path, or null if nothing matches.
@@ -97,7 +115,12 @@ export function renderPolicy(
     if (opts.fallback) return opts.fallback();
     throw new Error(`No policy found for job "${job}" (autonomy=${autonomy})`);
   }
-  return substitute(read(absPath), vars);
+  const template = read(absPath);
+  const missing = findMissingVars(template, vars);
+  if (missing.length) {
+    log.warn(`policy ${absPath}: unsubstituted ${missing.map((v) => "${" + v + "}").join(", ")}`);
+  }
+  return substitute(template, vars);
 }
 
 /**
