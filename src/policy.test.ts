@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import fs from "node:fs";
 import path from "node:path";
 import os from "node:os";
-import { substitute, resolvePolicyPath, renderPolicy, findMissingVars } from "./policy.js";
+import { substitute, resolvePolicyPath, renderPolicy, findMissingVars, countPolicyFiles } from "./policy.js";
 
 describe("substitute", () => {
   it("replaces ${VAR} placeholders with their values", () => {
@@ -138,5 +138,23 @@ describe("renderPolicy", () => {
 
   it("throws when no policy file exists and no fallback is given", () => {
     expect(() => renderPolicy("missing", "pr", {}, { dirs: [dir] })).toThrow(/missing/);
+  });
+});
+
+describe("countPolicyFiles", () => {
+  it("counts distinct .md files across dirs, ignoring non-md and shadowed duplicates", () => {
+    const a = fs.mkdtempSync(path.join(os.tmpdir(), "yeti-count-a-"));
+    const b = fs.mkdtempSync(path.join(os.tmpdir(), "yeti-count-b-"));
+    fs.writeFileSync(path.join(a, "scanner.md"), "");
+    fs.writeFileSync(path.join(a, "notes.txt"), "");
+    fs.writeFileSync(path.join(b, "scanner.md"), ""); // shadowed by a/scanner.md
+    fs.writeFileSync(path.join(b, "ci-fixer.md"), "");
+    expect(countPolicyFiles([a, b])).toBe(2); // scanner + ci-fixer
+    fs.rmSync(a, { recursive: true, force: true });
+    fs.rmSync(b, { recursive: true, force: true });
+  });
+
+  it("returns 0 for dirs that do not exist", () => {
+    expect(countPolicyFiles(["/no/such/dir-xyz"])).toBe(0);
   });
 });

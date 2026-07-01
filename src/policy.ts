@@ -31,6 +31,23 @@ export function defaultPolicyDirs(): string[] {
   return [OVERRIDE_DIR, BUNDLED_DIR];
 }
 
+/** Number of distinct <name>.md policy files across dirs (earlier dirs shadow later). */
+export function countPolicyFiles(dirs: string[]): number {
+  const names = new Set<string>();
+  for (const dir of dirs) {
+    let entries: string[];
+    try {
+      entries = fs.readdirSync(dir);
+    } catch {
+      continue; // dir absent — skip
+    }
+    for (const e of entries) {
+      if (e.endsWith(".md")) names.add(e);
+    }
+  }
+  return names.size;
+}
+
 /** In-memory cache: resolved absolute path -> file contents. Cleared on reload. */
 const cache = new Map<string, string>();
 
@@ -135,7 +152,7 @@ export function watchPolicies(): void {
     clearTimeout(timer);
     timer = setTimeout(() => {
       cache.clear();
-      log.info("Policies reloaded (cache cleared)");
+      log.info(`Policies reloaded (${countPolicyFiles(defaultPolicyDirs())} loaded)`);
     }, 500);
   };
   for (const dir of defaultPolicyDirs()) {
