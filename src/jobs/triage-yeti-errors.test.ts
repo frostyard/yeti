@@ -4,6 +4,10 @@ import { mockRepo, mockIssue } from "../test-helpers.js";
 vi.mock("../config.js", () => ({
   SELF_REPO: "test-org/test-repo",
   JOB_AI: {},
+  // WORK_DIR is pulled in transitively by policy.ts; point it at a nonexistent
+  // dir so renderPolicy falls through to the bundled src/policies template.
+  WORK_DIR: "/tmp/yeti-triage-test",
+  repoAutonomy: (r: { autonomy?: string }) => r?.autonomy ?? "pr",
 }));
 
 vi.mock("../log.js", () => ({
@@ -56,8 +60,10 @@ import {
   parseRelatedIssues,
   deduplicateByFingerprint,
   deduplicateByInvestigation,
+  type YetiErrorDetails,
 } from "./triage-yeti-errors.js";
 import { reportError } from "../error-reporter.js";
+import type * as gh from "../github.js";
 
 const ERROR_BODY = [
   "**Auto-created by Yeti error reporter**",
@@ -240,7 +246,7 @@ describe("triage-yeti-errors", () => {
       const issue = mockIssue({ number: 1, title: "[yeti-error] test:fp", body: ERROR_BODY });
       const details = parseYetiError(ERROR_BODY);
 
-      const prompt = buildInvestigationPrompt(issue, details, []);
+      const prompt = buildInvestigationPrompt("pr", issue, details, []);
 
       expect(prompt).toContain("ci-fixer:list-issues");
       expect(prompt).toContain("Error: gh issue list failed: 502");
@@ -253,7 +259,7 @@ describe("triage-yeti-errors", () => {
       const details = parseYetiError(ERROR_BODY);
       const other = mockIssue({ number: 5, title: "[yeti-error] other:fp", body: "Other error" });
 
-      const prompt = buildInvestigationPrompt(issue, details, [other]);
+      const prompt = buildInvestigationPrompt("pr", issue, details, [other]);
 
       expect(prompt).toContain("Other Open Error Issues");
       expect(prompt).toContain("#5");
@@ -264,7 +270,7 @@ describe("triage-yeti-errors", () => {
       const issue = mockIssue({ number: 1, title: "[yeti-error] ci-fixer:list-issues", body: ERROR_BODY });
       const details = parseYetiError(ERROR_BODY);
 
-      const prompt = buildInvestigationPrompt(issue, details, []);
+      const prompt = buildInvestigationPrompt("pr", issue, details, []);
 
       expect(prompt).toContain("src/jobs/ci-fixer.ts");
     });
@@ -273,7 +279,7 @@ describe("triage-yeti-errors", () => {
       const issue = mockIssue({ number: 1, body: ERROR_BODY });
       const details = parseYetiError(ERROR_BODY);
 
-      const prompt = buildInvestigationPrompt(issue, details, []);
+      const prompt = buildInvestigationPrompt("pr", issue, details, []);
 
       expect(prompt).toContain("Read `yeti/OVERVIEW.md` first");
       expect(prompt).toContain("follow and read any linked documents");
@@ -446,5 +452,138 @@ describe("triage-yeti-errors", () => {
         expect.objectContaining({ number: 10 }),
       );
     });
+  });
+});
+
+describe("buildInvestigationPrompt (policy template)", () => {
+  // Reconstructs the pre-migration inline prompt independently, proving the
+  // policy-template render is behavior-preserving, including both the
+  // fileHint step-2 branch and the otherIssues conditional section.
+  function mapFingerprintToFile(fingerprint: string): string | null {
+    const jobName = fingerprint.split(":")[0];
+    if (!jobName) return null;
+    const jobFile = `src/jobs/${jobName}.ts`;
+    const srcFile = `src/${jobName}.ts`;
+    return jobFile + "` or `" + srcFile;
+  }
+
+  function expected(
+    issue: gh.Issue,
+    errorDetails: YetiErrorDetails,
+    otherIssues: gh.Issue[],
+  ): string {
+    const sections: string[] = [
+      `You are investigating an internal Yeti error.`,
+      ``,
+      `## Error Details`,
+      ``,
+      `**Issue #${issue.number}: ${issue.title}**`,
+      `**Fingerprint:** \`${errorDetails.fingerprint}\``,
+      `**Context:** ${errorDetails.context}`,
+      `**Timestamp:** ${errorDetails.timestamp}`,
+      ``,
+      `### Stack Trace / Error`,
+      `\`\`\``,
+      errorDetails.errorText,
+      `\`\`\``,
+      ``,
+      `### Full Issue Body`,
+      ``,
+      issue.body,
+      ``,
+      `## Instructions`,
+      ``,
+      `1. **Read \`yeti/OVERVIEW.md\` first** for architectural context about the Yeti codebase, then follow and read any linked documents relevant to this error.`,
+    ];
+
+    const fileHint = mapFingerprintToFile(errorDetails.fingerprint);
+    if (fileHint) {
+      sections.push(
+        `2. **Read the source file** — the fingerprint \`${errorDetails.fingerprint}\` suggests the relevant source is \`${fileHint}\`. Read it and any related files.`,
+      );
+    } else {
+      sections.push(`2. **Find and read the relevant source code** for the error.`);
+    }
+
+    sections.push(
+      `3. **Run verification commands** — reproduce the failing scenario where possible, check configuration, test edge cases. Use the codebase to understand the error path.`,
+      `4. **Determine the root cause** — explain what went wrong and why, with evidence from the code.`,
+      `5. **Recommend a fix** — describe what changes would resolve the issue.`,
+      ``,
+    );
+
+    if (otherIssues.length > 0) {
+      sections.push(`## Other Open Error Issues`);
+      sections.push(``);
+      for (const other of otherIssues) {
+        const truncBody = other.body.length > 500 ? other.body.slice(0, 500) + "..." : other.body;
+        sections.push(`### #${other.number}: ${other.title}`);
+        sections.push(truncBody);
+        sections.push(``);
+      }
+      sections.push(
+        `Review the issues above. If any share the same root cause as this error, include them in the RELATED_ISSUES line below.`,
+        ``,
+      );
+    }
+
+    sections.push(
+      `## Output Format`,
+      ``,
+      `Produce an investigation report with:`,
+      `- Verified root cause`,
+      `- Evidence from code reading and diagnostic commands`,
+      `- Recommended fix`,
+      ``,
+      `At the very end of your output, include exactly one line:`,
+      `RELATED_ISSUES: <comma-separated issue numbers, or "none">`,
+      ``,
+      `Example: \`RELATED_ISSUES: 45, 67\` or \`RELATED_ISSUES: none\``,
+      ``,
+      `Do NOT make any code changes or commits. Only produce the investigation report as text output.`,
+    );
+
+    return sections.join("\n");
+  }
+
+  it("matches the pre-migration inline builder with no other issues (fileHint present)", () => {
+    const issue = mockIssue({ number: 1, title: "[yeti-error] test:fp", body: ERROR_BODY });
+    const details = parseYetiError(ERROR_BODY);
+
+    const out = buildInvestigationPrompt("pr", issue, details, []);
+    expect(out.trimEnd()).toBe(expected(issue, details, []).trimEnd());
+  });
+
+  it("matches the pre-migration inline builder with one other issue present", () => {
+    const issue = mockIssue({ number: 1, title: "[yeti-error] test:fp", body: ERROR_BODY });
+    const details = parseYetiError(ERROR_BODY);
+    const other = mockIssue({ number: 5, title: "[yeti-error] other:fp", body: "Other error" });
+
+    const out = buildInvestigationPrompt("pr", issue, details, [other]);
+    expect(out.trimEnd()).toBe(expected(issue, details, [other]).trimEnd());
+  });
+
+  it("matches the pre-migration inline builder with multiple other issues, truncating long bodies", () => {
+    const issue = mockIssue({ number: 1, title: "[yeti-error] test:fp", body: ERROR_BODY });
+    const details = parseYetiError(ERROR_BODY);
+    const longBody = "x".repeat(600);
+    const other1 = mockIssue({ number: 5, title: "[yeti-error] other:fp", body: longBody });
+    const other2 = mockIssue({ number: 6, title: "[yeti-error] third:fp", body: "short body" });
+
+    const out = buildInvestigationPrompt("pr", issue, details, [other1, other2]);
+    expect(out.trimEnd()).toBe(expected(issue, details, [other1, other2]).trimEnd());
+  });
+
+  it("matches the pre-migration inline builder when the fingerprint yields no file hint", () => {
+    const issue = mockIssue({ number: 2, title: "[yeti-error] unknown", body: "some body" });
+    const details: YetiErrorDetails = {
+      fingerprint: "",
+      context: "test-org/test-repo",
+      timestamp: "2025-01-01T00:00:00Z",
+      errorText: "boom",
+    };
+
+    const out = buildInvestigationPrompt("pr", issue, details, []);
+    expect(out.trimEnd()).toBe(expected(issue, details, []).trimEnd());
   });
 });
