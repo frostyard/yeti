@@ -129,6 +129,15 @@ describe("mkdocs-update", () => {
     expect(mockClaude.createWorktree).not.toHaveBeenCalled();
   });
 
+  it("skips repos below the createPR autonomy tier", async () => {
+    const advisoryRepo = { ...mockRepo(), autonomy: "advisory" as const };
+
+    await run([advisoryRepo]);
+
+    expect(mockClaude.createWorktree).not.toHaveBeenCalled();
+    expect(mockClaude.runAI).not.toHaveBeenCalled();
+  });
+
   it("creates PR when Claude produces commits with tree diff", async () => {
     await run([repo]);
 

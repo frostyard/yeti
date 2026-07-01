@@ -2,6 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { JOB_AI, repoAutonomy, type Repo } from "../config.js";
 import { renderPolicy, type Autonomy } from "../policy.js";
+import { can } from "../capability.js";
 import * as gh from "../github.js";
 import * as claude from "../claude.js";
 import * as log from "../log.js";
@@ -16,6 +17,11 @@ export function buildMkdocsPrompt(autonomy: Autonomy, fullName: string): string 
 }
 
 async function processRepo(repo: Repo): Promise<void> {
+  if (!can(repo, "createPR")) {
+    log.info(`[mkdocs-update] skip ${repo.fullName} — tier below 'createPR' requirement`);
+    return;
+  }
+
   const fullName = repo.fullName;
 
   // Step 1: Check for existing open mkdocs-update PR
