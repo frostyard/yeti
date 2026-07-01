@@ -1,6 +1,7 @@
 import path from "node:path";
 import os from "node:os";
 import fs from "node:fs";
+import type { Autonomy } from "./policy.js";
 
 export const WORK_DIR = path.join(os.homedir(), ".yeti");
 
@@ -44,6 +45,13 @@ export interface Repo {
   name: string;
   fullName: string;
   defaultBranch: string;
+  /** Autonomy tier controlling which policy variant jobs load. Defaults to "pr". */
+  autonomy?: Autonomy;
+}
+
+/** Resolve the autonomy tier for a repo, defaulting to "pr" when unset. */
+export function repoAutonomy(repo: Repo): Autonomy {
+  return repo.autonomy ?? "pr";
 }
 
 export interface ConfigFile {

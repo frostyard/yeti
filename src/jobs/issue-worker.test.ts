@@ -9,6 +9,10 @@ vi.mock("../config.js", () => ({
     inReview: "In Review",
   },
   JOB_AI: {},
+  // WORK_DIR is pulled in transitively by policy.ts; point it at a dir with no
+  // policies/ so renderPolicy falls through to the bundled src/policies template.
+  WORK_DIR: "/tmp/yeti-iw-test",
+  repoAutonomy: (r: { autonomy?: string }) => r?.autonomy ?? "pr",
 }));
 
 vi.mock("../log.js", () => ({
@@ -81,7 +85,8 @@ vi.mock("../plan-parser.js", async () => {
   return actual;
 });
 
-import { run } from "./issue-worker.js";
+import { run, buildPrompt } from "./issue-worker.js";
+import * as gh from "../github.js";
 import { reportError } from "../error-reporter.js";
 
 describe("issue-worker", () => {
@@ -493,5 +498,53 @@ describe("issue-worker", () => {
     );
     const prompt = mockClaude.runAI.mock.calls[0][0] as string;
     expect(prompt).toContain("## Attached Images");
+  });
+});
+
+describe("buildPrompt single-phase (policy template)", () => {
+  // Reconstructs the pre-migration single-phase prompt independently, proving the
+  // policy-template render is behavior-preserving.
+  function expectedSinglePhase(
+    fullName: string,
+    issue: gh.Issue,
+    comments: gh.IssueComment[],
+    imageContext: string,
+  ): string {
+    return [
+      `You are working on a GitHub issue for the repository ${fullName}.`,
+      `Issue #${issue.number}: ${issue.title}`,
+      ``,
+      issue.body,
+      ``,
+      ...comments.flatMap((c) => {
+        const label = gh.isYetiComment(c.body)
+          ? `Comment by @${c.login} (automated by Yeti):`
+          : `Comment by @${c.login}:`;
+        return [`---`, label, gh.stripYetiMarker(c.body), ``];
+      }),
+      `If \`yeti/OVERVIEW.md\` exists, read it first (and any linked documents that seem relevant to the issue) for context about the codebase.`,
+      ``,
+      `Please implement the changes needed to resolve this issue.`,
+      `Make commits with clear messages as you work.`,
+      imageContext,
+    ].join("\n");
+  }
+
+  const issue = { number: 7, title: "Fix bug", body: "It crashes.", labels: [] } as unknown as gh.Issue;
+
+  it("matches the pre-migration inline builder, with comments", () => {
+    const comments = [{ login: "alice", body: "Please hurry" }] as unknown as gh.IssueComment[];
+    const out = buildPrompt("pr", "acme/widget", issue, null, 1, 1, [], comments, "");
+    expect(out.trimEnd()).toBe(expectedSinglePhase("acme/widget", issue, comments, "").trimEnd());
+  });
+
+  it("matches the pre-migration inline builder, with no comments", () => {
+    const out = buildPrompt("pr", "acme/widget", issue, null, 1, 1, [], [], "");
+    expect(out.trimEnd()).toBe(expectedSinglePhase("acme/widget", issue, [], "").trimEnd());
+  });
+
+  it("substitutes image context when present", () => {
+    const out = buildPrompt("pr", "acme/widget", issue, null, 1, 1, [], [], "## Attached Images\ndiagram.png");
+    expect(out).toContain("## Attached Images");
   });
 });

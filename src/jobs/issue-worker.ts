@@ -1,4 +1,5 @@
-import { LABELS, JOB_AI, type Repo } from "../config.js";
+import { LABELS, JOB_AI, repoAutonomy, type Repo } from "../config.js";
+import { renderPolicy, type Autonomy } from "../policy.js";
 import * as gh from "../github.js";
 import { isRateLimited } from "../github.js";
 import * as claude from "../claude.js";
@@ -9,7 +10,19 @@ import { notify } from "../notify.js";
 import { processTextForImages } from "../images.js";
 import * as planParser from "../plan-parser.js";
 
-function buildPrompt(
+/** Format issue comments as the ${COMMENTS} block (empty string when there are none). */
+function formatComments(comments: gh.IssueComment[]): string {
+  const lines = comments.flatMap((c) => {
+    const label = gh.isYetiComment(c.body)
+      ? `Comment by @${c.login} (automated by Yeti):`
+      : `Comment by @${c.login}:`;
+    return [`---`, label, gh.stripYetiMarker(c.body), ``];
+  });
+  return lines.length ? lines.join("\n") + "\n" : "";
+}
+
+export function buildPrompt(
+  autonomy: Autonomy,
   fullName: string,
   issue: gh.Issue,
   plan: planParser.ParsedPlan | null,
@@ -20,24 +33,39 @@ function buildPrompt(
   imageContext: string,
 ): string {
   if (totalPhases === 1 || !plan) {
-    return [
-      `You are working on a GitHub issue for the repository ${fullName}.`,
-      `Issue #${issue.number}: ${issue.title}`,
-      ``,
-      issue.body,
-      ``,
-      ...comments.flatMap((c) => {
-        const label = gh.isYetiComment(c.body)
-          ? `Comment by @${c.login} (automated by Yeti):`
-          : `Comment by @${c.login}:`;
-        return [`---`, label, gh.stripYetiMarker(c.body), ``];
-      }),
-      `If \`yeti/OVERVIEW.md\` exists, read it first (and any linked documents that seem relevant to the issue) for context about the codebase.`,
-      ``,
-      `Please implement the changes needed to resolve this issue.`,
-      `Make commits with clear messages as you work.`,
-      imageContext,
-    ].join("\n");
+    const singlePhaseInline = () =>
+      [
+        `You are working on a GitHub issue for the repository ${fullName}.`,
+        `Issue #${issue.number}: ${issue.title}`,
+        ``,
+        issue.body,
+        ``,
+        ...comments.flatMap((c) => {
+          const label = gh.isYetiComment(c.body)
+            ? `Comment by @${c.login} (automated by Yeti):`
+            : `Comment by @${c.login}:`;
+          return [`---`, label, gh.stripYetiMarker(c.body), ``];
+        }),
+        `If \`yeti/OVERVIEW.md\` exists, read it first (and any linked documents that seem relevant to the issue) for context about the codebase.`,
+        ``,
+        `Please implement the changes needed to resolve this issue.`,
+        `Make commits with clear messages as you work.`,
+        imageContext,
+      ].join("\n");
+
+    return renderPolicy(
+      "issue-worker",
+      autonomy,
+      {
+        REPO: fullName,
+        NUM: String(issue.number),
+        TITLE: issue.title,
+        BODY: issue.body,
+        COMMENTS: formatComments(comments),
+        IMAGE_CONTEXT: imageContext,
+      },
+      { fallback: singlePhaseInline },
+    );
   }
 
   const phase = plan.phases[currentPhase - 1];
@@ -190,7 +218,7 @@ async function processIssue(repo: Repo, issue: gh.Issue): Promise<void> {
     const imageContext = await processTextForImages([issue.body, ...comments.map((c) => c.body)], wtPath);
 
     // 3. Build phase-aware prompt
-    const prompt = buildPrompt(fullName, issue, plan, currentPhase, totalPhases, mergedPRs, comments, imageContext);
+    const prompt = buildPrompt(repoAutonomy(repo), fullName, issue, plan, currentPhase, totalPhases, mergedPRs, comments, imageContext);
 
     const aiOptions = JOB_AI["issue-worker"];
     await claude.resolveEnqueue(aiOptions)(() => claude.runAI(prompt, wtPath!, aiOptions), gh.isItemPrioritized(fullName, issue.number) || gh.hasPriorityLabel(issue.labels));
