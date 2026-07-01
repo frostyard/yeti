@@ -6,6 +6,7 @@ import * as log from "../log.js";
 import * as db from "../db.js";
 import { reportError } from "../error-reporter.js";
 import { notify } from "../notify.js";
+import { can } from "../capability.js";
 
 const MAX_IMPROVEMENTS_PER_RUN = 10;
 
@@ -78,6 +79,11 @@ export function parseImprovements(output: string): Improvement[] {
 const FOOTER = "\n\n---\n*Automated improvement by yeti improvement-identifier*";
 
 async function processRepo(repo: Repo): Promise<void> {
+  if (!can(repo, "createPR")) {
+    log.info(`[improvement-identifier] skip ${repo.fullName} — tier below 'createPR' requirement`);
+    return;
+  }
+
   const fullName = repo.fullName;
 
   // Fetch open issue titles and PR titles for dedup context

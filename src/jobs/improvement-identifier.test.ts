@@ -108,6 +108,15 @@ describe("improvement-identifier", () => {
     mockClaude.pushBranch.mockResolvedValue(undefined);
   });
 
+  it("skips repo when autonomy tier is below 'createPR' requirement", async () => {
+    const advisoryRepo = { ...mockRepo(), autonomy: "advisory" as const };
+
+    await run([advisoryRepo]);
+
+    expect(mockClaude.createWorktree).not.toHaveBeenCalled();
+    expect(mockClaude.runAI).not.toHaveBeenCalled();
+  });
+
   it("processes repo even without local clone", async () => {
     mockFs.existsSync.mockReturnValue(false);
 
