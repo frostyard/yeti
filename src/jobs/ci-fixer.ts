@@ -1,4 +1,4 @@
-import { JOB_AI, type Repo } from "../config.js";
+import { JOB_AI, repoAutonomy, type Repo } from "../config.js";
 import * as gh from "../github.js";
 import { isRateLimited, RateLimitError } from "../github.js";
 import * as claude from "../claude.js";
@@ -7,12 +7,24 @@ import * as db from "../db.js";
 import { reportError } from "../error-reporter.js";
 import { notify } from "../notify.js";
 import { ShutdownError } from "../shutdown.js";
+import { renderPolicy, type Autonomy } from "../policy.js";
 
 type WorkItem =
   | { kind: "conflict"; repo: Repo; pr: gh.PR }
   | { kind: "rerun"; repo: Repo; pr: gh.PR; runId: string }
   | { kind: "unrelated"; repo: Repo; pr: gh.PR; fingerprint: string; reason: string; failLog: string; changedFiles: string[]; runUrl: string }
   | { kind: "fix"; repo: Repo; pr: gh.PR; failLog: string };
+
+export function buildConflictPrompt(autonomy: Autonomy, fullName: string, pr: gh.PR, conflictedFiles: string[]): string {
+  return renderPolicy("ci-fixer.conflict", autonomy, {
+    FULL_NAME: fullName,
+    PR_NUMBER: String(pr.number),
+    PR_TITLE: pr.title,
+    HEAD_REF: pr.headRefName,
+    BASE_REF: pr.baseRefName,
+    CONFLICTED_FILES: conflictedFiles.map((f) => `- ${f}`).join("\n"),
+  });
+}
 
 async function resolveConflicts(repo: Repo, pr: gh.PR): Promise<boolean> {
   const fullName = repo.fullName;
@@ -41,25 +53,7 @@ async function resolveConflicts(repo: Repo, pr: gh.PR): Promise<boolean> {
     }
 
     // Conflicts need Claude to resolve
-    const prompt = [
-      `You are resolving merge conflicts on a pull request in the repository ${fullName}.`,
-      `PR #${pr.number}: ${pr.title}`,
-      `Branch: ${pr.headRefName} (merging ${pr.baseRefName} into it)`,
-      ``,
-      `A merge of the base branch (origin/${pr.baseRefName}) has been started but has`,
-      `conflicts in the following files:`,
-      conflictedFiles.map((f) => `- ${f}`).join("\n"),
-      ``,
-      `The conflicted files contain standard git conflict markers`,
-      `(<<<<<<< HEAD, =======, >>>>>>>).`,
-      ``,
-      `Please resolve each conflict by:`,
-      `1. Reading each conflicted file`,
-      `2. Understanding the intent of both sides of the conflict`,
-      `3. Editing the file to remove all conflict markers and produce the correct merged result`,
-      `4. Staging the resolved files with \`git add <file>\``,
-      `5. Completing the merge with \`git commit --no-edit\``,
-    ].join("\n");
+    const prompt = buildConflictPrompt(repoAutonomy(repo), fullName, pr, conflictedFiles);
 
     const aiOptions = JOB_AI["ci-fixer"];
     await claude.resolveEnqueue(aiOptions)(() => claude.runAI(prompt, wtPath!, aiOptions), gh.hasPriorityLabel(pr.labels));
@@ -106,50 +100,23 @@ interface Classification {
   reason: string;
 }
 
+export function buildClassifyPrompt(autonomy: Autonomy, pr: gh.PR, failLog: string, changedFiles: string[]): string {
+  return renderPolicy("ci-fixer.classify", autonomy, {
+    PR_NUMBER: String(pr.number),
+    PR_TITLE: pr.title,
+    HEAD_REF: pr.headRefName,
+    CHANGED_FILES: changedFiles.map((f) => `- ${f}`).join("\n"),
+    FAIL_LOG: failLog,
+  });
+}
+
 async function classifyCIFailure(
-  _repo: Repo,
+  repo: Repo,
   pr: gh.PR,
   failLog: string,
   changedFiles: string[],
 ): Promise<Classification> {
-  const prompt = [
-    `You are classifying a CI failure to determine whether it was caused by the changes in this pull request.`,
-    ``,
-    `PR #${pr.number}: ${pr.title}`,
-    `Branch: ${pr.headRefName}`,
-    ``,
-    `Files changed in this PR:`,
-    changedFiles.map((f) => `- ${f}`).join("\n"),
-    ``,
-    `CI failure log:`,
-    "```",
-    failLog,
-    "```",
-    ``,
-    `Classify this failure. Respond with ONLY a JSON object (no markdown, no explanation):`,
-    `{`,
-    `  "related": true/false,`,
-    `  "fingerprint": "short-stable-id",`,
-    `  "reason": "1-2 sentence explanation"`,
-    `}`,
-    ``,
-    `Classification rules:`,
-    `- "related": true if the failure is caused by or related to the PR's changes`,
-    `  - Failures in files the PR modified → related`,
-    `  - Test failures testing code the PR changed → related`,
-    `  - Build errors from the PR's changes → related`,
-    `- "related": false if the failure is NOT caused by the PR`,
-    `  - Flakey tests (timeouts, race conditions, intermittent failures) → unrelated`,
-    `  - CI runner issues (disk space, network, docker pull limits) → unrelated`,
-    `  - Pre-existing failures that exist on the base branch → unrelated`,
-    `- When in doubt, classify as related (safe default)`,
-    ``,
-    `- "fingerprint": a short, stable, human-readable identifier for this class of failure`,
-    `  Examples: "flakey-test:auth-timeout", "runner:disk-space", "preexisting:lint-config"`,
-    `  Use category:detail format. Be consistent — the same issue should get the same fingerprint.`,
-    ``,
-    `- "reason": brief explanation of why you classified it this way`,
-  ].join("\n");
+  const prompt = buildClassifyPrompt(repoAutonomy(repo), pr, failLog, changedFiles);
 
   try {
     const aiOptions = JOB_AI["ci-fixer"];
@@ -234,6 +201,16 @@ async function identifyPRWork(repo: Repo, pr: gh.PR): Promise<WorkItem | null> {
   return { kind: "unrelated", repo, pr, fingerprint: classification.fingerprint, reason: classification.reason, failLog, changedFiles, runUrl: failedCheck.link };
 }
 
+export function buildFixPrompt(autonomy: Autonomy, fullName: string, pr: gh.PR, failLog: string): string {
+  return renderPolicy("ci-fixer", autonomy, {
+    FULL_NAME: fullName,
+    PR_NUMBER: String(pr.number),
+    PR_TITLE: pr.title,
+    HEAD_REF: pr.headRefName,
+    FAIL_LOG: failLog,
+  });
+}
+
 async function fixCI(repo: Repo, pr: gh.PR, failLog: string): Promise<void> {
   const fullName = repo.fullName;
   const taskId = db.recordTaskStart("ci-fixer", fullName, pr.number, null);
@@ -243,20 +220,7 @@ async function fixCI(repo: Repo, pr: gh.PR, failLog: string): Promise<void> {
     wtPath = await claude.createWorktreeFromBranch(repo, pr.headRefName, "ci-fixer");
     db.updateTaskWorktree(taskId, wtPath, pr.headRefName);
 
-    const prompt = [
-      `You are fixing a CI failure on a pull request in the repository ${fullName}.`,
-      `PR #${pr.number}: ${pr.title}`,
-      `Branch: ${pr.headRefName}`,
-      ``,
-      `The CI checks have failed. Here are the relevant failure logs:`,
-      ``,
-      "```",
-      failLog,
-      "```",
-      ``,
-      `Please analyze the failure and make the necessary code changes to fix it.`,
-      `Make commits with clear messages as you work.`,
-    ].join("\n");
+    const prompt = buildFixPrompt(repoAutonomy(repo), fullName, pr, failLog);
 
     const aiOptions = JOB_AI["ci-fixer"];
     await claude.resolveEnqueue(aiOptions)(() => claude.runAI(prompt, wtPath!, aiOptions), gh.hasPriorityLabel(pr.labels));
@@ -331,6 +295,16 @@ async function fileUnrelatedIssue(
   }
 }
 
+export function buildRevertPrompt(autonomy: Autonomy, pr: gh.PR, changedFiles: string[], gitLog: string): string {
+  return renderPolicy("ci-fixer.revert", autonomy, {
+    PR_NUMBER: String(pr.number),
+    PR_TITLE: pr.title,
+    HEAD_REF: pr.headRefName,
+    CHANGED_FILES: changedFiles.map((f) => `- ${f}`).join("\n"),
+    GIT_LOG: gitLog,
+  });
+}
+
 async function revertPreviousUnrelatedFixes(
   repo: Repo,
   pr: gh.PR,
@@ -355,30 +329,7 @@ async function revertPreviousUnrelatedFixes(
       wtPath,
     );
 
-    const prompt = [
-      `You are examining commits on a pull request branch to identify and revert automated CI fix attempts that were for issues UNRELATED to the PR's purpose.`,
-      ``,
-      `PR #${pr.number}: ${pr.title}`,
-      `Branch: ${pr.headRefName}`,
-      ``,
-      `Files originally changed in this PR:`,
-      changedFiles.map((f) => `- ${f}`).join("\n"),
-      ``,
-      `Commit history on this branch (newest first):`,
-      "```",
-      gitLog,
-      "```",
-      ``,
-      `Identify any commits that appear to be automated CI fix attempts for issues that are NOT related to the PR's original purpose (the files listed above). These are typically commits that:`,
-      `- Fix flakey tests unrelated to the PR`,
-      `- Work around CI runner issues`,
-      `- Fix pre-existing problems not introduced by this PR`,
-      ``,
-      `For each such commit, run: git revert <sha> --no-edit`,
-      ``,
-      `If no unrelated fix commits are found, do nothing.`,
-      `Be conservative — only revert commits you are confident are unrelated automated fixes.`,
-    ].join("\n");
+    const prompt = buildRevertPrompt(repoAutonomy(repo), pr, changedFiles, gitLog);
 
     const aiOptions = JOB_AI["ci-fixer"];
     await claude.resolveEnqueue(aiOptions)(() => claude.runAI(prompt, wtPath!, aiOptions), gh.hasPriorityLabel(pr.labels));
