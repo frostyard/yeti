@@ -20,7 +20,8 @@ const { mockClaude, mockDb } = vi.hoisted(() => ({
 vi.mock("./claude.js", () => mockClaude);
 vi.mock("./db.js", () => mockDb);
 
-import { parseLearnings, stripLearningsDeclaration } from "./learnings.js";
+import { parseLearnings, stripLearningsDeclaration, enforceLearnings, setConsolidatorTrigger } from "./learnings.js";
+import * as log from "./log.js";
 
 describe("parseLearnings", () => {
   it("parses none/none as declared with no learnings", () => {
@@ -73,5 +74,74 @@ describe("stripLearningsDeclaration", () => {
 
   it("returns output unchanged when there is no declaration", () => {
     expect(stripLearningsDeclaration("plain output")).toBe("plain output");
+  });
+});
+
+describe("enforceLearnings", () => {
+  const ctx = { jobName: "issue-worker", repo: "org/repo", wtPath: "/tmp/wt", baseBranch: "main" };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockClaude.enqueue.mockImplementation((fn: () => Promise<string>) => fn());
+    mockClaude.resolveEnqueue.mockReturnValue(mockClaude.enqueue);
+    mockClaude.runAI.mockResolvedValue("LEARNINGS-REPO: none\nLEARNINGS-YETI: none");
+    mockClaude.hasTreeDiff.mockResolvedValue(true);
+    mockDb.insertLearning.mockReturnValue(1);
+    mockDb.countPendingLearnings.mockReturnValue(0);
+    setConsolidatorTrigger(null as unknown as () => void);
+  });
+
+  it("declaration present with none/none → no retry, no inserts", async () => {
+    await enforceLearnings("done\nLEARNINGS-REPO: none\nLEARNINGS-YETI: none", ctx);
+    expect(mockClaude.runAI).not.toHaveBeenCalled();
+    expect(mockDb.insertLearning).not.toHaveBeenCalled();
+  });
+
+  it("yeti learning → inserted into db", async () => {
+    await enforceLearnings("LEARNINGS-REPO: none\nLEARNINGS-YETI: use brew", ctx);
+    expect(mockDb.insertLearning).toHaveBeenCalledWith("issue-worker", "org/repo", "yeti", "use brew");
+  });
+
+  it("missing declaration → retries once and captures the retry's learnings", async () => {
+    mockClaude.runAI.mockResolvedValueOnce("LEARNINGS-REPO: none\nLEARNINGS-YETI: retry learning");
+    await enforceLearnings("no declaration here", ctx);
+    expect(mockClaude.runAI).toHaveBeenCalledTimes(1);
+    expect(mockDb.insertLearning).toHaveBeenCalledWith("issue-worker", "org/repo", "yeti", "retry learning");
+  });
+
+  it("still missing after retry → warns and returns without throwing", async () => {
+    mockClaude.runAI.mockResolvedValueOnce("still nothing");
+    await enforceLearnings("no declaration", ctx);
+    expect(mockDb.insertLearning).not.toHaveBeenCalled();
+    expect(log.warn).toHaveBeenCalled();
+  });
+
+  it("repo learning claimed but no yeti/ tree diff → warns, does not throw", async () => {
+    mockClaude.hasTreeDiff.mockResolvedValue(false);
+    await enforceLearnings("LEARNINGS-REPO: yeti/learnings/x.md: claimed\nLEARNINGS-YETI: none", ctx);
+    expect(mockClaude.hasTreeDiff).toHaveBeenCalledWith("/tmp/wt", "main", "yeti/");
+    expect(log.warn).toHaveBeenCalled();
+  });
+
+  it("threshold reached → fires the consolidator trigger", async () => {
+    const trigger = vi.fn();
+    setConsolidatorTrigger(trigger);
+    mockDb.countPendingLearnings.mockReturnValue(5);
+    await enforceLearnings("LEARNINGS-REPO: none\nLEARNINGS-YETI: hit threshold", ctx);
+    expect(trigger).toHaveBeenCalled();
+  });
+
+  it("below threshold → trigger not fired", async () => {
+    const trigger = vi.fn();
+    setConsolidatorTrigger(trigger);
+    mockDb.countPendingLearnings.mockReturnValue(3);
+    await enforceLearnings("LEARNINGS-REPO: none\nLEARNINGS-YETI: below threshold", ctx);
+    expect(trigger).not.toHaveBeenCalled();
+  });
+
+  it("retry runAI rejection is swallowed — the gate never throws", async () => {
+    mockClaude.runAI.mockRejectedValueOnce(new Error("timeout"));
+    await expect(enforceLearnings("no declaration", ctx)).resolves.toBeUndefined();
+    expect(log.warn).toHaveBeenCalled();
   });
 });
