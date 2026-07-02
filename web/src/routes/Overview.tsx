@@ -1,5 +1,5 @@
 import { Link } from "react-router-dom";
-import { Activity, ListChecks, CheckCircle2, XCircle, Cpu, Gauge, MemoryStick, HardDrive } from "lucide-react";
+import { Activity, ListChecks, CheckCircle2, XCircle, Cpu, Gauge, MemoryStick, HardDrive, Lightbulb } from "lucide-react";
 import { useOverview, useRuns } from "../lib/queries";
 import { StatCard, StatusPill } from "../components/ui/status";
 import { Card, SectionHeader, EmptyState, Skeleton } from "../components/ui/base";
@@ -69,6 +69,7 @@ export function Overview() {
           <StatCard label="In Queue" value={d.counts.queuePending} tone="ice" icon={<ListChecks size={15} />} />
           <StatCard label="Recent Done" value={d.counts.recentDone} tone="success" icon={<CheckCircle2 size={15} />} />
           <StatCard label="Recent Failed" value={d.counts.recentFailed} tone={d.counts.recentFailed > 0 ? "danger" : "muted"} icon={<XCircle size={15} />} />
+          <StatCard label="Learnings" value={d.counts.pendingLearnings} tone={d.counts.pendingLearnings > 0 ? "ice" : "muted"} icon={<Lightbulb size={15} />} />
         </div>
       </section>
 

@@ -8,6 +8,7 @@ export const useQueue = () => useQuery({ queryKey: ["queue"], queryFn: api.queue
 export const useConfig = () => useQuery({ queryKey: ["config"], queryFn: api.config });
 export const useRepos = () => useQuery({ queryKey: ["repos"], queryFn: api.repos, refetchInterval: 60_000 });
 export const useNotifications = () => useQuery({ queryKey: ["notifications"], queryFn: () => api.notifications(), refetchInterval: 30_000 });
+export const useLearnings = () => useQuery({ queryKey: ["learnings"], queryFn: () => api.learnings(), refetchInterval: 60_000 });
 
 export const useRuns = (params: { job?: string; search?: string } = {}) =>
   useQuery({ queryKey: ["runs", params], queryFn: () => api.runs(params), refetchInterval: 30_000 });
@@ -39,6 +40,14 @@ export function useQueueActions() {
     onSuccess: invalidate,
   });
   return { merge, action };
+}
+
+export function useDismissLearning() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (v: { id: number; reason?: string }) => api.dismissLearning(v.id, v.reason),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["learnings"] }); qc.invalidateQueries({ queryKey: ["overview"] }); },
+  });
 }
 
 export function useAddRepo() {

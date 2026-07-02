@@ -10,6 +10,7 @@ import { LogDetail } from "./routes/LogDetail";
 import { IssueLogs } from "./routes/IssueLogs";
 import { Repos } from "./routes/Repos";
 import { Notifications } from "./routes/Notifications";
+import { Learnings } from "./routes/Learnings";
 import { Config } from "./routes/Config";
 import { Login } from "./routes/Login";
 import { NotFound } from "./routes/NotFound";
@@ -55,6 +56,7 @@ export function AppRoutes() {
           <Route path="/logs/:runId" element={<LogDetail />} />
           <Route path="/repos" element={<Repos />} />
           <Route path="/notifications" element={<Notifications />} />
+          <Route path="/learnings" element={<Learnings />} />
           <Route path="/config" element={<Config />} />
           <Route path="*" element={<NotFound />} />
         </Route>

@@ -1,6 +1,6 @@
 import type {
   Session, Overview, Job, QueueResponse, RunsResponse, RunDetail, TailResponse,
-  IssueLogsResponse, NotificationRow, ReposResponse, ConfigResponse,
+  IssueLogsResponse, NotificationRow, ReposResponse, ConfigResponse, LearningRow,
 } from "./types";
 
 export class ApiError extends Error {
@@ -47,6 +47,10 @@ export const api = {
   repos: () => req<ReposResponse>("/api/repos"),
   notifications: (after?: number) =>
     req<NotificationRow[]>(`/api/notifications${after !== undefined ? `?after=${after}` : ""}`),
+  learnings: (status?: string) =>
+    req<LearningRow[]>(`/api/learnings${status ? `?status=${encodeURIComponent(status)}` : ""}`),
+  dismissLearning: (id: number, reason?: string) =>
+    post<{ result: string }>(`/api/learnings/${id}/dismiss`, reason ? { reason } : undefined),
 
   runs: (params: { job?: string; search?: string; limit?: number } = {}) => {
     const qs = new URLSearchParams();
