@@ -63,7 +63,7 @@ const { mockGh, mockClaude, mockDb } = vi.hoisted(() => ({
     runAI: vi.fn(),
     resolveEnqueue: vi.fn(),
     randomSuffix: vi.fn().mockReturnValue("ab12"),
-    scrubWorktreePaths: (text: string) => text,
+    scrubWorktreePaths: vi.fn((text: string, _wtPath?: string) => text),
   },
   mockDb: {
     recordTaskStart: vi.fn().mockReturnValue(1),
@@ -100,6 +100,7 @@ describe("issue-refiner", () => {
     mockClaude.enqueue.mockImplementation((fn: () => Promise<string>) => fn());
     mockClaude.resolveEnqueue.mockReturnValue(mockClaude.enqueue);
     mockClaude.runAI.mockResolvedValue("## Plan\nDo the thing");
+    mockClaude.scrubWorktreePaths.mockImplementation((text: string, _wtPath?: string) => text);
     mockClaude.removeWorktree.mockResolvedValue(undefined);
     mockGh.listOpenIssues.mockResolvedValue([]);
     mockGh.getSelfLogin.mockResolvedValue("yeti-bot[bot]");
@@ -440,6 +441,34 @@ describe("issue-refiner", () => {
     expect(mockGh.addLabel).not.toHaveBeenCalled();
     expect(mockGh.removeLabel).not.toHaveBeenCalled();
     expect(mockDb.recordTaskComplete).toHaveBeenCalledWith(1);
+  });
+
+  it("scrubs worktree paths from follow-up responses before posting", async () => {
+    const issue = mockIssue({ body: "Test issue body" });
+    mockGh.listOpenIssues.mockResolvedValueOnce([issue]);
+    mockGh.getOpenPRForIssue.mockResolvedValueOnce({ number: 5, headRefName: "yeti/issue-1-c6b5" });
+
+    const planComment = { id: 501, body: "<!-- yeti-automated -->## Implementation Plan\n\nOriginal plan", login: "yeti-bot" };
+    const humanComment = { id: 502, body: "Where is the fix?", login: "frostyard" };
+
+    mockGh.getIssueComments.mockResolvedValue([planComment, humanComment]);
+    mockGh.getCommentReactions.mockResolvedValue([]);
+    mockClaude.runAI.mockResolvedValue("See /tmp/worktree/src/api.ts:12 for details.");
+    mockClaude.scrubWorktreePaths.mockImplementation((text: string, wtPath?: string) => (
+      wtPath ? text.replaceAll(wtPath.endsWith("/") ? wtPath : `${wtPath}/`, "") : text
+    ));
+
+    await run([repo]);
+
+    expect(mockClaude.scrubWorktreePaths).toHaveBeenCalledWith(
+      "See /tmp/worktree/src/api.ts:12 for details.",
+      "/tmp/worktree",
+    );
+    expect(mockGh.commentOnIssue).toHaveBeenCalledWith(
+      repo.fullName,
+      issue.number,
+      "See src/api.ts:12 for details.",
+    );
   });
 
   it("skips issue with open PR when no unreacted comments", async () => {
