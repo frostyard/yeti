@@ -1,5 +1,5 @@
 import { Link } from "react-router-dom";
-import { Activity, ListChecks, CheckCircle2, XCircle, Cpu } from "lucide-react";
+import { Activity, ListChecks, CheckCircle2, XCircle, Cpu, Gauge, MemoryStick, HardDrive } from "lucide-react";
 import { useOverview, useRuns } from "../lib/queries";
 import { StatCard, StatusPill } from "../components/ui/status";
 import { Card, SectionHeader, EmptyState, Skeleton } from "../components/ui/base";
@@ -7,7 +7,34 @@ import { RelativeTime } from "../components/ui/time";
 import { DataTable, type Column } from "../components/ui/DataTable";
 import { discordTone } from "../lib/discord";
 import { repoShortName, issueLogsPath } from "../lib/format";
-import type { JobRunRow, RunningTask } from "../lib/types";
+import type { JobRunRow, RunningTask, SystemStats } from "../lib/types";
+
+type Tone = "success" | "warning" | "danger" | "muted";
+const usageTone = (p: number): Tone => (p >= 90 ? "danger" : p >= 70 ? "warning" : "success");
+const pctOf = (used: number, total: number) => (total > 0 ? Math.round((used / total) * 100) : 0);
+const gib = (bytes: number) => (bytes / 1024 ** 3).toFixed(1);
+
+function SystemSection({ sys }: { sys: SystemStats }) {
+  const memPct = pctOf(sys.memUsed, sys.memTotal);
+  const diskPct = pctOf(sys.diskUsed, sys.diskTotal);
+  const loadRatio = sys.cpuCount > 0 ? sys.load[0] / sys.cpuCount : sys.load[0];
+  const loadTone: Tone = loadRatio >= 1 ? "danger" : loadRatio >= 0.7 ? "warning" : "success";
+  return (
+    <section>
+      <SectionHeader label="System" />
+      <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+        <StatCard label="CPU" value={sys.cpuPercent === null ? "—" : `${sys.cpuPercent}%`}
+          tone={sys.cpuPercent === null ? "muted" : usageTone(sys.cpuPercent)} sub={`${sys.cpuCount} cores`} icon={<Cpu size={15} />} />
+        <StatCard label="Load 1m" value={sys.load[0].toFixed(2)} tone={loadTone}
+          sub={`${sys.load[1].toFixed(2)} · ${sys.load[2].toFixed(2)}`} icon={<Gauge size={15} />} />
+        <StatCard label="Memory" value={`${memPct}%`} tone={usageTone(memPct)}
+          sub={`${gib(sys.memUsed)} / ${gib(sys.memTotal)} GiB`} icon={<MemoryStick size={15} />} />
+        <StatCard label="Disk" value={`${diskPct}%`} tone={usageTone(diskPct)}
+          sub={`${gib(sys.diskUsed)} / ${gib(sys.diskTotal)} GiB`} icon={<HardDrive size={15} />} />
+      </div>
+    </section>
+  );
+}
 
 export function Overview() {
   const { data, isLoading } = useOverview();
@@ -53,6 +80,8 @@ export function Overview() {
           <StatCard label="Codex" value={d.codexQueue.active} tone="ice" sub={`${d.codexQueue.pending} queued`} icon={<Cpu size={15} />} />
         </div>
       </section>
+
+      {d.system && <SystemSection sys={d.system} />}
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
         <section>

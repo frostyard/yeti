@@ -90,6 +90,14 @@ vi.mock("./quiesce.js", () => ({
   clearQuiesce: vi.fn(),
 }));
 
+vi.mock("./sysstats.js", () => ({
+  getSystemStats: vi.fn().mockReturnValue({
+    cpuPercent: 12, cpuCount: 4, load: [0.5, 0.4, 0.3],
+    memTotal: 8_000_000_000, memUsed: 3_000_000_000,
+    diskTotal: 50_000_000_000, diskUsed: 20_000_000_000,
+  }),
+}));
+
 vi.mock("./github.js", () => ({
   getQueueSnapshot: vi.fn().mockReturnValue({ items: [], oldestFetchAt: null }),
   enrichQueueItemsWithPRStatus: vi.fn().mockResolvedValue(undefined),
@@ -297,6 +305,11 @@ describe("JSON API (auth disabled)", () => {
     expect(body.counts.running).toBe(1);
     expect(body.updatePending).toBe(false);
     expect(body.pendingUpdateTag).toBeNull();
+    expect(body.system).toEqual({
+      cpuPercent: 12, cpuCount: 4, load: [0.5, 0.4, 0.3],
+      memTotal: 8_000_000_000, memUsed: 3_000_000_000,
+      diskTotal: 50_000_000_000, diskUsed: 20_000_000_000,
+    });
   });
 
   it("GET /api/jobs returns one entry per job", async () => {

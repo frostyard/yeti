@@ -16,6 +16,7 @@ import { VERSION } from "./version.js";
 import { isOAuthConfigured } from "./oauth.js";
 import { JOB_DESCRIPTIONS, type JobInfo } from "./job-meta.js";
 import { isUpdatePending, pendingUpdateTag } from "./quiesce.js";
+import { getSystemStats } from "./sysstats.js";
 import { readBody, parseCookies, safeCompare, isAuthEnabled, getSession, requireApiAuth, sendJson, tokenCookie } from "./http-util.js";
 
 /** Maps don't survive JSON.stringify — flatten to a plain object for the wire. */
@@ -102,7 +103,7 @@ function buildOverviewPayload(scheduler: Scheduler, startedAt: string): Record<s
     recentDone,
     recentFailed,
   };
-  return { ...status, version: VERSION, counts, updatePending: isUpdatePending(), pendingUpdateTag: pendingUpdateTag() };
+  return { ...status, version: VERSION, counts, system: getSystemStats(), updatePending: isUpdatePending(), pendingUpdateTag: pendingUpdateTag() };
 }
 
 function buildJobsPayload(scheduler: Scheduler, allJobs: JobInfo[]): unknown[] {

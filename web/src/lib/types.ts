@@ -38,6 +38,16 @@ export interface DiscordStatus {
   lastResult: "ok" | "error" | null;
 }
 
+export interface SystemStats {
+  cpuPercent: number | null;
+  cpuCount: number;
+  load: [number, number, number];
+  memTotal: number;
+  memUsed: number;
+  diskTotal: number;
+  diskUsed: number;
+}
+
 export interface Overview {
   status: string;
   version: string;
@@ -53,6 +63,7 @@ export interface Overview {
   jobAi: Record<string, { backend?: AiBackend; model?: string }>;
   discord: DiscordStatus;
   counts: { running: number; queuePending: number; recentDone: number; recentFailed: number };
+  system: SystemStats;
   updatePending: boolean;
   pendingUpdateTag: string | null;
 }
