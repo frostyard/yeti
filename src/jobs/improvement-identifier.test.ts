@@ -2,8 +2,9 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { mockRepo } from "../test-helpers.js";
 
 vi.mock("../config.js", () => ({
-  WORK_DIR: "/home/testuser/.yeti",
+  WORK_DIR: "/tmp/yeti-improve-test",
   JOB_AI: {},
+  repoAutonomy: (r: { autonomy?: string }) => r?.autonomy ?? "pr",
 }));
 
 vi.mock("../log.js", () => ({
@@ -24,6 +25,7 @@ vi.mock("../notify.js", () => ({
 const { mockFs, mockGh, mockClaude, mockDb } = vi.hoisted(() => ({
   mockFs: {
     existsSync: vi.fn(),
+    readFileSync: vi.fn(),
   },
   mockGh: {
     listOpenIssues: vi.fn(),
@@ -52,12 +54,28 @@ const { mockFs, mockGh, mockClaude, mockDb } = vi.hoisted(() => ({
   },
 }));
 
-vi.mock("node:fs", () => ({ default: mockFs }));
+// The job's own fs usage is fully mocked via mockFs. renderPolicy (imported
+// transitively via ../policy.js) also reads through node:fs to load
+// src/policies/improvement-identifier*.md from real disk, so
+// existsSync/readFileSync delegate to the real fs for any "policies" path —
+// only the job's own paths go through the mock.
+vi.mock("node:fs", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("node:fs")>();
+  const isPolicyPath = (p: unknown) => typeof p === "string" && p.includes("policies");
+  return {
+    default: {
+      ...actual,
+      existsSync: (p: string) => (isPolicyPath(p) ? actual.existsSync(p) : mockFs.existsSync(p)),
+      readFileSync: (p: string, enc?: BufferEncoding) =>
+        isPolicyPath(p) ? actual.readFileSync(p, enc) : mockFs.readFileSync(p, enc),
+    },
+  };
+});
 vi.mock("../github.js", () => mockGh);
 vi.mock("../claude.js", () => mockClaude);
 vi.mock("../db.js", () => mockDb);
 
-import { run, parseImprovements } from "./improvement-identifier.js";
+import { run, parseImprovements, buildAnalysisPrompt, buildImplementationPrompt } from "./improvement-identifier.js";
 import { reportError } from "../error-reporter.js";
 
 const validResponse = JSON.stringify({
@@ -88,6 +106,15 @@ describe("improvement-identifier", () => {
     mockClaude.hasNewCommits.mockResolvedValue(true);
     mockClaude.hasTreeDiff.mockResolvedValue(true);
     mockClaude.pushBranch.mockResolvedValue(undefined);
+  });
+
+  it("skips repo when autonomy tier is below 'createPR' requirement", async () => {
+    const advisoryRepo = { ...mockRepo(), autonomy: "advisory" as const };
+
+    await run([advisoryRepo]);
+
+    expect(mockClaude.createWorktree).not.toHaveBeenCalled();
+    expect(mockClaude.runAI).not.toHaveBeenCalled();
   });
 
   it("processes repo even without local clone", async () => {
@@ -389,5 +416,105 @@ describe("parseImprovements", () => {
     const result = parseImprovements(`\`\`\`json\n${output}\n\`\`\``);
     expect(result).toHaveLength(1);
     expect(result[0].title).toBe("Valid");
+  });
+});
+
+describe("buildAnalysisPrompt (policy template)", () => {
+  // Reconstructs the pre-migration inline prompt independently, proving the
+  // policy-template render is behavior-preserving.
+  function expected(fullName: string, openIssueTitles: string[], openPRTitles: string[]): string {
+    const issueList =
+      openIssueTitles.length > 0
+        ? openIssueTitles.map((t) => `  - ${t}`).join("\n")
+        : "  (none)";
+
+    const prList =
+      openPRTitles.length > 0
+        ? openPRTitles.map((t) => `  - ${t}`).join("\n")
+        : "  (none)";
+
+    return [
+      `You are analyzing the repository ${fullName} for opportunities to improve the codebase.`,
+      ``,
+      `Read the codebase thoroughly. If \`yeti/OVERVIEW.md\` exists, read it first`,
+      `(and any linked documents) for context about the architecture and patterns.`,
+      ``,
+      `Look for meaningful opportunities such as:`,
+      `- Code that could be consolidated (duplicate or near-duplicate logic)`,
+      `- Overcomplicated code that could be simplified`,
+      `- Dead code or unused exports/dependencies`,
+      `- Performance issues or inefficiencies`,
+      `- Security concerns`,
+      `- Missing error handling at system boundaries`,
+      `- Stale TODOs or FIXMEs that should be addressed`,
+      ``,
+      `Guidelines:`,
+      `- Be conservative. Only suggest improvements that provide clear, tangible value.`,
+      `- Do NOT suggest stylistic changes, comment additions, or trivial refactors.`,
+      `- Do NOT suggest adding type annotations, docstrings, or documentation.`,
+      `- "No improvements found" is perfectly acceptable — do not manufacture suggestions.`,
+      `- Group related improvements into a single suggestion when they should be addressed together.`,
+      `- Each suggestion should be specific and actionable, referencing exact files and line numbers.`,
+      ``,
+      `The following issues are already open in this repository — do NOT re-suggest these:`,
+      issueList,
+      ``,
+      `The following PRs are already open in this repository — do NOT re-suggest these:`,
+      prList,
+      ``,
+      `Respond with ONLY a JSON block in this exact format, no other text:`,
+      ``,
+      "```json",
+      `{`,
+      `  "improvements": [`,
+      `    {`,
+      `      "title": "Short descriptive title (imperative mood)",`,
+      `      "body": "Detailed description with file references, what to change, and why"`,
+      `    }`,
+      `  ]`,
+      `}`,
+      "```",
+      ``,
+      `If no improvements are worth suggesting, respond with:`,
+      "```json",
+      `{ "improvements": [] }`,
+      "```",
+    ].join("\n");
+  }
+
+  it("matches the pre-migration inline builder with no open issues/PRs", () => {
+    const out = buildAnalysisPrompt("pr", "acme/widget", [], []);
+    expect(out.trimEnd()).toBe(expected("acme/widget", [], []).trimEnd());
+  });
+
+  it("matches the pre-migration inline builder with open issues and PRs", () => {
+    const issues = ["Fix bug in parser", "Handle empty input"];
+    const prs = ["refactor: Improve X", "feat: Add Y"];
+    const out = buildAnalysisPrompt("pr", "acme/widget", issues, prs);
+    expect(out.trimEnd()).toBe(expected("acme/widget", issues, prs).trimEnd());
+  });
+});
+
+describe("buildImplementationPrompt (policy template)", () => {
+  // Reconstructs the pre-migration inline prompt independently, proving the
+  // policy-template render is behavior-preserving.
+  function expected(fullName: string, improvement: { title: string; body: string }): string {
+    return [
+      `You are implementing a specific improvement in the repository ${fullName}.`,
+      ``,
+      `**Improvement: ${improvement.title}**`,
+      improvement.body,
+      ``,
+      `If \`yeti/OVERVIEW.md\` exists, read it first (and any linked documents) for context.`,
+      ``,
+      `Implement this improvement. Make clean, focused commits with clear messages.`,
+      `Do not make changes beyond what is described above.`,
+    ].join("\n");
+  }
+
+  it("matches the pre-migration inline builder", () => {
+    const improvement = { title: "Consolidate duplicate validation logic", body: "Files `src/a.ts` and `src/b.ts` both validate..." };
+    const out = buildImplementationPrompt("pr", "acme/widget", improvement);
+    expect(out.trimEnd()).toBe(expected("acme/widget", improvement).trimEnd());
   });
 });

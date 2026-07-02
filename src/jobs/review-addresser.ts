@@ -1,4 +1,6 @@
-import { LABELS, JOB_AI, type Repo } from "../config.js";
+import { LABELS, JOB_AI, repoAutonomy, type Repo } from "../config.js";
+import { can } from "../capability.js";
+import { renderPolicy, type Autonomy } from "../policy.js";
 import * as gh from "../github.js";
 import { isRateLimited } from "../github.js";
 import * as claude from "../claude.js";
@@ -8,7 +10,29 @@ import { reportError } from "../error-reporter.js";
 import { notify } from "../notify.js";
 import { processTextForImages } from "../images.js";
 
+export function buildPrompt(
+  autonomy: Autonomy,
+  fullName: string,
+  pr: gh.PR,
+  reviewData: gh.PRReviewData,
+  imageContext: string,
+): string {
+  return renderPolicy("review-addresser", autonomy, {
+    REPO: fullName,
+    NUM: String(pr.number),
+    TITLE: pr.title,
+    BRANCH: pr.headRefName,
+    REVIEW_COMMENTS: reviewData.formatted,
+    IMAGE_CONTEXT: imageContext,
+  });
+}
+
 async function processPR(repo: Repo, pr: gh.PR, reviewData: gh.PRReviewData): Promise<void> {
+  if (!can(repo, "push")) {
+    log.info(`[review-addresser] skip ${repo.fullName} — tier below 'push' requirement`);
+    return;
+  }
+
   const fullName = repo.fullName;
   log.info(`[review-addresser] Processing PR #${pr.number} in ${fullName}`);
 
@@ -21,27 +45,13 @@ async function processPR(repo: Repo, pr: gh.PR, reviewData: gh.PRReviewData): Pr
 
     const imageContext = await processTextForImages([reviewData.formatted], wtPath);
 
-    const prompt = [
-      `You are addressing PR review comments on a pull request in the repository ${fullName}.`,
-      `PR #${pr.number}: ${pr.title}`,
-      `Branch: ${pr.headRefName}`,
-      ``,
-      `The following review comments have been left on this PR:`,
-      ``,
-      reviewData.formatted,
-      ``,
-      `Please address each review comment by making the necessary code changes.`,
-      `If a review comment is a question or requires no code changes, respond with a text explanation.`,
-      `Always include a brief summary of what you did (or why no changes were needed) in your text output.`,
-      `Make commits with clear messages as you work.`,
-      imageContext,
-    ].join("\n");
+    const prompt = buildPrompt(repoAutonomy(repo), fullName, pr, reviewData, imageContext);
 
     const aiOptions = JOB_AI["review-addresser"];
     const claudeOutput = await claude.resolveEnqueue(aiOptions)(() => claude.runAI(prompt, wtPath!, aiOptions), gh.hasPriorityLabel(pr.labels));
 
     if (await claude.hasNewCommits(wtPath, pr.headRefName) && await claude.hasTreeDiff(wtPath, pr.headRefName)) {
-      await claude.pushBranch(wtPath, pr.headRefName);
+      await claude.pushBranch(wtPath, pr.headRefName, fullName);
       try {
         const description = await claude.regeneratePRDescription(wtPath, pr.baseRefName, pr, aiOptions);
         await gh.updatePRBody(fullName, pr.number, description);

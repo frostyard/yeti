@@ -7,6 +7,7 @@ vi.mock("../config.js", () => ({
     ready: "Ready",
     inReview: "In Review",
   },
+  repoAutonomy: (r: { autonomy?: string } | undefined) => r?.autonomy ?? "pr",
 }));
 
 vi.mock("../log.js", () => ({
@@ -50,7 +51,7 @@ import { reportError } from "../error-reporter.js";
 import * as log from "../log.js";
 
 describe("auto-merger", () => {
-  const repo = mockRepo();
+  const repo = mockRepo({ autonomy: "automerge" as const });
 
   beforeEach(() => {
     vi.clearAllMocks();
@@ -166,7 +167,7 @@ describe("auto-merger", () => {
   });
 
   it("reports errors without crashing the loop", async () => {
-    const repo2 = mockRepo({ name: "test-repo-2", fullName: "test-org/test-repo-2" });
+    const repo2 = mockRepo({ name: "test-repo-2", fullName: "test-org/test-repo-2", autonomy: "automerge" as const });
     const pr = mockPR({ author: { login: "dependabot[bot]" } });
 
     mockGh.listPRs
@@ -378,6 +379,31 @@ describe("auto-merger", () => {
     await run([repo]);
 
     expect(mockGh.getPRMergeableState).toHaveBeenCalledWith(repo.fullName, pr.number);
+    expect(mockGh.mergePR).toHaveBeenCalledWith(repo.fullName, pr.number);
+  });
+
+  it("skips repo below automerge tier without merging", async () => {
+    const prRepo = { ...mockRepo(), autonomy: "pr" as const };
+    const pr = mockPR({ author: { login: "dependabot[bot]" } });
+    mockGh.listPRs.mockResolvedValue([pr]);
+    mockGh.getPRCheckStatus.mockResolvedValue("passing");
+
+    await run([prRepo]);
+
+    expect(mockGh.listPRs).not.toHaveBeenCalled();
+    expect(mockGh.mergePR).not.toHaveBeenCalled();
+    expect(log.info).toHaveBeenCalledWith(
+      `[auto-merger] skip ${prRepo.fullName} — tier below 'merge' requirement`,
+    );
+  });
+
+  it("merges an eligible PR when repo is at automerge tier", async () => {
+    const pr = mockPR({ author: { login: "dependabot[bot]" } });
+    mockGh.listPRs.mockResolvedValue([pr]);
+    mockGh.getPRCheckStatus.mockResolvedValue("passing");
+
+    await run([repo]);
+
     expect(mockGh.mergePR).toHaveBeenCalledWith(repo.fullName, pr.number);
   });
 });

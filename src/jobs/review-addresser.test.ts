@@ -8,6 +8,10 @@ vi.mock("../config.js", () => ({
     priority: "Priority",
   },
   JOB_AI: {},
+  // WORK_DIR is pulled in transitively by policy.ts; point it at a dir with no
+  // policies/ so renderPolicy falls through to the bundled src/policies template.
+  WORK_DIR: "/tmp/yeti-ra-test",
+  repoAutonomy: (r: { autonomy?: string }) => r?.autonomy ?? "pr",
 }));
 
 vi.mock("../log.js", () => ({
@@ -69,8 +73,9 @@ vi.mock("../images.js", () => ({
   processTextForImages: mockProcessTextForImages,
 }));
 
-import { run } from "./review-addresser.js";
+import { run, buildPrompt } from "./review-addresser.js";
 import { reportError } from "../error-reporter.js";
+import type * as gh from "../github.js";
 
 describe("review-addresser", () => {
   const repo = mockRepo();
@@ -122,6 +127,17 @@ describe("review-addresser", () => {
       message: expect.stringContaining("Addressed review"),
     }));
     expect(mockDb.recordTaskComplete).toHaveBeenCalledWith(1);
+  });
+
+  it("autonomy below 'push' — skips repo before any worktree/AI work", async () => {
+    const advisoryRepo = { ...mockRepo(), autonomy: "advisory" as const };
+    const pr = mockPR({ headRefName: "yeti/fix-123" });
+    mockGh.listPRs.mockResolvedValue([pr]);
+
+    await run([advisoryRepo]);
+
+    expect(mockClaude.createWorktreeFromBranch).not.toHaveBeenCalled();
+    expect(mockClaude.runAI).not.toHaveBeenCalled();
   });
 
   it("no review comments — skips without creating worktree", async () => {
@@ -230,5 +246,47 @@ describe("review-addresser", () => {
 
     expect(mockGh.getPRReviewComments).not.toHaveBeenCalled();
     expect(mockClaude.createWorktreeFromBranch).not.toHaveBeenCalled();
+  });
+});
+
+describe("buildPrompt (policy template)", () => {
+  // Reconstructs the pre-migration inline prompt independently, proving the
+  // policy-template render is behavior-preserving.
+  function expected(fullName: string, pr: gh.PR, reviewData: gh.PRReviewData, imageContext: string): string {
+    return [
+      `You are addressing PR review comments on a pull request in the repository ${fullName}.`,
+      `PR #${pr.number}: ${pr.title}`,
+      `Branch: ${pr.headRefName}`,
+      ``,
+      `The following review comments have been left on this PR:`,
+      ``,
+      reviewData.formatted,
+      ``,
+      `Please address each review comment by making the necessary code changes.`,
+      `If a review comment is a question or requires no code changes, respond with a text explanation.`,
+      `Always include a brief summary of what you did (or why no changes were needed) in your text output.`,
+      `Make commits with clear messages as you work.`,
+      imageContext,
+    ].join("\n");
+  }
+
+  const pr = mockPR({ headRefName: "yeti/fix-123" });
+  const reviewData: gh.PRReviewData = {
+    formatted: "Please rename this variable.",
+    commentIds: [1],
+    reviewCommentIds: [2],
+  };
+
+  it("matches the pre-migration inline builder, no image context", () => {
+    const out = buildPrompt("pr", "acme/widget", pr, reviewData, "");
+    expect(out.trimEnd()).toBe(expected("acme/widget", pr, reviewData, "").trimEnd());
+  });
+
+  it("substitutes image context when present", () => {
+    const out = buildPrompt("pr", "acme/widget", pr, reviewData, "\n## Attached Images\ndiagram.png");
+    expect(out).toContain("## Attached Images");
+    expect(out.trimEnd()).toBe(
+      expected("acme/widget", pr, reviewData, "\n## Attached Images\ndiagram.png").trimEnd(),
+    );
   });
 });

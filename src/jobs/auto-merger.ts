@@ -4,10 +4,15 @@ import { isRateLimited } from "../github.js";
 import * as log from "../log.js";
 import { reportError } from "../error-reporter.js";
 import { notify } from "../notify.js";
+import { can } from "../capability.js";
 
 export async function run(repos: Repo[]): Promise<void> {
   for (const repo of repos) {
     if (isRateLimited()) break;
+    if (!can(repo, "merge")) {
+      log.info(`[auto-merger] skip ${repo.fullName} — tier below 'merge' requirement`);
+      continue;
+    }
     try {
       const prs = await gh.listPRs(repo.fullName);
 

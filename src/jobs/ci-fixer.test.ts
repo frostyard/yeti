@@ -1,8 +1,13 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { mockRepo, mockPR } from "../test-helpers.js";
 import { ShutdownError } from "../shutdown.js";
+import type * as gh from "../github.js";
 
-vi.mock("../config.js", () => ({ JOB_AI: {} }));
+vi.mock("../config.js", () => ({
+  JOB_AI: {},
+  WORK_DIR: "/tmp/yeti-cifix-test",
+  repoAutonomy: (r: { autonomy?: string } | undefined) => r?.autonomy ?? "pr",
+}));
 
 const mockLog = vi.hoisted(() => ({
   info: vi.fn(),
@@ -83,7 +88,7 @@ vi.mock("../github.js", () => mockGh);
 vi.mock("../claude.js", () => mockClaude);
 vi.mock("../db.js", () => mockDb);
 
-import { run } from "./ci-fixer.js";
+import { run, buildConflictPrompt, buildClassifyPrompt, buildFixPrompt, buildRevertPrompt } from "./ci-fixer.js";
 
 describe("ci-fixer", () => {
   const repo = mockRepo();
@@ -148,6 +153,24 @@ describe("ci-fixer", () => {
 
     expect(mockGh.rerunWorkflow).toHaveBeenCalledWith(repo.fullName, "555");
     expect(mockReportError).not.toHaveBeenCalled();
+  });
+
+  it("autonomy below 'push' — skips repo before any worktree/AI work", async () => {
+    const advisoryRepo = { ...mockRepo(), autonomy: "advisory" as const };
+    const pr = mockPR();
+    mockGh.listPRs.mockResolvedValue([pr]);
+    mockGh.getFailingCheck.mockResolvedValue({
+      name: "CI",
+      state: "FAILURE",
+      link: "https://github.com/org/repo/actions/runs/123",
+    });
+    mockGh.getFailedRunLog.mockResolvedValue("error: test failed");
+
+    await run([advisoryRepo]);
+
+    expect(mockGh.listPRs).not.toHaveBeenCalled();
+    expect(mockClaude.createWorktreeFromBranch).not.toHaveBeenCalled();
+    expect(mockClaude.runAI).not.toHaveBeenCalled();
   });
 
   it("related failure — proceeds with fix as before", async () => {
@@ -900,5 +923,152 @@ describe("ci-fixer", () => {
     expect(mockGh.createIssue).toHaveBeenCalledTimes(2);
     // One comment per occurrence
     expect(mockGh.commentOnIssue).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe("buildConflictPrompt (policy template)", () => {
+  // Reconstructs the pre-migration inline prompt independently, proving the
+  // policy-template render is behavior-preserving.
+  function expected(fullName: string, pr: gh.PR, conflictedFiles: string[]): string {
+    return [
+      `You are resolving merge conflicts on a pull request in the repository ${fullName}.`,
+      `PR #${pr.number}: ${pr.title}`,
+      `Branch: ${pr.headRefName} (merging ${pr.baseRefName} into it)`,
+      ``,
+      `A merge of the base branch (origin/${pr.baseRefName}) has been started but has`,
+      `conflicts in the following files:`,
+      conflictedFiles.map((f) => `- ${f}`).join("\n"),
+      ``,
+      `The conflicted files contain standard git conflict markers`,
+      `(<<<<<<< HEAD, =======, >>>>>>>).`,
+      ``,
+      `Please resolve each conflict by:`,
+      `1. Reading each conflicted file`,
+      `2. Understanding the intent of both sides of the conflict`,
+      `3. Editing the file to remove all conflict markers and produce the correct merged result`,
+      `4. Staging the resolved files with \`git add <file>\``,
+      `5. Completing the merge with \`git commit --no-edit\``,
+    ].join("\n");
+  }
+
+  it("matches the pre-migration inline builder", () => {
+    const pr = mockPR({ number: 42, title: "Add dark mode", headRefName: "feature", baseRefName: "main" });
+    const conflictedFiles = ["src/a.ts", "src/b.ts"];
+    const out = buildConflictPrompt("pr", "acme/widget", pr, conflictedFiles);
+    expect(out.trimEnd()).toBe(expected("acme/widget", pr, conflictedFiles).trimEnd());
+  });
+});
+
+describe("buildClassifyPrompt (policy template)", () => {
+  function expected(pr: gh.PR, failLog: string, changedFiles: string[]): string {
+    return [
+      `You are classifying a CI failure to determine whether it was caused by the changes in this pull request.`,
+      ``,
+      `PR #${pr.number}: ${pr.title}`,
+      `Branch: ${pr.headRefName}`,
+      ``,
+      `Files changed in this PR:`,
+      changedFiles.map((f) => `- ${f}`).join("\n"),
+      ``,
+      `CI failure log:`,
+      "```",
+      failLog,
+      "```",
+      ``,
+      `Classify this failure. Respond with ONLY a JSON object (no markdown, no explanation):`,
+      `{`,
+      `  "related": true/false,`,
+      `  "fingerprint": "short-stable-id",`,
+      `  "reason": "1-2 sentence explanation"`,
+      `}`,
+      ``,
+      `Classification rules:`,
+      `- "related": true if the failure is caused by or related to the PR's changes`,
+      `  - Failures in files the PR modified → related`,
+      `  - Test failures testing code the PR changed → related`,
+      `  - Build errors from the PR's changes → related`,
+      `- "related": false if the failure is NOT caused by the PR`,
+      `  - Flakey tests (timeouts, race conditions, intermittent failures) → unrelated`,
+      `  - CI runner issues (disk space, network, docker pull limits) → unrelated`,
+      `  - Pre-existing failures that exist on the base branch → unrelated`,
+      `- When in doubt, classify as related (safe default)`,
+      ``,
+      `- "fingerprint": a short, stable, human-readable identifier for this class of failure`,
+      `  Examples: "flakey-test:auth-timeout", "runner:disk-space", "preexisting:lint-config"`,
+      `  Use category:detail format. Be consistent — the same issue should get the same fingerprint.`,
+      ``,
+      `- "reason": brief explanation of why you classified it this way`,
+    ].join("\n");
+  }
+
+  it("matches the pre-migration inline builder", () => {
+    const pr = mockPR({ number: 7, title: "Fix bug", headRefName: "fix-branch" });
+    const failLog = "error: test failed\nAssertionError: expected true to be false";
+    const changedFiles = ["src/app.ts", "src/util.ts"];
+    const out = buildClassifyPrompt("pr", pr, failLog, changedFiles);
+    expect(out.trimEnd()).toBe(expected(pr, failLog, changedFiles).trimEnd());
+  });
+});
+
+describe("buildFixPrompt (policy template)", () => {
+  function expected(fullName: string, pr: gh.PR, failLog: string): string {
+    return [
+      `You are fixing a CI failure on a pull request in the repository ${fullName}.`,
+      `PR #${pr.number}: ${pr.title}`,
+      `Branch: ${pr.headRefName}`,
+      ``,
+      `The CI checks have failed. Here are the relevant failure logs:`,
+      ``,
+      "```",
+      failLog,
+      "```",
+      ``,
+      `Please analyze the failure and make the necessary code changes to fix it.`,
+      `Make commits with clear messages as you work.`,
+    ].join("\n");
+  }
+
+  it("matches the pre-migration inline builder", () => {
+    const pr = mockPR({ number: 15, title: "Add feature", headRefName: "feature-branch" });
+    const failLog = "npm ERR! Test failed";
+    const out = buildFixPrompt("pr", "acme/widget", pr, failLog);
+    expect(out.trimEnd()).toBe(expected("acme/widget", pr, failLog).trimEnd());
+  });
+});
+
+describe("buildRevertPrompt (policy template)", () => {
+  function expected(pr: gh.PR, changedFiles: string[], gitLog: string): string {
+    return [
+      `You are examining commits on a pull request branch to identify and revert automated CI fix attempts that were for issues UNRELATED to the PR's purpose.`,
+      ``,
+      `PR #${pr.number}: ${pr.title}`,
+      `Branch: ${pr.headRefName}`,
+      ``,
+      `Files originally changed in this PR:`,
+      changedFiles.map((f) => `- ${f}`).join("\n"),
+      ``,
+      `Commit history on this branch (newest first):`,
+      "```",
+      gitLog,
+      "```",
+      ``,
+      `Identify any commits that appear to be automated CI fix attempts for issues that are NOT related to the PR's original purpose (the files listed above). These are typically commits that:`,
+      `- Fix flakey tests unrelated to the PR`,
+      `- Work around CI runner issues`,
+      `- Fix pre-existing problems not introduced by this PR`,
+      ``,
+      `For each such commit, run: git revert <sha> --no-edit`,
+      ``,
+      `If no unrelated fix commits are found, do nothing.`,
+      `Be conservative — only revert commits you are confident are unrelated automated fixes.`,
+    ].join("\n");
+  }
+
+  it("matches the pre-migration inline builder", () => {
+    const pr = mockPR({ number: 23, title: "Add widget", headRefName: "widget-branch" });
+    const changedFiles = ["src/widget.ts"];
+    const gitLog = "abc123 fix flakey test\ndef456 add widget feature";
+    const out = buildRevertPrompt("pr", pr, changedFiles, gitLog);
+    expect(out.trimEnd()).toBe(expected(pr, changedFiles, gitLog).trimEnd());
   });
 });

@@ -1,14 +1,21 @@
-import { JOB_AI, type Repo } from "../config.js";
+import { JOB_AI, repoAutonomy, type Repo } from "../config.js";
+import { renderPolicy, type Autonomy } from "../policy.js";
 import * as gh from "../github.js";
 import * as claude from "../claude.js";
 import * as log from "../log.js";
 import * as db from "../db.js";
 import { reportError } from "../error-reporter.js";
 import { notify } from "../notify.js";
+import { can } from "../capability.js";
 
 const MAX_IMPROVEMENTS_PER_RUN = 10;
 
-function buildPrompt(fullName: string, openIssueTitles: string[], openPRTitles: string[]): string {
+export function buildAnalysisPrompt(
+  autonomy: Autonomy,
+  fullName: string,
+  openIssueTitles: string[],
+  openPRTitles: string[],
+): string {
   const issueList =
     openIssueTitles.length > 0
       ? openIssueTitles.map((t) => `  - ${t}`).join("\n")
@@ -19,67 +26,19 @@ function buildPrompt(fullName: string, openIssueTitles: string[], openPRTitles: 
       ? openPRTitles.map((t) => `  - ${t}`).join("\n")
       : "  (none)";
 
-  return [
-    `You are analyzing the repository ${fullName} for opportunities to improve the codebase.`,
-    ``,
-    `Read the codebase thoroughly. If \`yeti/OVERVIEW.md\` exists, read it first`,
-    `(and any linked documents) for context about the architecture and patterns.`,
-    ``,
-    `Look for meaningful opportunities such as:`,
-    `- Code that could be consolidated (duplicate or near-duplicate logic)`,
-    `- Overcomplicated code that could be simplified`,
-    `- Dead code or unused exports/dependencies`,
-    `- Performance issues or inefficiencies`,
-    `- Security concerns`,
-    `- Missing error handling at system boundaries`,
-    `- Stale TODOs or FIXMEs that should be addressed`,
-    ``,
-    `Guidelines:`,
-    `- Be conservative. Only suggest improvements that provide clear, tangible value.`,
-    `- Do NOT suggest stylistic changes, comment additions, or trivial refactors.`,
-    `- Do NOT suggest adding type annotations, docstrings, or documentation.`,
-    `- "No improvements found" is perfectly acceptable — do not manufacture suggestions.`,
-    `- Group related improvements into a single suggestion when they should be addressed together.`,
-    `- Each suggestion should be specific and actionable, referencing exact files and line numbers.`,
-    ``,
-    `The following issues are already open in this repository — do NOT re-suggest these:`,
-    issueList,
-    ``,
-    `The following PRs are already open in this repository — do NOT re-suggest these:`,
-    prList,
-    ``,
-    `Respond with ONLY a JSON block in this exact format, no other text:`,
-    ``,
-    "```json",
-    `{`,
-    `  "improvements": [`,
-    `    {`,
-    `      "title": "Short descriptive title (imperative mood)",`,
-    `      "body": "Detailed description with file references, what to change, and why"`,
-    `    }`,
-    `  ]`,
-    `}`,
-    "```",
-    ``,
-    `If no improvements are worth suggesting, respond with:`,
-    "```json",
-    `{ "improvements": [] }`,
-    "```",
-  ].join("\n");
+  return renderPolicy("improvement-identifier", autonomy, {
+    REPO: fullName,
+    ISSUE_LIST: issueList,
+    PR_LIST: prList,
+  });
 }
 
-function buildImplementationPrompt(fullName: string, improvement: Improvement): string {
-  return [
-    `You are implementing a specific improvement in the repository ${fullName}.`,
-    ``,
-    `**Improvement: ${improvement.title}**`,
-    improvement.body,
-    ``,
-    `If \`yeti/OVERVIEW.md\` exists, read it first (and any linked documents) for context.`,
-    ``,
-    `Implement this improvement. Make clean, focused commits with clear messages.`,
-    `Do not make changes beyond what is described above.`,
-  ].join("\n");
+export function buildImplementationPrompt(autonomy: Autonomy, fullName: string, improvement: Improvement): string {
+  return renderPolicy("improvement-identifier.implement", autonomy, {
+    REPO: fullName,
+    TITLE: improvement.title,
+    BODY: improvement.body,
+  });
 }
 
 interface Improvement {
@@ -120,6 +79,11 @@ export function parseImprovements(output: string): Improvement[] {
 const FOOTER = "\n\n---\n*Automated improvement by yeti improvement-identifier*";
 
 async function processRepo(repo: Repo): Promise<void> {
+  if (!can(repo, "createPR")) {
+    log.info(`[improvement-identifier] skip ${repo.fullName} — tier below 'createPR' requirement`);
+    return;
+  }
+
   const fullName = repo.fullName;
 
   // Fetch open issue titles and PR titles for dedup context
@@ -146,7 +110,7 @@ async function processRepo(repo: Repo): Promise<void> {
     db.updateTaskWorktree(analysisTaskId, analysisWt, analysisBranch);
 
     log.info(`[improvement-identifier] Analyzing ${fullName}`);
-    const prompt = buildPrompt(fullName, openIssueTitles, openPRTitles);
+    const prompt = buildAnalysisPrompt(repoAutonomy(repo), fullName, openIssueTitles, openPRTitles);
     const aiOptions = JOB_AI["improvement-identifier"];
     const output = await claude.resolveEnqueue(aiOptions)(() => claude.runAI(prompt, analysisWt!, aiOptions));
 
@@ -191,12 +155,12 @@ async function processRepo(repo: Repo): Promise<void> {
       implWt = await claude.createWorktree(repo, implBranch, "improvement-identifier");
       db.updateTaskWorktree(implTaskId, implWt, implBranch);
 
-      const implPrompt = buildImplementationPrompt(fullName, improvement);
+      const implPrompt = buildImplementationPrompt(repoAutonomy(repo), fullName, improvement);
       const aiOptions = JOB_AI["improvement-identifier"];
       await claude.resolveEnqueue(aiOptions)(() => claude.runAI(implPrompt, implWt!, aiOptions));
 
       if (await claude.hasNewCommits(implWt, repo.defaultBranch) && await claude.hasTreeDiff(implWt, repo.defaultBranch)) {
-        await claude.pushBranch(implWt, implBranch);
+        await claude.pushBranch(implWt, implBranch, fullName);
         const prBody = improvement.body + FOOTER;
         const prNumber = await gh.createPR(fullName, implBranch, `refactor: ${improvement.title}`, prBody);
         log.info(`[improvement-identifier] Created PR for "${improvement.title}" in ${fullName}`);

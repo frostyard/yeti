@@ -494,3 +494,52 @@ describe("config", () => {
     expect(listener).not.toHaveBeenCalled();
   });
 });
+
+describe("autonomy config", () => {
+  // Minimal repo factory for these tests
+  const repo = (fullName: string, autonomy?: string) => ({
+    owner: fullName.split("/")[0],
+    name: fullName.split("/")[1],
+    fullName,
+    defaultBranch: "main",
+    ...(autonomy ? { autonomy } : {}),
+  }) as unknown as import("./config.js").Repo;
+
+  it("defaults DEFAULT_AUTONOMY to 'pr' when unset", async () => {
+    const mod = await import("./config.js");
+
+    fs.mkdirSync(path.dirname(mod.CONFIG_PATH), { recursive: true });
+    fs.writeFileSync(mod.CONFIG_PATH, JSON.stringify({}));
+    mod.reloadConfig();
+
+    expect(mod.DEFAULT_AUTONOMY).toBe("pr");
+  });
+
+  it("repoAutonomy precedence: map > repo field > default; invalid map values coerce to pr", async () => {
+    const mod = await import("./config.js");
+
+    fs.mkdirSync(path.dirname(mod.CONFIG_PATH), { recursive: true });
+    fs.writeFileSync(
+      mod.CONFIG_PATH,
+      JSON.stringify({
+        defaultAutonomy: "issues",
+        autonomy: { "acme/mapped": "automerge", "acme/bad": "nonsense" },
+      }),
+    );
+    mod.reloadConfig();
+
+    expect(mod.DEFAULT_AUTONOMY).toBe("issues");
+
+    // Map wins over the repo's own field.
+    expect(mod.repoAutonomy(repo("acme/mapped", "advisory"))).toBe("automerge");
+
+    // No map entry, but a repo field -> repo field wins over default.
+    expect(mod.repoAutonomy(repo("acme/withfield", "advisory"))).toBe("advisory");
+
+    // No map entry, no repo field -> falls back to the configured default.
+    expect(mod.repoAutonomy(repo("acme/other"))).toBe("issues");
+
+    // Invalid map value is coerced to "pr" at load time, so it wins over the default.
+    expect(mod.repoAutonomy(repo("acme/bad"))).toBe("pr");
+  });
+});
