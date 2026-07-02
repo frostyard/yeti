@@ -23,6 +23,8 @@ import * as issueAuditor from "./jobs/issue-auditor.js";
 import * as planReviewer from "./jobs/plan-reviewer.js";
 import * as mkdocsUpdate from "./jobs/mkdocs-update.js";
 import * as promptEvaluator from "./jobs/prompt-evaluator.js";
+import * as learningConsolidator from "./jobs/learning-consolidator.js";
+import { setConsolidatorTrigger } from "./learnings.js";
 import * as discord from "./discord.js";
 import { isDiscordConfigured } from "./discord.js";
 import { setShuttingDown } from "./shutdown.js";
@@ -260,6 +262,15 @@ const jobs: Job[] = [
       await promptEvaluator.run(repos);
     },
   },
+  {
+    name: "learning-consolidator",
+    intervalMs: 0,
+    scheduledHour: SCHEDULES.learningConsolidatorHour,
+    async run() {
+      const repos = await gh.listRepos();
+      await learningConsolidator.run(repos);
+    },
+  },
 ];
 
 // ── Job filtering ──
@@ -283,6 +294,11 @@ if (enabledJobs.length === 0) {
 }
 
 const scheduler = startJobs(enabledJobs, config.PAUSED_JOBS);
+
+setConsolidatorTrigger(() => {
+  const result = scheduler.triggerJob("learning-consolidator");
+  if (result !== "started") log.info(`[learnings] consolidator threshold trigger: ${result}`);
+});
 const allJobInfo = jobs.map(j => ({ name: j.name, intervalMs: j.intervalMs, ...(j.scheduledHour !== undefined ? { scheduledHour: j.scheduledHour } : {}) }));
 const server = createServer(scheduler, allJobInfo);
 
