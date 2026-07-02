@@ -1,3 +1,4 @@
+import { stripPreamble } from "../test-preamble.js";
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { mockRepo, mockPR } from "../test-helpers.js";
 
@@ -305,6 +306,6 @@ describe("buildMkdocsPrompt (policy template)", () => {
 
   it("matches the pre-migration inline builder", () => {
     const out = buildMkdocsPrompt("pr", "acme/widget");
-    expect(out.trimEnd()).toBe(expected("acme/widget").trimEnd());
+    expect(stripPreamble(out).trimEnd()).toBe(expected("acme/widget").trimEnd());
   });
 });

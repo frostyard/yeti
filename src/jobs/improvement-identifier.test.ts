@@ -1,3 +1,4 @@
+import { stripPreamble } from "../test-preamble.js";
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { mockRepo } from "../test-helpers.js";
 
@@ -487,14 +488,14 @@ describe("buildAnalysisPrompt (policy template)", () => {
 
   it("matches the pre-migration inline builder with no open issues/PRs", () => {
     const out = buildAnalysisPrompt("pr", "acme/widget", [], []);
-    expect(out.trimEnd()).toBe(expected("acme/widget", [], []).trimEnd());
+    expect(stripPreamble(out).trimEnd()).toBe(expected("acme/widget", [], []).trimEnd());
   });
 
   it("matches the pre-migration inline builder with open issues and PRs", () => {
     const issues = ["Fix bug in parser", "Handle empty input"];
     const prs = ["refactor: Improve X", "feat: Add Y"];
     const out = buildAnalysisPrompt("pr", "acme/widget", issues, prs);
-    expect(out.trimEnd()).toBe(expected("acme/widget", issues, prs).trimEnd());
+    expect(stripPreamble(out).trimEnd()).toBe(expected("acme/widget", issues, prs).trimEnd());
   });
 });
 
@@ -518,6 +519,6 @@ describe("buildImplementationPrompt (policy template)", () => {
   it("matches the pre-migration inline builder", () => {
     const improvement = { title: "Consolidate duplicate validation logic", body: "Files `src/a.ts` and `src/b.ts` both validate..." };
     const out = buildImplementationPrompt("pr", "acme/widget", improvement);
-    expect(out.trimEnd()).toBe(expected("acme/widget", improvement).trimEnd());
+    expect(stripPreamble(out).trimEnd()).toBe(expected("acme/widget", improvement).trimEnd());
   });
 });

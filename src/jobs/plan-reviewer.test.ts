@@ -1,3 +1,4 @@
+import { stripPreamble } from "../test-preamble.js";
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { mockRepo, mockIssue } from "../test-helpers.js";
 
@@ -488,17 +489,17 @@ describe("buildReviewPrompt (policy template)", () => {
 
   it("matches the pre-migration inline builder with REVIEW_LOOP disabled", () => {
     const out = buildReviewPrompt("pr", "acme/widget", issue, planBody, false);
-    expect(out.trimEnd()).toBe(expected("acme/widget", issue, planBody, false).trimEnd());
+    expect(stripPreamble(out).trimEnd()).toBe(expected("acme/widget", issue, planBody, false).trimEnd());
   });
 
   it("matches the pre-migration inline builder with REVIEW_LOOP enabled", () => {
     const out = buildReviewPrompt("pr", "acme/widget", issue, planBody, true);
-    expect(out.trimEnd()).toBe(expected("acme/widget", issue, planBody, true).trimEnd());
+    expect(stripPreamble(out).trimEnd()).toBe(expected("acme/widget", issue, planBody, true).trimEnd());
   });
 
   it("falls back to the no-description placeholder when issue body is empty", () => {
     const emptyBodyIssue = mockIssue({ number: 7, title: "No body issue", body: "" });
     const out = buildReviewPrompt("pr", "acme/widget", emptyBodyIssue, planBody, false);
-    expect(out.trimEnd()).toBe(expected("acme/widget", emptyBodyIssue, planBody, false).trimEnd());
+    expect(stripPreamble(out).trimEnd()).toBe(expected("acme/widget", emptyBodyIssue, planBody, false).trimEnd());
   });
 });

@@ -1,3 +1,4 @@
+import { stripPreamble } from "../test-preamble.js";
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { mockRepo, mockPR } from "../test-helpers.js";
 
@@ -284,13 +285,13 @@ describe("buildPrompt (policy template)", () => {
 
   it("matches the pre-migration inline builder, no image context", () => {
     const out = buildPrompt("pr", "acme/widget", pr, reviewData, "");
-    expect(out.trimEnd()).toBe(expected("acme/widget", pr, reviewData, "").trimEnd());
+    expect(stripPreamble(out).trimEnd()).toBe(expected("acme/widget", pr, reviewData, "").trimEnd());
   });
 
   it("substitutes image context when present", () => {
     const out = buildPrompt("pr", "acme/widget", pr, reviewData, "\n## Attached Images\ndiagram.png");
     expect(out).toContain("## Attached Images");
-    expect(out.trimEnd()).toBe(
+    expect(stripPreamble(out).trimEnd()).toBe(
       expected("acme/widget", pr, reviewData, "\n## Attached Images\ndiagram.png").trimEnd(),
     );
   });

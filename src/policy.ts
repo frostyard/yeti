@@ -128,16 +128,37 @@ export function renderPolicy(
 ): string {
   const dirs = opts.dirs ?? defaultPolicyDirs();
   const absPath = resolvePolicyPath(job, autonomy, dirs);
+  let body: string;
   if (!absPath) {
-    if (opts.fallback) return opts.fallback();
-    throw new Error(`No policy found for job "${job}" (autonomy=${autonomy})`);
+    if (opts.fallback) body = opts.fallback();
+    else throw new Error(`No policy found for job "${job}" (autonomy=${autonomy})`);
+  } else {
+    const template = read(absPath);
+    const missing = findMissingVars(template, vars);
+    if (missing.length) {
+      log.warn(`policy ${absPath}: unsubstituted ${missing.map((v) => "${" + v + "}").join(", ")}`);
+    }
+    body = substitute(template, vars);
   }
-  const template = read(absPath);
-  const missing = findMissingVars(template, vars);
-  if (missing.length) {
-    log.warn(`policy ${absPath}: unsubstituted ${missing.map((v) => "${" + v + "}").join(", ")}`);
+  // Prepend the shared environment preamble (if present) to every prompt. Kept in
+  // one file (_preamble.md) so environment guidance stays DRY across all jobs.
+  const preamble = readPreamble(dirs, vars);
+  return preamble ? preamble + "\n\n" + body : body;
+}
+
+/** Resolve the shared preamble file (`_preamble.md`), first hit across dirs, or null. */
+export function resolvePreamblePath(dirs: string[]): string | null {
+  for (const dir of dirs) {
+    const p = path.join(dir, "_preamble.md");
+    if (fs.existsSync(p)) return p;
   }
-  return substitute(template, vars);
+  return null;
+}
+
+/** The rendered shared preamble (trimmed), or "" when no `_preamble.md` exists. */
+export function readPreamble(dirs: string[] = defaultPolicyDirs(), vars: Record<string, string> = {}): string {
+  const p = resolvePreamblePath(dirs);
+  return p ? substitute(read(p), vars).trimEnd() : "";
 }
 
 /**

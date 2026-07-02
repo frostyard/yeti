@@ -82,6 +82,7 @@ Jobs must be listed in the `enabledJobs` config array to run. An empty or missin
 - **Crash recovery**: On startup, tasks still marked `running` in DB get their worktrees cleaned and are marked `failed`.
 - **Tree-diff guard**: All PR-creating jobs gate on both `hasNewCommits` (commit count) and `hasTreeDiff` (actual tree difference via `git diff --quiet`) before pushing/creating PRs. This prevents failures when commits produce no effective changes.
 - **Fresh duplicate-PR guard**: `getOpenPRForIssue` bypasses the `listPRs` TTL cache (`fresh: true`) to avoid race conditions where a concurrent PR is invisible during the 60-second cache window.
+- **Prompt policies + shared preamble**: Job prompts are `src/policies/<job>.md` templates rendered by `renderPolicy()` (`src/policy.ts`) with `${VAR}` substitution and per-autonomy variants; user overrides live in `~/.yeti/policies`. `src/policies/_preamble.md` is prepended to **every** rendered prompt — the DRY place for environment-wide agent guidance (e.g. "install tools with `brew`, never `apt`/`sudo`"). Backends run without an internal sandbox (Claude `--dangerously-skip-permissions`, Codex `--sandbox danger-full-access`), so agents can install via Homebrew, which must be on the runtime user's login-shell PATH.
 
 ## Testing
 

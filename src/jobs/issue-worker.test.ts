@@ -1,3 +1,4 @@
+import { stripPreamble } from "../test-preamble.js";
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { mockRepo, mockIssue, mockPR } from "../test-helpers.js";
 import * as planParser from "../plan-parser.js";
@@ -555,12 +556,12 @@ describe("buildPrompt single-phase (policy template)", () => {
   it("matches the pre-migration inline builder, with comments", () => {
     const comments = [{ login: "alice", body: "Please hurry" }] as unknown as gh.IssueComment[];
     const out = buildPrompt("pr", "acme/widget", issue, null, 1, 1, [], comments, "");
-    expect(out.trimEnd()).toBe(expectedSinglePhase("acme/widget", issue, comments, "").trimEnd());
+    expect(stripPreamble(out).trimEnd()).toBe(expectedSinglePhase("acme/widget", issue, comments, "").trimEnd());
   });
 
   it("matches the pre-migration inline builder, with no comments", () => {
     const out = buildPrompt("pr", "acme/widget", issue, null, 1, 1, [], [], "");
-    expect(out.trimEnd()).toBe(expectedSinglePhase("acme/widget", issue, [], "").trimEnd());
+    expect(stripPreamble(out).trimEnd()).toBe(expectedSinglePhase("acme/widget", issue, [], "").trimEnd());
   });
 
   it("substitutes image context when present", () => {
@@ -610,6 +611,6 @@ describe("buildPrompt multi-phase (policy template)", () => {
 
   it("renders the phased variant identically to the pre-migration inline builder", () => {
     const out = buildPrompt("pr", "acme/widget", issue, plan, 2, 2, mergedPRs, [], "");
-    expect(out.trimEnd()).toBe(expectedPhased().trimEnd());
+    expect(stripPreamble(out).trimEnd()).toBe(expectedPhased().trimEnd());
   });
 });

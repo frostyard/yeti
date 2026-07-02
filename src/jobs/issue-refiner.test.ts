@@ -1,3 +1,4 @@
+import { stripPreamble } from "../test-preamble.js";
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { mockRepo, mockIssue } from "../test-helpers.js";
 
@@ -753,7 +754,7 @@ describe("buildNewPlanPrompt (policy template)", () => {
   it("matches the pre-migration inline builder — no comments", () => {
     const issue = { number: 3, title: "Add dark mode", body: "Please add a dark mode toggle" };
     const out = buildNewPlanPrompt("pr", "acme/widget", issue as never, []);
-    expect(out.trimEnd()).toBe(expected("acme/widget", issue, []).trimEnd());
+    expect(stripPreamble(out).trimEnd()).toBe(expected("acme/widget", issue, []).trimEnd());
   });
 
   it("matches the pre-migration inline builder — with comments", () => {
@@ -763,13 +764,13 @@ describe("buildNewPlanPrompt (policy template)", () => {
       { id: 2, body: "<!-- yeti-automated -->Investigated, seems related to session expiry.", login: "yeti-bot" },
     ];
     const out = buildNewPlanPrompt("pr", "acme/widget", issue as never, comments);
-    expect(out.trimEnd()).toBe(expected("acme/widget", issue, comments).trimEnd());
+    expect(stripPreamble(out).trimEnd()).toBe(expected("acme/widget", issue, comments).trimEnd());
   });
 
   it("uses fallback text when issue body is empty", () => {
     const issue = { number: 5, title: "No body issue", body: "" };
     const out = buildNewPlanPrompt("pr", "acme/widget", issue as never, []);
-    expect(out.trimEnd()).toBe(expected("acme/widget", issue, []).trimEnd());
+    expect(stripPreamble(out).trimEnd()).toBe(expected("acme/widget", issue, []).trimEnd());
     expect(out).toContain("(No description provided)");
   });
 });
@@ -895,14 +896,14 @@ describe("buildRefinementPrompt (policy template)", () => {
       { id: 11, body: "<!-- yeti-automated -->\n*— Automated by Yeti —*\nNote: theme persistence not addressed", login: "yeti-bot" },
     ];
     const out = buildRefinementPrompt("pr", "acme/widget", issue as never, existingPlan, feedback);
-    expect(out.trimEnd()).toBe(expected("acme/widget", issue, existingPlan, feedback).trimEnd());
+    expect(stripPreamble(out).trimEnd()).toBe(expected("acme/widget", issue, existingPlan, feedback).trimEnd());
   });
 
   it("matches the pre-migration inline builder — no feedback", () => {
     const issue = { number: 8, title: "Add dark mode", body: "Please add a dark mode toggle" };
     const existingPlan = "1. Add a theme context\n2. Wire up the toggle";
     const out = buildRefinementPrompt("pr", "acme/widget", issue as never, existingPlan, []);
-    expect(out.trimEnd()).toBe(expected("acme/widget", issue, existingPlan, []).trimEnd());
+    expect(stripPreamble(out).trimEnd()).toBe(expected("acme/widget", issue, existingPlan, []).trimEnd());
     expect(out).toContain("No specific feedback comments were provided");
   });
 });
@@ -955,13 +956,13 @@ describe("buildFollowUpPrompt (policy template)", () => {
       { id: 20, body: "Is this done yet?", login: "reviewer" },
     ];
     const out = buildFollowUpPrompt("pr", "acme/widget", issue as never, existingPlan, 42, followUpComments);
-    expect(out.trimEnd()).toBe(expected("acme/widget", issue, existingPlan, 42, followUpComments).trimEnd());
+    expect(stripPreamble(out).trimEnd()).toBe(expected("acme/widget", issue, existingPlan, 42, followUpComments).trimEnd());
   });
 
   it("matches the pre-migration inline builder — no follow-up comments", () => {
     const issue = { number: 10, title: "Add dark mode", body: "Please add a dark mode toggle" };
     const existingPlan = "1. Add a theme context\n2. Wire up the toggle";
     const out = buildFollowUpPrompt("pr", "acme/widget", issue as never, existingPlan, 43, []);
-    expect(out.trimEnd()).toBe(expected("acme/widget", issue, existingPlan, 43, []).trimEnd());
+    expect(stripPreamble(out).trimEnd()).toBe(expected("acme/widget", issue, existingPlan, 43, []).trimEnd());
   });
 });

@@ -1,3 +1,4 @@
+import { stripPreamble } from "../test-preamble.js";
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { mockRepo, mockPR } from "../test-helpers.js";
 import { ShutdownError } from "../shutdown.js";
@@ -958,7 +959,7 @@ describe("buildConflictPrompt (policy template)", () => {
     const pr = mockPR({ number: 42, title: "Add dark mode", headRefName: "feature", baseRefName: "main" });
     const conflictedFiles = ["src/a.ts", "src/b.ts"];
     const out = buildConflictPrompt("pr", "acme/widget", pr, conflictedFiles);
-    expect(out.trimEnd()).toBe(expected("acme/widget", pr, conflictedFiles).trimEnd());
+    expect(stripPreamble(out).trimEnd()).toBe(expected("acme/widget", pr, conflictedFiles).trimEnd());
   });
 });
 
@@ -1009,7 +1010,7 @@ describe("buildClassifyPrompt (policy template)", () => {
     const failLog = "error: test failed\nAssertionError: expected true to be false";
     const changedFiles = ["src/app.ts", "src/util.ts"];
     const out = buildClassifyPrompt("pr", pr, failLog, changedFiles);
-    expect(out.trimEnd()).toBe(expected(pr, failLog, changedFiles).trimEnd());
+    expect(stripPreamble(out).trimEnd()).toBe(expected(pr, failLog, changedFiles).trimEnd());
   });
 });
 
@@ -1035,7 +1036,7 @@ describe("buildFixPrompt (policy template)", () => {
     const pr = mockPR({ number: 15, title: "Add feature", headRefName: "feature-branch" });
     const failLog = "npm ERR! Test failed";
     const out = buildFixPrompt("pr", "acme/widget", pr, failLog);
-    expect(out.trimEnd()).toBe(expected("acme/widget", pr, failLog).trimEnd());
+    expect(stripPreamble(out).trimEnd()).toBe(expected("acme/widget", pr, failLog).trimEnd());
   });
 });
 
@@ -1072,6 +1073,6 @@ describe("buildRevertPrompt (policy template)", () => {
     const changedFiles = ["src/widget.ts"];
     const gitLog = "abc123 fix flakey test\ndef456 add widget feature";
     const out = buildRevertPrompt("pr", pr, changedFiles, gitLog);
-    expect(out.trimEnd()).toBe(expected(pr, changedFiles, gitLog).trimEnd());
+    expect(stripPreamble(out).trimEnd()).toBe(expected(pr, changedFiles, gitLog).trimEnd());
   });
 });
