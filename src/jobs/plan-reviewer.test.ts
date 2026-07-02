@@ -51,6 +51,7 @@ const { mockGh, mockClaude, mockDb } = vi.hoisted(() => ({
     removeLabel: vi.fn(),
     commentOnIssue: vi.fn(),
     isYetiComment: (body: string) => body.includes("<!-- yeti-automated -->"),
+    stripYetiMarker: (body: string) => body.replace("<!-- yeti-automated -->", "").trim(),
     isRateLimited: vi.fn().mockReturnValue(false),
     isItemSkipped: vi.fn().mockReturnValue(false),
     hasPriorityLabel: vi.fn().mockReturnValue(false),
@@ -79,7 +80,7 @@ vi.mock("../github.js", () => mockGh);
 vi.mock("../claude.js", () => mockClaude);
 vi.mock("../db.js", () => mockDb);
 
-import { run, buildReviewPrompt } from "./plan-reviewer.js";
+import { run, buildReviewPrompt, buildThreadSection, buildRoundInfo } from "./plan-reviewer.js";
 import { reportError } from "../error-reporter.js";
 
 describe("plan-reviewer", () => {
@@ -449,62 +450,78 @@ describe("plan-reviewer", () => {
   });
 });
 
-describe("buildReviewPrompt (policy template)", () => {
-  // Reconstructs the pre-migration inline prompt independently, proving the
-  // policy-template render is behavior-preserving for both REVIEW_LOOP states.
-  function expected(fullName: string, issue: { number: number; title: string; body: string | null }, planBody: string, reviewLoop: boolean): string {
-    const lines = [
-      `You are reviewing an implementation plan for ${fullName}#${issue.number}.`,
-      ``,
-      `**Issue: ${issue.title}**`,
-      ``,
-      issue.body || "(No description provided)",
-      ``,
-      planBody,
-      ``,
-      `Your job is to find problems with this plan:`,
-      `- Missing edge cases or error handling`,
-      `- Files that should be modified but aren't mentioned`,
-      `- Incorrect assumptions about the codebase`,
-      `- Risks that aren't acknowledged`,
-      `- Over-engineering or unnecessary complexity`,
-      `- Missing test coverage`,
-      ``,
-      `If the plan is solid, say so briefly. If it has issues, list them clearly.`,
-      `Read yeti/OVERVIEW.md if it exists for codebase context.`,
-      `Do NOT make code changes. Only produce your review as text output.`,
-    ];
+describe("prompt building", () => {
+  const issue = mockIssue({ number: 42, title: "Add dark mode", body: "Some issue description" });
+  const planBody = "## Implementation Plan\n\nDo the thing";
 
-    if (reviewLoop) {
-      lines.push(
-        ``,
-        `End your review with exactly one of these lines on its own line:`,
-        `VERDICT: APPROVED`,
-        `VERDICT: NEEDS REVISION`,
-        ``,
-        `Do not include both. Use APPROVED only if the plan is solid enough to implement as-is.`,
+  describe("buildThreadSection", () => {
+    it("labels human comments MAINTAINER (binding) and yeti comments as automated", () => {
+      const comments = [
+        { id: 1, body: "<!-- yeti-automated -->## Plan Review\n\nold review", login: "yeti[bot]", updatedAt: "" },
+        { id: 2, body: "please keep the API stable", login: "bsherman", updatedAt: "" },
+      ];
+      const out = buildThreadSection(comments, 99);
+      expect(out).toContain("Comment by @yeti[bot] (automated by Yeti):");
+      expect(out).toContain("MAINTAINER (binding) — comment by @bsherman:");
+      expect(out).toContain("please keep the API stable");
+    });
+
+    it("labels non-yeti bot comments as bot, not maintainer", () => {
+      const comments = [{ id: 1, body: "coverage 80%", login: "codecov[bot]", updatedAt: "" }];
+      expect(buildThreadSection(comments, 99)).toContain("Comment by @codecov[bot] (bot):");
+    });
+
+    it("elides the plan comment itself", () => {
+      const comments = [
+        { id: 501, body: "<!-- yeti-automated -->## Implementation Plan\n\nthe plan", login: "yeti[bot]", updatedAt: "" },
+        { id: 502, body: "a reply", login: "bsherman", updatedAt: "" },
+      ];
+      const out = buildThreadSection(comments, 501);
+      expect(out).not.toContain("the plan");
+      expect(out).toContain("a reply");
+    });
+
+    it("says so when there are no other comments", () => {
+      expect(buildThreadSection([], 501)).toContain("No other comments");
+    });
+  });
+
+  describe("buildRoundInfo", () => {
+    it("states the round position", () => {
+      expect(buildRoundInfo(1, 3)).toBe("This is review round 1 of 3.");
+    });
+
+    it("adds the final-round instruction at max rounds", () => {
+      const out = buildRoundInfo(3, 3);
+      expect(out).toContain("round 3 of 3");
+      expect(out).toContain("final round");
+      expect(out).toContain("do not manufacture findings");
+    });
+  });
+
+  describe("buildReviewPrompt", () => {
+    it("renders issue, plan, thread, round info, and the contract", () => {
+      const out = stripPreamble(
+        buildReviewPrompt("pr", "acme/widget", issue, planBody, "THREAD-CONTENT", "This is review round 2 of 3."),
       );
-    }
+      expect(out).toContain("acme/widget#42");
+      expect(out).toContain("Add dark mode");
+      expect(out).toContain("Some issue description");
+      expect(out).toContain(planBody);
+      expect(out).toContain("THREAD-CONTENT");
+      expect(out).toContain("This is review round 2 of 3.");
+      // Contract essentials
+      expect(out).toContain("MAINTAINER comments are binding");
+      expect(out).toContain("Blocking");
+      expect(out).toContain("Advisory");
+      expect(out).toContain("VERDICT: APPROVED");
+      expect(out).toContain("VERDICT: NEEDS REVISION");
+      expect(out).toContain("repo-relative");
+    });
 
-    return lines.join("\n");
-  }
-
-  const issue = mockIssue({ number: 42, title: "Add dark mode support", body: "Some issue description" });
-  const planBody = "## Implementation Plan\n\nDo the thing step by step";
-
-  it("matches the pre-migration inline builder with REVIEW_LOOP disabled", () => {
-    const out = buildReviewPrompt("pr", "acme/widget", issue, planBody, false);
-    expect(stripPreamble(out).trimEnd()).toBe(expected("acme/widget", issue, planBody, false).trimEnd());
-  });
-
-  it("matches the pre-migration inline builder with REVIEW_LOOP enabled", () => {
-    const out = buildReviewPrompt("pr", "acme/widget", issue, planBody, true);
-    expect(stripPreamble(out).trimEnd()).toBe(expected("acme/widget", issue, planBody, true).trimEnd());
-  });
-
-  it("falls back to the no-description placeholder when issue body is empty", () => {
-    const emptyBodyIssue = mockIssue({ number: 7, title: "No body issue", body: "" });
-    const out = buildReviewPrompt("pr", "acme/widget", emptyBodyIssue, planBody, false);
-    expect(stripPreamble(out).trimEnd()).toBe(expected("acme/widget", emptyBodyIssue, planBody, false).trimEnd());
+    it("always includes the verdict instruction (no reviewLoop parameter)", () => {
+      const out = buildReviewPrompt("pr", "acme/widget", issue, planBody, "(No other comments on the issue.)", "This is review round 1 of 3.");
+      expect(out).toContain("VERDICT:");
+    });
   });
 });
