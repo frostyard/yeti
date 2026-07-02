@@ -62,13 +62,13 @@ export interface Repo {
   name: string;
   fullName: string;
   defaultBranch: string;
-  /** Autonomy tier controlling which policy variant jobs load. Defaults to "pr". */
-  autonomy?: Autonomy;
 }
 
-/** Resolve the autonomy tier for a repo: per-repo map > repo field > instance default. */
+/** Resolve the autonomy tier for a repo: per-repo map > instance default. Must stay
+ *  identical to fullNameAutonomy in capability.ts — both resolvers exist only because
+ *  one call site has a Repo object and the other only a fullName. */
 export function repoAutonomy(repo: Repo): Autonomy {
-  return AUTONOMY_MAP[repo.fullName] ?? repo.autonomy ?? DEFAULT_AUTONOMY;
+  return AUTONOMY_MAP[repo.fullName] ?? DEFAULT_AUTONOMY;
 }
 
 export interface ConfigFile {

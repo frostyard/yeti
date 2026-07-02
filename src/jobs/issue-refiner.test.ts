@@ -12,7 +12,7 @@ vi.mock("../config.js", () => ({
   ENABLED_JOBS: [],
   JOB_AI: {},
   WORK_DIR: "/tmp/yeti-refiner-test",
-  repoAutonomy: (r: { autonomy?: string } | undefined) => r?.autonomy ?? "pr",
+  repoAutonomy: () => "pr",
 }));
 
 vi.mock("../log.js", () => ({

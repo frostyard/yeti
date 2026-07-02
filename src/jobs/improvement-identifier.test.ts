@@ -1,10 +1,11 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { mockRepo } from "../test-helpers.js";
 
+const { __tier } = vi.hoisted(() => ({ __tier: {} as Record<string, string> }));
 vi.mock("../config.js", () => ({
   WORK_DIR: "/tmp/yeti-improve-test",
   JOB_AI: {},
-  repoAutonomy: (r: { autonomy?: string }) => r?.autonomy ?? "pr",
+  repoAutonomy: (r: { fullName: string }) => __tier[r.fullName] ?? "pr",
 }));
 
 vi.mock("../log.js", () => ({
@@ -92,6 +93,7 @@ describe("improvement-identifier", () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    for (const k in __tier) delete __tier[k];
     mockFs.existsSync.mockReturnValue(true);
     mockGh.listOpenIssues.mockResolvedValue([]);
     mockGh.listPRs.mockResolvedValue([]);
@@ -109,7 +111,8 @@ describe("improvement-identifier", () => {
   });
 
   it("skips repo when autonomy tier is below 'createPR' requirement", async () => {
-    const advisoryRepo = { ...mockRepo(), autonomy: "advisory" as const };
+    const advisoryRepo = mockRepo();
+    __tier[advisoryRepo.fullName] = "advisory";
 
     await run([advisoryRepo]);
 

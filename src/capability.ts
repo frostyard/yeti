@@ -28,7 +28,7 @@ export function fullNameAutonomy(fullName: string): Autonomy {
   return AUTONOMY_MAP[fullName] ?? DEFAULT_AUTONOMY;
 }
 
-/** Pre-flight capability check (has the Repo object; uses full repoAutonomy precedence). */
+/** Pre-flight capability check. Resolves the tier via repoAutonomy, which is identical to fullNameAutonomy (AUTONOMY_MAP ?? DEFAULT). */
 export function can(repo: Repo, action: Action): boolean {
   return TIER_RANK[repoAutonomy(repo)] >= TIER_RANK[ACTION_MIN_TIER[action]];
 }

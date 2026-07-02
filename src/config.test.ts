@@ -496,14 +496,15 @@ describe("config", () => {
 });
 
 describe("autonomy config", () => {
-  // Minimal repo factory for these tests
-  const repo = (fullName: string, autonomy?: string) => ({
+  // Minimal repo factory for these tests. Repo no longer carries an autonomy
+  // field — repoAutonomy resolves purely from AUTONOMY_MAP (keyed by fullName)
+  // and DEFAULT_AUTONOMY, identical to capability.ts's fullNameAutonomy.
+  const repo = (fullName: string): import("./config.js").Repo => ({
     owner: fullName.split("/")[0],
     name: fullName.split("/")[1],
     fullName,
     defaultBranch: "main",
-    ...(autonomy ? { autonomy } : {}),
-  }) as unknown as import("./config.js").Repo;
+  });
 
   it("defaults DEFAULT_AUTONOMY to 'pr' when unset", async () => {
     const mod = await import("./config.js");
@@ -515,7 +516,7 @@ describe("autonomy config", () => {
     expect(mod.DEFAULT_AUTONOMY).toBe("pr");
   });
 
-  it("repoAutonomy precedence: map > repo field > default; invalid map values coerce to pr", async () => {
+  it("repoAutonomy precedence: map > default; invalid map values coerce to pr", async () => {
     const mod = await import("./config.js");
 
     fs.mkdirSync(path.dirname(mod.CONFIG_PATH), { recursive: true });
@@ -530,13 +531,10 @@ describe("autonomy config", () => {
 
     expect(mod.DEFAULT_AUTONOMY).toBe("issues");
 
-    // Map wins over the repo's own field.
-    expect(mod.repoAutonomy(repo("acme/mapped", "advisory"))).toBe("automerge");
+    // Map wins over the default.
+    expect(mod.repoAutonomy(repo("acme/mapped"))).toBe("automerge");
 
-    // No map entry, but a repo field -> repo field wins over default.
-    expect(mod.repoAutonomy(repo("acme/withfield", "advisory"))).toBe("advisory");
-
-    // No map entry, no repo field -> falls back to the configured default.
+    // No map entry -> falls back to the configured default.
     expect(mod.repoAutonomy(repo("acme/other"))).toBe("issues");
 
     // Invalid map value is coerced to "pr" at load time, so it wins over the default.

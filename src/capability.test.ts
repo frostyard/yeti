@@ -1,16 +1,26 @@
 import { describe, it, expect } from "vitest";
 import { vi } from "vitest";
 
+const { __tier } = vi.hoisted(() => ({ __tier: {} as Record<string, string> }));
 vi.mock("./config.js", () => ({
-  // repoAutonomy honors an explicit repo.autonomy for the pre-flight `can` tests
-  repoAutonomy: (r: { autonomy?: string }) => r?.autonomy ?? "pr",
+  // repoAutonomy is keyed by fullName only, matching production's fullName-keyed
+  // resolution — no repo.autonomy field exists anymore.
+  repoAutonomy: (r: { fullName: string }) => __tier[r.fullName] ?? "pr",
   DEFAULT_AUTONOMY: "pr",
   AUTONOMY_MAP: { "acme/advisory-repo": "advisory", "acme/merge-repo": "automerge" },
 }));
 
 import { can, assertCapability, fullNameAutonomy, AutonomyError, type Action } from "./capability.js";
 
-const repo = (autonomy?: string) => ({ owner: "acme", name: "r", fullName: "acme/r", defaultBranch: "main", ...(autonomy ? { autonomy } : {}) }) as unknown as import("./config.js").Repo;
+const repo = (tier?: string): import("./config.js").Repo => {
+  const r = { owner: "acme", name: "r", fullName: "acme/r", defaultBranch: "main" };
+  if (tier) {
+    __tier[r.fullName] = tier;
+  } else {
+    delete __tier[r.fullName];
+  }
+  return r as import("./config.js").Repo;
+};
 
 describe("fullNameAutonomy", () => {
   it("uses AUTONOMY_MAP when present, else DEFAULT_AUTONOMY", () => {
