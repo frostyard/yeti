@@ -718,6 +718,37 @@ describe("issue-refiner", () => {
 
       expect(mockGh.removeLabel).toHaveBeenCalledWith(repo.fullName, issue.number, "Needs Refinement");
       expect(mockGh.addLabel).not.toHaveBeenCalledWith(repo.fullName, issue.number, "Needs Plan Review");
+      expect(mockGh.commentOnIssue).toHaveBeenCalledWith(
+        repo.fullName,
+        issue.number,
+        expect.stringContaining("Which behavior do you want?"),
+      );
+    });
+
+    it("posts both blocking questions and the response when the AI malformedly emits both", async () => {
+      const issue = setupKickedBackIssue([planComment, reviewComment]);
+      mockClaude.runAI.mockResolvedValue(
+        "### Clarifying Questions (blocking)\n1. Which behavior do you want?\n\n### Review Response\n- R1-B1: acknowledged",
+      );
+
+      await run([repo]);
+
+      // Questions are posted despite the malformed extra Review Response section
+      expect(mockGh.commentOnIssue).toHaveBeenCalledWith(
+        repo.fullName,
+        issue.number,
+        expect.stringContaining("Which behavior do you want?"),
+      );
+      // Response is still posted in its own comment
+      expect(mockGh.commentOnIssue).toHaveBeenCalledWith(
+        repo.fullName,
+        issue.number,
+        expect.stringContaining("### Review Response"),
+      );
+      // Plan is NOT edited — not actionable
+      expect(mockGh.editIssueComment).not.toHaveBeenCalled();
+      // Not re-armed for review
+      expect(mockGh.addLabel).not.toHaveBeenCalledWith(repo.fullName, issue.number, "Needs Plan Review");
     });
   });
 });

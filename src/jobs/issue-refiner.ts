@@ -308,14 +308,14 @@ async function processReviewRevision(
       await gh.editIssueComment(fullName, planComment.id, `${PLAN_HEADER}\n\n${scrubbedPlan}`);
       log.info(`[issue-refiner] Revised plan comment for ${fullName}#${issue.number}`);
       notify({ jobName: "issue-refiner", message: `Plan revised after review for ${fullName}#${issue.number}`, url: gh.issueUrl(fullName, issue.number) });
+    } else {
+      // Blocking clarifying questions: post them so the human sees them, even if the AI
+      // (violating the revise policy) also emitted a Review Response section alongside them.
+      await gh.commentOnIssue(fullName, issue.number, claude.scrubWorktreePaths(stripLearningsDeclaration(planBody), wtPath));
     }
     if (respMatch) {
       const scrubbedResp = claude.scrubWorktreePaths(stripLearningsDeclaration(respMatch[1].trim()), wtPath);
       await gh.commentOnIssue(fullName, issue.number, `### Review Response\n${scrubbedResp}`);
-    }
-    if (!actionable && !respMatch) {
-      // Blocking clarifying questions with no response section: post them so the human sees them.
-      await gh.commentOnIssue(fullName, issue.number, claude.scrubWorktreePaths(stripLearningsDeclaration(planOutput), wtPath));
     }
 
     await gh.removeLabel(fullName, issue.number, LABELS.needsRefinement);
