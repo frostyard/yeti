@@ -6,7 +6,7 @@ import os from "node:os";
 vi.mock("./log.js", () => ({ info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() }));
 
 import * as log from "./log.js";
-import { substitute, resolvePolicyPath, renderPolicy, findMissingVars, countPolicyFiles } from "./policy.js";
+import { substitute, resolvePolicyPath, renderPolicy, findMissingVars, countPolicyFiles, readPreamble } from "./policy.js";
 
 describe("substitute", () => {
   it("replaces ${VAR} placeholders with their values", () => {
@@ -138,6 +138,25 @@ describe("renderPolicy", () => {
   it("uses the fallback when no policy file exists", () => {
     const out = renderPolicy("missing", "pr", {}, { dirs: [dir], fallback: () => "FALLBACK" });
     expect(out).toBe("FALLBACK");
+  });
+
+  it("prepends the shared _preamble.md to every rendered prompt", () => {
+    fs.writeFileSync(path.join(dir, "_preamble.md"), "ENV NOTE for ${REPO}\n");
+    fs.writeFileSync(path.join(dir, "issue-worker.md"), "Fix #${NUM}");
+    const out = renderPolicy("issue-worker", "pr", { NUM: "7", REPO: "acme/widget" }, { dirs: [dir] });
+    expect(out).toBe("ENV NOTE for acme/widget\n\nFix #7");
+  });
+
+  it("prepends the preamble to fallback prompts too", () => {
+    fs.writeFileSync(path.join(dir, "_preamble.md"), "ENV NOTE");
+    const out = renderPolicy("missing", "pr", {}, { dirs: [dir], fallback: () => "FALLBACK" });
+    expect(out).toBe("ENV NOTE\n\nFALLBACK");
+  });
+
+  it("readPreamble returns the trimmed preamble or empty string", () => {
+    expect(readPreamble([dir])).toBe("");
+    fs.writeFileSync(path.join(dir, "_preamble.md"), "ENV NOTE\n\n");
+    expect(readPreamble([dir])).toBe("ENV NOTE");
   });
 
   it("throws when no policy file exists and no fallback is given", () => {

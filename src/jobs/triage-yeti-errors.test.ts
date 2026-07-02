@@ -1,3 +1,4 @@
+import { stripPreamble } from "../test-preamble.js";
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { mockRepo, mockIssue } from "../test-helpers.js";
 
@@ -551,7 +552,7 @@ describe("buildInvestigationPrompt (policy template)", () => {
     const details = parseYetiError(ERROR_BODY);
 
     const out = buildInvestigationPrompt("pr", issue, details, []);
-    expect(out.trimEnd()).toBe(expected(issue, details, []).trimEnd());
+    expect(stripPreamble(out).trimEnd()).toBe(expected(issue, details, []).trimEnd());
   });
 
   it("matches the pre-migration inline builder with one other issue present", () => {
@@ -560,7 +561,7 @@ describe("buildInvestigationPrompt (policy template)", () => {
     const other = mockIssue({ number: 5, title: "[yeti-error] other:fp", body: "Other error" });
 
     const out = buildInvestigationPrompt("pr", issue, details, [other]);
-    expect(out.trimEnd()).toBe(expected(issue, details, [other]).trimEnd());
+    expect(stripPreamble(out).trimEnd()).toBe(expected(issue, details, [other]).trimEnd());
   });
 
   it("matches the pre-migration inline builder with multiple other issues, truncating long bodies", () => {
@@ -571,7 +572,7 @@ describe("buildInvestigationPrompt (policy template)", () => {
     const other2 = mockIssue({ number: 6, title: "[yeti-error] third:fp", body: "short body" });
 
     const out = buildInvestigationPrompt("pr", issue, details, [other1, other2]);
-    expect(out.trimEnd()).toBe(expected(issue, details, [other1, other2]).trimEnd());
+    expect(stripPreamble(out).trimEnd()).toBe(expected(issue, details, [other1, other2]).trimEnd());
   });
 
   it("matches the pre-migration inline builder when the fingerprint yields no file hint", () => {
@@ -584,6 +585,6 @@ describe("buildInvestigationPrompt (policy template)", () => {
     };
 
     const out = buildInvestigationPrompt("pr", issue, details, []);
-    expect(out.trimEnd()).toBe(expected(issue, details, []).trimEnd());
+    expect(stripPreamble(out).trimEnd()).toBe(expected(issue, details, []).trimEnd());
   });
 });

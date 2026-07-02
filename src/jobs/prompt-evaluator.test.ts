@@ -1,3 +1,4 @@
+import { stripPreamble } from "../test-preamble.js";
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { mockRepo } from "../test-helpers.js";
 
@@ -451,7 +452,7 @@ describe("buildTestInputPrompt (policy template)", () => {
     const promptSource = 'function buildNewPlanPrompt() { return "prompt text"; }';
     const purpose = "Produce an initial implementation plan from a GitHub issue";
     const out = buildTestInputPrompt("pr", promptSource, purpose);
-    expect(out.trimEnd()).toBe(expected(promptSource, purpose).trimEnd());
+    expect(stripPreamble(out).trimEnd()).toBe(expected(promptSource, purpose).trimEnd());
   });
 });
 
@@ -492,7 +493,7 @@ describe("buildVariantPrompt (policy template)", () => {
     const promptSource = 'function buildNewPlanPrompt() { return "prompt text"; }';
     const purpose = "Produce an initial implementation plan from a GitHub issue";
     const out = buildVariantPrompt("pr", promptSource, purpose);
-    expect(out.trimEnd()).toBe(expected(promptSource, purpose).trimEnd());
+    expect(stripPreamble(out).trimEnd()).toBe(expected(promptSource, purpose).trimEnd());
   });
 });
 
@@ -538,6 +539,6 @@ describe("buildJudgePrompt (policy template)", () => {
     const currentOutput = "Current prompt output 1";
     const variantOutput = "Variant prompt output 1";
     const out = buildJudgePrompt("pr", testCase, currentOutput, variantOutput);
-    expect(out.trimEnd()).toBe(expected(testCase, currentOutput, variantOutput).trimEnd());
+    expect(stripPreamble(out).trimEnd()).toBe(expected(testCase, currentOutput, variantOutput).trimEnd());
   });
 });

@@ -1,3 +1,4 @@
+import { stripPreamble } from "../test-preamble.js";
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { mockRepo, mockPR } from "../test-helpers.js";
 
@@ -605,16 +606,16 @@ describe("buildDocPrompt (policy template)", () => {
 
   it("matches the pre-migration inline builder with no plans (planCount = 0)", () => {
     const out = buildDocPrompt("pr", "acme/widget", 0);
-    expect(out.trimEnd()).toBe(expected("acme/widget", 0).trimEnd());
+    expect(stripPreamble(out).trimEnd()).toBe(expected("acme/widget", 0).trimEnd());
   });
 
   it("matches the pre-migration inline builder with plans (planCount > 0)", () => {
     const out = buildDocPrompt("pr", "acme/widget", 3);
-    expect(out.trimEnd()).toBe(expected("acme/widget", 3).trimEnd());
+    expect(stripPreamble(out).trimEnd()).toBe(expected("acme/widget", 3).trimEnd());
   });
 
   it("defaults planCount to 0 when omitted", () => {
     const out = buildDocPrompt("pr", "acme/widget");
-    expect(out.trimEnd()).toBe(expected("acme/widget", 0).trimEnd());
+    expect(stripPreamble(out).trimEnd()).toBe(expected("acme/widget", 0).trimEnd());
   });
 });
