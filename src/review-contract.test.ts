@@ -57,6 +57,11 @@ describe("parseVerdict", () => {
     expect(parseVerdict("Problems.\nverdict: needs revision")).toBe("needs-revision");
   });
 
+  it("parses verdicts with trailing terminal punctuation", () => {
+    expect(parseVerdict("All good.\nVERDICT: APPROVED.")).toBe("approved");
+    expect(parseVerdict("Problems remain.\nVERDICT: NEEDS REVISION?")).toBe("needs-revision");
+  });
+
   it("uses the last verdict line", () => {
     expect(parseVerdict("VERDICT: APPROVED\n...\nVERDICT: NEEDS REVISION")).toBe("needs-revision");
   });
@@ -82,6 +87,18 @@ describe("countBlockingFindings", () => {
 
   it("returns 0 when there are no blocking findings", () => {
     expect(countBlockingFindings("### Advisory\n- [R1-A1] nit")).toBe(0);
+  });
+
+  it("ignores bracketed blocking finding IDs outside the Blocking section", () => {
+    const review = [
+      "### Prior findings",
+      "- [R1-B1] resolved by the updated plan",
+      "### Blocking",
+      "- [R2-B1] current issue",
+      "### Advisory",
+      "- [R2-B2] incorrectly bracketed reference, but not in Blocking",
+    ].join("\n");
+    expect(countBlockingFindings(review)).toBe(1);
   });
 
   it("counts segment-prefixed blocking finding IDs", () => {

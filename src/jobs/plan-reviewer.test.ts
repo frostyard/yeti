@@ -43,8 +43,6 @@ vi.mock("../notify.js", () => ({
 const { mockGh, mockClaude, mockDb } = vi.hoisted(() => ({
   mockGh: {
     listOpenIssues: vi.fn(),
-    getSelfLogin: vi.fn(),
-    getCommentReactions: vi.fn(),
     addReaction: vi.fn(),
     getIssueComments: vi.fn(),
     addLabel: vi.fn(),
@@ -101,8 +99,6 @@ describe("plan-reviewer", () => {
     mockClaude.runAI.mockResolvedValue("The plan looks solid but misses error handling for edge case X.");
     mockClaude.removeWorktree.mockResolvedValue(undefined);
     mockGh.listOpenIssues.mockResolvedValue([]);
-    mockGh.getSelfLogin.mockResolvedValue("yeti-bot[bot]");
-    mockGh.getCommentReactions.mockResolvedValue([]);
     mockGh.addReaction.mockResolvedValue(undefined);
     mockGh.addLabel.mockResolvedValue(undefined);
     mockGh.removeLabel.mockResolvedValue(undefined);
@@ -118,7 +114,6 @@ describe("plan-reviewer", () => {
     });
     mockGh.listOpenIssues.mockResolvedValueOnce([issue]);
     mockGh.getIssueComments.mockResolvedValue([planComment]);
-    mockGh.getCommentReactions.mockResolvedValue([]);
 
     await run([repo]);
 
@@ -250,7 +245,6 @@ describe("plan-reviewer", () => {
     });
     mockGh.listOpenIssues.mockResolvedValueOnce([issue]);
     mockGh.getIssueComments.mockResolvedValue([planComment]);
-    mockGh.getCommentReactions.mockResolvedValue([]);
 
     await run([repo]);
 
@@ -279,7 +273,6 @@ describe("plan-reviewer", () => {
     });
     mockGh.listOpenIssues.mockResolvedValueOnce([issue]);
     mockGh.getIssueComments.mockResolvedValue([planComment]);
-    mockGh.getCommentReactions.mockResolvedValue([]);
 
     await run([repo]);
 
@@ -299,7 +292,6 @@ describe("plan-reviewer", () => {
     });
     mockGh.listOpenIssues.mockResolvedValueOnce([issue]);
     mockGh.getIssueComments.mockResolvedValue([planComment]);
-    mockGh.getCommentReactions.mockResolvedValue([]);
     mockClaude.runAI.mockResolvedValue("");
 
     await run([repo]);
@@ -320,7 +312,6 @@ describe("plan-reviewer", () => {
     });
     mockGh.listOpenIssues.mockResolvedValueOnce([issue]);
     mockGh.getIssueComments.mockResolvedValue([planComment]);
-    mockGh.getCommentReactions.mockResolvedValue([]);
     mockClaude.runAI.mockRejectedValueOnce(
       new Error("Codex exited with code 2: error: unexpected argument '--approval-mode' found"),
     );
@@ -365,7 +356,6 @@ describe("plan-reviewer", () => {
         });
       }
       mockGh.getIssueComments.mockResolvedValue(comments);
-      mockGh.getCommentReactions.mockResolvedValue([]);
       mockClaude.runAI.mockResolvedValue(reviewOutput);
 
       return issue;
