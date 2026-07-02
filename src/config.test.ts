@@ -494,3 +494,50 @@ describe("config", () => {
     expect(listener).not.toHaveBeenCalled();
   });
 });
+
+describe("autonomy config", () => {
+  // Minimal repo factory for these tests. Repo no longer carries an autonomy
+  // field — repoAutonomy resolves purely from AUTONOMY_MAP (keyed by fullName)
+  // and DEFAULT_AUTONOMY, identical to capability.ts's fullNameAutonomy.
+  const repo = (fullName: string): import("./config.js").Repo => ({
+    owner: fullName.split("/")[0],
+    name: fullName.split("/")[1],
+    fullName,
+    defaultBranch: "main",
+  });
+
+  it("defaults DEFAULT_AUTONOMY to 'pr' when unset", async () => {
+    const mod = await import("./config.js");
+
+    fs.mkdirSync(path.dirname(mod.CONFIG_PATH), { recursive: true });
+    fs.writeFileSync(mod.CONFIG_PATH, JSON.stringify({}));
+    mod.reloadConfig();
+
+    expect(mod.DEFAULT_AUTONOMY).toBe("pr");
+  });
+
+  it("repoAutonomy precedence: map > default; invalid map values coerce to pr", async () => {
+    const mod = await import("./config.js");
+
+    fs.mkdirSync(path.dirname(mod.CONFIG_PATH), { recursive: true });
+    fs.writeFileSync(
+      mod.CONFIG_PATH,
+      JSON.stringify({
+        defaultAutonomy: "issues",
+        autonomy: { "acme/mapped": "automerge", "acme/bad": "nonsense" },
+      }),
+    );
+    mod.reloadConfig();
+
+    expect(mod.DEFAULT_AUTONOMY).toBe("issues");
+
+    // Map wins over the default.
+    expect(mod.repoAutonomy(repo("acme/mapped"))).toBe("automerge");
+
+    // No map entry -> falls back to the configured default.
+    expect(mod.repoAutonomy(repo("acme/other"))).toBe("issues");
+
+    // Invalid map value is coerced to "pr" at load time, so it wins over the default.
+    expect(mod.repoAutonomy(repo("acme/bad"))).toBe("pr");
+  });
+});

@@ -1,4 +1,4 @@
-import { LABELS, JOB_AI, REVIEW_LOOP, MAX_PLAN_ROUNDS, type Repo } from "../config.js";
+import { LABELS, JOB_AI, REVIEW_LOOP, MAX_PLAN_ROUNDS, repoAutonomy, type Repo } from "../config.js";
 import * as gh from "../github.js";
 import { isRateLimited } from "../github.js";
 import * as claude from "../claude.js";
@@ -7,48 +7,28 @@ import * as db from "../db.js";
 import { reportError } from "../error-reporter.js";
 import { notify } from "../notify.js";
 import { PLAN_HEADER } from "../plan-parser.js";
+import { renderPolicy, type Autonomy } from "../policy.js";
 const REVIEW_HEADER = "## Plan Review";
 
-function buildReviewPrompt(
+export function buildReviewPrompt(
+  autonomy: Autonomy,
   fullName: string,
   issue: gh.Issue,
   planBody: string,
   reviewLoop: boolean,
 ): string {
-  const lines = [
-    `You are reviewing an implementation plan for ${fullName}#${issue.number}.`,
-    ``,
-    `**Issue: ${issue.title}**`,
-    ``,
-    issue.body || "(No description provided)",
-    ``,
-    planBody,
-    ``,
-    `Your job is to find problems with this plan:`,
-    `- Missing edge cases or error handling`,
-    `- Files that should be modified but aren't mentioned`,
-    `- Incorrect assumptions about the codebase`,
-    `- Risks that aren't acknowledged`,
-    `- Over-engineering or unnecessary complexity`,
-    `- Missing test coverage`,
-    ``,
-    `If the plan is solid, say so briefly. If it has issues, list them clearly.`,
-    `Read yeti/OVERVIEW.md if it exists for codebase context.`,
-    `Do NOT make code changes. Only produce your review as text output.`,
-  ];
+  const verdictBlock = reviewLoop
+    ? `\n\nEnd your review with exactly one of these lines on its own line:\nVERDICT: APPROVED\nVERDICT: NEEDS REVISION\n\nDo not include both. Use APPROVED only if the plan is solid enough to implement as-is.`
+    : "";
 
-  if (reviewLoop) {
-    lines.push(
-      ``,
-      `End your review with exactly one of these lines on its own line:`,
-      `VERDICT: APPROVED`,
-      `VERDICT: NEEDS REVISION`,
-      ``,
-      `Do not include both. Use APPROVED only if the plan is solid enough to implement as-is.`,
-    );
-  }
-
-  return lines.join("\n");
+  return renderPolicy("plan-reviewer", autonomy, {
+    FULL_NAME: fullName,
+    ISSUE_NUMBER: String(issue.number),
+    ISSUE_TITLE: issue.title,
+    ISSUE_BODY: issue.body || "(No description provided)",
+    PLAN_BODY: planBody,
+    VERDICT_BLOCK: verdictBlock,
+  });
 }
 
 function parseVerdict(output: string): "approved" | "needs-revision" {
@@ -95,7 +75,7 @@ async function processIssue(repo: Repo, issue: gh.Issue, planComment: gh.IssueCo
     db.updateTaskWorktree(taskId, wtPath, branchName);
 
     const aiOptions = JOB_AI["plan-reviewer"];
-    const prompt = buildReviewPrompt(fullName, issue, planComment.body, REVIEW_LOOP);
+    const prompt = buildReviewPrompt(repoAutonomy(repo), fullName, issue, planComment.body, REVIEW_LOOP);
 
     const reviewOutput = await claude.resolveEnqueue(aiOptions)(
       () => claude.runAI(prompt, wtPath!, aiOptions),

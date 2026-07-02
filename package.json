@@ -4,8 +4,8 @@
   "type": "module",
   "private": true,
   "scripts": {
-    "build": "tsc && vite build --config web/vite.config.ts",
-    "build:server": "tsc",
+    "build": "tsc && node scripts/copy-policies.mjs && vite build --config web/vite.config.ts",
+    "build:server": "tsc && node scripts/copy-policies.mjs",
     "build:web": "vite build --config web/vite.config.ts",
     "typecheck": "tsc --noEmit",
     "typecheck:web": "tsc --noEmit -p web/tsconfig.json",

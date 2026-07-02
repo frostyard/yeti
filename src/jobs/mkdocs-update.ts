@@ -1,6 +1,8 @@
 import fs from "node:fs";
 import path from "node:path";
-import { JOB_AI, type Repo } from "../config.js";
+import { JOB_AI, repoAutonomy, type Repo } from "../config.js";
+import { renderPolicy, type Autonomy } from "../policy.js";
+import { can } from "../capability.js";
 import * as gh from "../github.js";
 import * as claude from "../claude.js";
 import * as log from "../log.js";
@@ -8,36 +10,18 @@ import * as db from "../db.js";
 import { reportError } from "../error-reporter.js";
 import { notify } from "../notify.js";
 
-function buildMkdocsPrompt(fullName: string): string {
-  return [
-    `You are updating MkDocs documentation for the repository ${fullName}.`,
-    ``,
-    `The source code is the single source of truth. Your goal is to update the`,
-    `MkDocs documentation to accurately reflect the current state of the code.`,
-    `When the documentation conflicts with the source code, the source code is`,
-    `always right. Do not invent features or behaviors — only document what`,
-    `exists in the code.`,
-    ``,
-    `Steps:`,
-    `1. Read \`yeti/OVERVIEW.md\` if it exists, for architecture context.`,
-    `2. Read \`mkdocs.yml\` (or \`mkdocs.yaml\`) to understand the docs structure`,
-    `   and identify the docs directory (default: \`docs/\`).`,
-    `3. Scan recent git history (\`git log --oneline -50\`) to identify source`,
-    `   code changes since the documentation was last updated.`,
-    `4. Read the source code files that changed to understand what actually`,
-    `   changed.`,
-    `5. Update only the Markdown files under the MkDocs docs directory (and`,
-    `   \`mkdocs.yml\` itself if the nav structure needs it). Do NOT modify`,
-    `   source code, \`yeti/\` docs, or binary/media files.`,
-    `6. If no documentation updates are needed (no meaningful source changes),`,
-    `   make no commits.`,
-    `7. Commit changes with message: "docs: update mkdocs content [mkdocs-update]"`,
-    ``,
-    `Do NOT make any source code changes. Only update documentation.`,
-  ].join("\n");
+export function buildMkdocsPrompt(autonomy: Autonomy, fullName: string): string {
+  return renderPolicy("mkdocs-update", autonomy, {
+    REPO: fullName,
+  });
 }
 
 async function processRepo(repo: Repo): Promise<void> {
+  if (!can(repo, "createPR")) {
+    log.info(`[mkdocs-update] skip ${repo.fullName} — tier below 'createPR' requirement`);
+    return;
+  }
+
   const fullName = repo.fullName;
 
   // Step 1: Check for existing open mkdocs-update PR
@@ -68,14 +52,14 @@ async function processRepo(repo: Repo): Promise<void> {
 
     // Step 3: Run AI to update docs
     log.info(`[mkdocs-update] Updating mkdocs content for ${fullName}`);
-    const prompt = buildMkdocsPrompt(fullName);
+    const prompt = buildMkdocsPrompt(repoAutonomy(repo), fullName);
     const aiOptions = JOB_AI["mkdocs-update"];
     await claude.resolveEnqueue(aiOptions)(() => claude.runAI(prompt, wtPath!, aiOptions));
 
     // Step 4: Push and create PR
     if (await claude.hasNewCommits(wtPath, repo.defaultBranch) && await claude.hasTreeDiff(wtPath, repo.defaultBranch)) {
       const description = await claude.generateDocsPRDescription(wtPath, repo.defaultBranch, aiOptions);
-      await claude.pushBranch(wtPath, branchName);
+      await claude.pushBranch(wtPath, branchName, fullName);
       const prNumber = await gh.createPR(
         fullName,
         branchName,

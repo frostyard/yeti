@@ -100,7 +100,7 @@ See [Jobs](jobs.md) for detailed behavior of each.
 
 | Job | Trigger | Interval | Summary |
 |-----|---------|----------|---------|
-| `issue-refiner` | Issues labelled `Needs Refinement` | 5 min | Posts implementation plans using a four-step prompt (evaluate plannability → draft plan → two rounds of self-critique against unverified assumptions, scope discipline, ordering correctness, and risk honesty → produce final revised plan); asks clarifying questions for underspecified issues using blocking/non-blocking classification; gates review on plan actionability (blocking questions skip review and wait for human input); enforces anti-scope-creep and narrowest-interpretation guards; refines plans via structured prompt (grounded file reads, per-comment processing, scope guard, conflict flagging, post-revision verification); responds to follow-up questions on issues with open PRs |
+| `issue-refiner` | Issues labelled `Needs Refinement` | 5 min | Posts implementation plans using a four-step prompt (evaluate plannability with phantom reference detection → draft plan with anti-gold-plating checklist → two rounds of self-critique against five dimensions: unverified assumptions, scope discipline, ordering correctness, risk honesty, and completeness vs. gold-plating → produce final revised plan); asks clarifying questions for underspecified issues using blocking/non-blocking classification; gates review on plan actionability (blocking questions skip review and wait for human input); enforces anti-scope-creep and narrowest-interpretation guards; refines plans via structured prompt (grounded file reads, per-comment processing, scope guard, conflict flagging, post-revision verification); responds to follow-up questions on issues with open PRs |
 | `plan-reviewer` | Issues labelled `Needs Plan Review` | 10 min | Adversarial review of implementation plans using configurable AI backend |
 | `issue-worker` | Label `Refined` | 5 min | Implements the issue, creates a PR |
 | `ci-fixer` | Any open PR with failing checks | 10 min | Resolves merge conflicts, fixes CI failures |
@@ -338,6 +338,18 @@ Individual jobs can be paused and resumed via the dashboard (`POST /pause/:job`)
 or pre-configured via `pausedJobs` in `config.json`. Paused jobs skip their
 scheduled ticks but can still be triggered manually.
 
+### Git Identity for Direct Commits
+
+All jobs normally commit via `runAI()`, which delegates to the Claude/Copilot/Codex
+CLI — these handle git identity internally. The one exception is
+`ensureClaudeMdDocBlock()` in doc-maintainer, which commits directly via
+`claude.git()`. Because the `yeti` system user has no global git config, direct
+`git commit` calls must pass inline identity flags:
+`git -c user.email=yeti@users.noreply.github.com -c user.name=Yeti commit ...`.
+The `GIT_COMMIT_CLAUDEMD` constant in `doc-maintainer.ts` centralizes this. Any
+future code path that commits directly (bypassing AI backends) needs the same
+treatment.
+
 ### Commit Tag
 
 Doc-maintainer commits include `[doc-maintainer]` in the message. This is used
@@ -447,6 +459,13 @@ not manage their credentials.
 
 The Discord integration requires creating a Discord application, bot token, and private channel. See
 [Discord Setup](discord-setup.md) for the full walkthrough.
+
+## Vision
+
+See [Future Yeti — Vision](VISION.md) for the long-term architectural
+direction: orchestrator-based multi-agent execution, mechanical plan checking,
+wave-parallel task execution, and persistent per-repo state. Derived from
+research into GSD, CCPM, Symphony, PAUL, and GAAI harness patterns.
 
 ## Technology Stack
 

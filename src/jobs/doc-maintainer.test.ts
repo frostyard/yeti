@@ -1,9 +1,11 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { mockRepo, mockPR } from "../test-helpers.js";
 
+const { __tier } = vi.hoisted(() => ({ __tier: {} as Record<string, string> }));
 vi.mock("../config.js", () => ({
   WORK_DIR: "/home/testuser/.yeti",
   JOB_AI: {},
+  repoAutonomy: (r: { fullName: string }) => __tier[r.fullName] ?? "pr",
 }));
 
 vi.mock("../log.js", () => ({
@@ -64,13 +66,32 @@ const { mockFs, mockGh, mockClaude, mockDb, mockPlanParser } = vi.hoisted(() => 
   },
 }));
 
-vi.mock("node:fs", () => ({ default: mockFs }));
+// The job's own fs usage (CLAUDE.md, .plans/) is fully mocked via mockFs.
+// renderPolicy (imported transitively via ../policy.js) also reads through
+// node:fs to load src/policies/doc-maintainer*.md from real disk, so
+// existsSync/readFileSync delegate to the real fs for any "policies" path —
+// only the job's own paths (CLAUDE.md, .plans/) go through the mock.
+vi.mock("node:fs", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("node:fs")>();
+  const isPolicyPath = (p: unknown) => typeof p === "string" && p.includes("policies");
+  return {
+    default: {
+      ...actual,
+      existsSync: (p: string) => (isPolicyPath(p) ? actual.existsSync(p) : mockFs.existsSync(p)),
+      readFileSync: (p: string, enc?: BufferEncoding) =>
+        isPolicyPath(p) ? actual.readFileSync(p, enc) : mockFs.readFileSync(p, enc),
+      mkdirSync: mockFs.mkdirSync,
+      writeFileSync: mockFs.writeFileSync,
+      rmSync: mockFs.rmSync,
+    },
+  };
+});
 vi.mock("../github.js", () => mockGh);
 vi.mock("../claude.js", () => mockClaude);
 vi.mock("../db.js", () => mockDb);
 vi.mock("../plan-parser.js", () => mockPlanParser);
 
-import { run, ensureClaudeMdDocBlock } from "./doc-maintainer.js";
+import { run, ensureClaudeMdDocBlock, buildDocPrompt } from "./doc-maintainer.js";
 import { reportError } from "../error-reporter.js";
 
 describe("doc-maintainer", () => {
@@ -78,6 +99,7 @@ describe("doc-maintainer", () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    for (const k in __tier) delete __tier[k];
     mockFs.existsSync.mockReturnValue(true);
     // Default: CLAUDE.md already has both directives so ensureClaudeMdDocBlock is a no-op
     mockFs.readFileSync.mockReturnValue(
@@ -209,6 +231,18 @@ describe("doc-maintainer", () => {
       expect.any(String),
       expect.any(String),
     );
+  });
+
+  describe("autonomy pre-flight gate", () => {
+    it("skips before worktree/AI when repo tier is below 'createPR' (advisory)", async () => {
+      const advisoryRepo = mockRepo();
+      __tier[advisoryRepo.fullName] = "advisory";
+
+      await run([advisoryRepo]);
+
+      expect(mockClaude.createWorktree).not.toHaveBeenCalled();
+      expect(mockClaude.runAI).not.toHaveBeenCalled();
+    });
   });
 
   describe("plan harvesting", () => {
@@ -515,5 +549,72 @@ describe("doc-maintainer", () => {
       // Should continue to AI run since HEAD differs from last doc SHA
       expect(mockClaude.runAI).toHaveBeenCalled();
     });
+  });
+});
+
+describe("buildDocPrompt (policy template)", () => {
+  // Reconstructs the pre-migration inline prompt independently, proving the
+  // policy-template render is behavior-preserving.
+  function expected(fullName: string, planCount = 0): string {
+    const lines = [
+      `You are maintaining documentation for the repository ${fullName}.`,
+      ``,
+      `Your goal is to create or update documentation under \`yeti/\` that is`,
+      `optimized for providing context when planning and implementing new features`,
+      `and bug fixes.`,
+      ``,
+      `Steps:`,
+      `1. Run \`mkdir -p yeti\` to ensure the directory exists.`,
+      `2. Read the codebase to understand its current structure, purpose, and key`,
+      `   patterns.`,
+      `3. If \`yeti/OVERVIEW.md\` exists, read it and all docs it links to, then`,
+      `   update them to reflect the current state of the code. Preserve accurate`,
+      `   content and update anything outdated. If it doesn't exist, create it`,
+      `   from scratch.`,
+      `4. \`yeti/OVERVIEW.md\` is the main entry point and should include:`,
+      `   - **Purpose**: What this repo does and its role (2-3 sentences)`,
+      `   - **Architecture**: Key directories, modules, and how they fit together`,
+      `   - **Key Patterns**: Important conventions, data flow, and design decisions`,
+      `   - **Configuration**: Key config values and environment variables`,
+      `5. For complex subsystems that need detailed coverage, create dedicated`,
+      `   documents (e.g., \`yeti/database-schema.md\`, \`yeti/api-design.md\`) and`,
+      `   link to them from OVERVIEW.md. Keep each focused on one subject.`,
+      `6. Keep OVERVIEW.md concise (200-500 lines). Dedicated docs can be longer`,
+      `   as needed for thorough coverage.`,
+      `7. Commit with message: "docs: update documentation [doc-maintainer]"`,
+      ``,
+      `Do NOT make any code changes. Only update documentation.`,
+    ];
+
+    if (planCount > 0) {
+      lines.push(
+        ``,
+        `A \`.plans/\` directory has been created in the repo root containing implementation`,
+        `plans from ${planCount} recently-closed issues. Each file is named by issue number`,
+        `(e.g., \`.plans/42.md\`).`,
+        ``,
+        `Read these plans and extract any valuable architectural context, design decisions,`,
+        `conventions, or patterns into the existing documentation. Only add information that`,
+        `is actually reflected in the current codebase. If a plan contains nothing new for`,
+        `the docs, skip it. Do NOT commit the \`.plans/\` directory — it is temporary.`,
+      );
+    }
+
+    return lines.join("\n");
+  }
+
+  it("matches the pre-migration inline builder with no plans (planCount = 0)", () => {
+    const out = buildDocPrompt("pr", "acme/widget", 0);
+    expect(out.trimEnd()).toBe(expected("acme/widget", 0).trimEnd());
+  });
+
+  it("matches the pre-migration inline builder with plans (planCount > 0)", () => {
+    const out = buildDocPrompt("pr", "acme/widget", 3);
+    expect(out.trimEnd()).toBe(expected("acme/widget", 3).trimEnd());
+  });
+
+  it("defaults planCount to 0 when omitted", () => {
+    const out = buildDocPrompt("pr", "acme/widget");
+    expect(out.trimEnd()).toBe(expected("acme/widget", 0).trimEnd());
   });
 });

@@ -1,6 +1,24 @@
 import path from "node:path";
 import os from "node:os";
 import fs from "node:fs";
+import type { Autonomy } from "./policy.js";
+
+const AUTONOMY_TIERS = ["advisory", "issues", "pr", "automerge"] as const satisfies readonly Autonomy[];
+// Compile-time guard: if a tier is added to the Autonomy union but not to
+// AUTONOMY_TIERS above, this assignment fails to type-check.
+type _TierListComplete = Autonomy extends (typeof AUTONOMY_TIERS)[number] ? true : ["AUTONOMY_TIERS missing a tier in the Autonomy union"];
+const _tierListComplete: _TierListComplete = true;
+void _tierListComplete;
+
+function coerceAutonomy(value: unknown, context: string): Autonomy {
+  if (typeof value === "string" && (AUTONOMY_TIERS as readonly string[]).includes(value)) {
+    return value as Autonomy;
+  }
+  if (value !== undefined) {
+    console.warn(`[WARN] invalid autonomy "${String(value)}" for ${context} — using "pr"`);
+  }
+  return "pr";
+}
 
 export const WORK_DIR = path.join(os.homedir(), ".yeti");
 
@@ -44,6 +62,13 @@ export interface Repo {
   name: string;
   fullName: string;
   defaultBranch: string;
+}
+
+/** Resolve the autonomy tier for a repo: per-repo map > instance default. Must stay
+ *  identical to fullNameAutonomy in capability.ts — both resolvers exist only because
+ *  one call site has a Repo object and the other only a fullName. */
+export function repoAutonomy(repo: Repo): Autonomy {
+  return AUTONOMY_MAP[repo.fullName] ?? DEFAULT_AUTONOMY;
 }
 
 export interface ConfigFile {
@@ -97,6 +122,8 @@ export interface ConfigFile {
   githubAppClientSecret?: string;
   externalUrl?: string;
   webhookSecret?: string;
+  defaultAutonomy?: Autonomy;
+  autonomy?: Record<string, Autonomy>;
 }
 
 function loadConfig() {
@@ -230,6 +257,12 @@ function loadConfig() {
   const jobAi = file.jobAi ?? {};
   const queueScanIntervalMs = file.queueScanIntervalMs ?? 5 * 60 * 1000;
 
+  const defaultAutonomy = coerceAutonomy(file.defaultAutonomy ?? "pr", "defaultAutonomy");
+  const autonomy: Record<string, Autonomy> = {};
+  for (const [repo, tier] of Object.entries(file.autonomy ?? {})) {
+    autonomy[repo] = coerceAutonomy(tier, `autonomy["${repo}"]`);
+  }
+
   const githubAppId = process.env["YETI_GITHUB_APP_ID"] ?? file.githubAppId ?? "";
   const githubAppInstallationId = process.env["YETI_GITHUB_APP_INSTALLATION_ID"] ?? file.githubAppInstallationId ?? "";
   const githubAppPrivateKeyPath = process.env["YETI_GITHUB_APP_PRIVATE_KEY_PATH"] ?? file.githubAppPrivateKeyPath ?? "";
@@ -246,7 +279,7 @@ function loadConfig() {
 
   const webhookSecret = process.env["YETI_WEBHOOK_SECRET"] ?? file.webhookSecret ?? "";
 
-  return { githubOwners, selfRepo, port, intervals, schedules, logLevel, logRetentionDays, logRetentionPerJob, discordBotToken, discordChannelId, discordAllowedUsers, authToken, maxClaudeWorkers, claudeTimeoutMs, maxCopilotWorkers, copilotTimeoutMs, maxCodexWorkers, codexTimeoutMs, pausedJobs, skippedItems, prioritizedItems, allowedRepos, includeForks, enabledJobs, reviewLoop, maxPlanRounds, jobAi, queueScanIntervalMs, githubAppId, githubAppInstallationId, githubAppPrivateKeyPath, githubAppClientId, githubAppClientSecret, externalUrl, webhookSecret };
+  return { githubOwners, selfRepo, port, intervals, schedules, logLevel, logRetentionDays, logRetentionPerJob, discordBotToken, discordChannelId, discordAllowedUsers, authToken, maxClaudeWorkers, claudeTimeoutMs, maxCopilotWorkers, copilotTimeoutMs, maxCodexWorkers, codexTimeoutMs, pausedJobs, skippedItems, prioritizedItems, allowedRepos, includeForks, enabledJobs, reviewLoop, maxPlanRounds, jobAi, queueScanIntervalMs, githubAppId, githubAppInstallationId, githubAppPrivateKeyPath, githubAppClientId, githubAppClientSecret, externalUrl, webhookSecret, defaultAutonomy, autonomy };
 }
 
 const config = loadConfig();
@@ -275,6 +308,8 @@ export let COPILOT_TIMEOUT_MS = config.copilotTimeoutMs;
 export let MAX_CODEX_WORKERS = config.maxCodexWorkers;
 export let CODEX_TIMEOUT_MS = config.codexTimeoutMs;
 export let JOB_AI: Readonly<Record<string, { backend?: "claude" | "copilot" | "codex"; model?: string }>> = config.jobAi;
+export let DEFAULT_AUTONOMY: Autonomy = config.defaultAutonomy;
+export let AUTONOMY_MAP: Readonly<Record<string, Autonomy>> = config.autonomy;
 export let QUEUE_SCAN_INTERVAL_MS = config.queueScanIntervalMs;
 // Immutable — requires restart (bot connection)
 export const DISCORD_BOT_TOKEN = config.discordBotToken;
@@ -343,6 +378,8 @@ export function reloadConfig(): void {
   CODEX_TIMEOUT_MS = fresh.codexTimeoutMs;
   JOB_AI = fresh.jobAi;
   QUEUE_SCAN_INTERVAL_MS = fresh.queueScanIntervalMs;
+  DEFAULT_AUTONOMY = fresh.defaultAutonomy;
+  AUTONOMY_MAP = fresh.autonomy;
   DISCORD_ALLOWED_USERS = fresh.discordAllowedUsers;
   notifyListeners();
 }

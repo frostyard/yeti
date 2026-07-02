@@ -1,9 +1,11 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { mockRepo, mockPR } from "../test-helpers.js";
 
+const { __tier } = vi.hoisted(() => ({ __tier: {} as Record<string, string> }));
 vi.mock("../config.js", () => ({
   WORK_DIR: "/home/testuser/.yeti",
   JOB_AI: {},
+  repoAutonomy: (r: { fullName: string }) => __tier[r.fullName] ?? "pr",
 }));
 
 vi.mock("../log.js", () => ({
@@ -53,12 +55,26 @@ const { mockFs, mockGh, mockClaude, mockDb } = vi.hoisted(() => ({
   },
 }));
 
-vi.mock("node:fs", () => ({ default: mockFs }));
+// The job's own fs usage (mkdocs.yml / mkdocs.yaml existence check) is fully
+// mocked via mockFs. renderPolicy (imported transitively via ../policy.js)
+// also reads through node:fs to load src/policies/mkdocs-update*.md from
+// real disk, so existsSync delegates to the real fs for any "policies" path —
+// only the job's own paths (mkdocs.yml/.yaml) go through the mock.
+vi.mock("node:fs", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("node:fs")>();
+  const isPolicyPath = (p: unknown) => typeof p === "string" && p.includes("policies");
+  return {
+    default: {
+      ...actual,
+      existsSync: (p: string) => (isPolicyPath(p) ? actual.existsSync(p) : mockFs.existsSync(p)),
+    },
+  };
+});
 vi.mock("../github.js", () => mockGh);
 vi.mock("../claude.js", () => mockClaude);
 vi.mock("../db.js", () => mockDb);
 
-import { run } from "./mkdocs-update.js";
+import { run, buildMkdocsPrompt } from "./mkdocs-update.js";
 import { reportError } from "../error-reporter.js";
 
 describe("mkdocs-update", () => {
@@ -66,6 +82,7 @@ describe("mkdocs-update", () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    for (const k in __tier) delete __tier[k];
     mockGh.listPRs.mockResolvedValue([]);
     mockGh.createPR.mockResolvedValue(100);
     mockClaude.createWorktree.mockResolvedValue("/tmp/worktree");
@@ -114,6 +131,16 @@ describe("mkdocs-update", () => {
     expect(mockClaude.createWorktree).not.toHaveBeenCalled();
   });
 
+  it("skips repos below the createPR autonomy tier", async () => {
+    const advisoryRepo = mockRepo();
+    __tier[advisoryRepo.fullName] = "advisory";
+
+    await run([advisoryRepo]);
+
+    expect(mockClaude.createWorktree).not.toHaveBeenCalled();
+    expect(mockClaude.runAI).not.toHaveBeenCalled();
+  });
+
   it("creates PR when Claude produces commits with tree diff", async () => {
     await run([repo]);
 
@@ -126,6 +153,7 @@ describe("mkdocs-update", () => {
     expect(mockClaude.pushBranch).toHaveBeenCalledWith(
       "/tmp/worktree",
       expect.stringContaining("yeti/mkdocs-update-"),
+      repo.fullName,
     );
     expect(mockGh.createPR).toHaveBeenCalledWith(
       repo.fullName,
@@ -240,5 +268,43 @@ describe("mkdocs-update", () => {
       value: {},
       writable: true,
     });
+  });
+});
+
+describe("buildMkdocsPrompt (policy template)", () => {
+  // Reconstructs the pre-migration inline prompt independently, proving the
+  // policy-template render is behavior-preserving.
+  function expected(fullName: string): string {
+    return [
+      `You are updating MkDocs documentation for the repository ${fullName}.`,
+      ``,
+      `The source code is the single source of truth. Your goal is to update the`,
+      `MkDocs documentation to accurately reflect the current state of the code.`,
+      `When the documentation conflicts with the source code, the source code is`,
+      `always right. Do not invent features or behaviors — only document what`,
+      `exists in the code.`,
+      ``,
+      `Steps:`,
+      `1. Read \`yeti/OVERVIEW.md\` if it exists, for architecture context.`,
+      `2. Read \`mkdocs.yml\` (or \`mkdocs.yaml\`) to understand the docs structure`,
+      `   and identify the docs directory (default: \`docs/\`).`,
+      `3. Scan recent git history (\`git log --oneline -50\`) to identify source`,
+      `   code changes since the documentation was last updated.`,
+      `4. Read the source code files that changed to understand what actually`,
+      `   changed.`,
+      `5. Update only the Markdown files under the MkDocs docs directory (and`,
+      `   \`mkdocs.yml\` itself if the nav structure needs it). Do NOT modify`,
+      `   source code, \`yeti/\` docs, or binary/media files.`,
+      `6. If no documentation updates are needed (no meaningful source changes),`,
+      `   make no commits.`,
+      `7. Commit changes with message: "docs: update mkdocs content [mkdocs-update]"`,
+      ``,
+      `Do NOT make any source code changes. Only update documentation.`,
+    ].join("\n");
+  }
+
+  it("matches the pre-migration inline builder", () => {
+    const out = buildMkdocsPrompt("pr", "acme/widget");
+    expect(out.trimEnd()).toBe(expected("acme/widget").trimEnd());
   });
 });

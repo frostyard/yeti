@@ -3,6 +3,7 @@ import { GITHUB_OWNERS, LABELS, LABEL_SPECS, SKIPPED_ITEMS, PRIORITIZED_ITEMS, A
 import * as log from "./log.js";
 import { notify } from "./notify.js";
 import { reportError } from "./error-reporter.js";
+import { assertCapability } from "./capability.js";
 
 const RATE_LIMIT_RE = /rate limit/i;
 const TRANSIENT_RE = /\b(400|500|502|503|504|ETIMEDOUT|ECONNRESET|ECONNREFUSED|connection reset)\b|Could not resolve to a|TLS handshake timeout|Something went wrong|stream error|unexpected EOF/i;
@@ -526,6 +527,7 @@ export async function createIssue(
   body: string,
   labels: string[],
 ): Promise<number> {
+  assertCapability(repo, "createIssue");
   for (const label of labels) {
     await ensureLabel(repo, label);
   }
@@ -750,6 +752,7 @@ export async function createPR(
   title: string,
   body: string,
 ): Promise<number> {
+  assertCapability(repo, "createPR");
   try {
     const url = (
       await gh(["pr", "create", "--repo", repo, "--head", head, "--title", title, "--body", body])
@@ -894,6 +897,7 @@ export async function updatePRBody(repo: string, prNumber: number, body: string)
 }
 
 export async function mergePR(repo: string, prNumber: number): Promise<void> {
+  assertCapability(repo, "merge");
   await gh(["pr", "merge", String(prNumber), "--repo", repo, "--squash"]);
 }
 

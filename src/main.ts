@@ -30,8 +30,13 @@ import { reportError } from "./error-reporter.js";
 import { VERSION } from "./version.js";
 import { announceIfNewVersion } from "./startup-announce.js";
 import { isGitHubAppConfigured, initGitHubApp, configureWebhook } from "./github-app.js";
+import { watchPolicies } from "./policy.js";
 
 log.info(`yeti ${VERSION} starting up`);
+
+// ── Policy templates: watch for hot-reload (edit ~/.yeti/policies without restart) ──
+
+watchPolicies();
 
 // ── Database init & recovery ──
 
