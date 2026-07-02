@@ -1,7 +1,7 @@
 import http from "node:http";
 import { queueStatus, copilotQueueStatus, codexQueueStatus, cancelCurrentTask } from "./claude.js";
 import * as config from "./config.js";
-import { getConfigForDisplay, writeConfig, LOG_LEVELS, type ConfigFile } from "./config.js";
+import { getConfigForDisplay, getEnvOverrides, writeConfig, LOG_LEVELS, type ConfigFile } from "./config.js";
 import { getQueueSnapshot, enrichQueueItemsWithPRStatus, mergePR, removeQueueItem, listAllOrgRepos, listRepos, type QueueCategory } from "./github.js";
 import {
   getRecentJobRuns, getRecentWorkItems, getDistinctJobNames, getJobRun, getJobRunLogs,
@@ -364,6 +364,11 @@ export async function handleApi(
     if (p === "/api/config") {
       try {
         const { updates, tab } = buildConfigUpdate(JSON.parse(await readBody(req)));
+        // Env-overridden fields are locked — writing them to the file would be a no-op
+        // (env wins at load) and misleading, so drop them.
+        for (const field of Object.keys(getEnvOverrides())) {
+          delete (updates as Record<string, unknown>)[field];
+        }
         writeConfig(updates);
         const newToken = config.AUTH_TOKEN;
         const headers: Record<string, string> = { "Content-Type": "application/json" };
@@ -462,7 +467,7 @@ export async function handleApi(
       return;
     }
 
-    if (p === "/api/config") { sendJson(res, 200, getConfigForDisplay()); return; }
+    if (p === "/api/config") { sendJson(res, 200, { values: getConfigForDisplay(), envOverrides: getEnvOverrides() }); return; }
 
     if (p === "/api/repos") {
       const repos = await listRepos();

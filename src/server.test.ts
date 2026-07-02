@@ -32,6 +32,7 @@ vi.mock("./config.js", () => ({
     enabledJobs: ["issue-worker", "ci-fixer"],
     allowedRepos: ["repo1", "repo2"],
   }),
+  getEnvOverrides: vi.fn().mockReturnValue({}),
   writeConfig: vi.fn(),
   SKIPPED_ITEMS: [],
   PRIORITIZED_ITEMS: [],
@@ -351,10 +352,26 @@ describe("JSON API (auth disabled)", () => {
     expect(Array.isArray(JSON.parse(res.body))).toBe(true);
   });
 
-  it("GET /api/config returns masked config", async () => {
+  it("GET /api/config returns masked config values + envOverrides", async () => {
     const res = await request(server, "GET", "/api/config");
     expect(res.status).toBe(200);
-    expect(JSON.parse(res.body).githubOwners).toEqual(["owner1"]);
+    const body = JSON.parse(res.body);
+    expect(body.values.githubOwners).toEqual(["owner1"]);
+    expect(body.envOverrides).toEqual({});
+  });
+
+  it("POST /api/config drops env-overridden fields before writing", async () => {
+    const configMod = await import("./config.js");
+    (configMod.getEnvOverrides as ReturnType<typeof vi.fn>).mockReturnValueOnce({ logLevel: "YETI_LOG_LEVEL" });
+    const res = await request(server, "POST", "/api/config", {
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ logLevel: "warn", maxPlanRounds: 5, _tab: "general" }),
+    });
+    expect(res.status).toBe(200);
+    const write = (configMod as unknown as { writeConfig: ReturnType<typeof vi.fn> }).writeConfig;
+    const lastArg = write.mock.calls.at(-1)![0];
+    expect(lastArg).not.toHaveProperty("logLevel");
+    expect(lastArg).toHaveProperty("maxPlanRounds", 5);
   });
 
   it("GET /api/repos returns repos + availableRepos", async () => {

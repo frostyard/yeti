@@ -1,6 +1,6 @@
 import type {
   Session, Overview, Job, QueueResponse, RunsResponse, RunDetail, TailResponse,
-  IssueLogsResponse, NotificationRow, ReposResponse,
+  IssueLogsResponse, NotificationRow, ReposResponse, ConfigResponse,
 } from "./types";
 
 export class ApiError extends Error {
@@ -43,7 +43,7 @@ export const api = {
   overview: () => req<Overview>("/api/overview"),
   jobs: () => req<Job[]>("/api/jobs"),
   queue: () => req<QueueResponse>("/api/queue"),
-  config: () => req<Record<string, unknown>>("/api/config"),
+  config: () => req<ConfigResponse>("/api/config"),
   repos: () => req<ReposResponse>("/api/repos"),
   notifications: (after?: number) =>
     req<NotificationRow[]>(`/api/notifications${after !== undefined ? `?after=${after}` : ""}`),
