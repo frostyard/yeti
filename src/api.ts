@@ -168,6 +168,9 @@ function buildConfigUpdate(body: unknown): { updates: Partial<ConfigFile>; tab: 
   if (typeof b.maxPlanRounds === "number" && Number.isFinite(b.maxPlanRounds) && b.maxPlanRounds >= 1) {
     updates.maxPlanRounds = b.maxPlanRounds;
   }
+  if (typeof b.learningsPendingThreshold === "number" && Number.isFinite(b.learningsPendingThreshold) && b.learningsPendingThreshold >= 1) {
+    updates.learningsPendingThreshold = b.learningsPendingThreshold;
+  }
 
   // Intervals (ms, each > 0) & Schedules (hour 0..23)
   if (b.intervals && typeof b.intervals === "object") {

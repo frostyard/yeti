@@ -46,6 +46,7 @@ export function Config() {
       includeForks: !!cfg.includeForks,
       reviewLoop: !!cfg.reviewLoop,
       maxPlanRounds: num(cfg.maxPlanRounds, 3),
+      learningsPendingThreshold: num(cfg.learningsPendingThreshold, 5),
       intervalsMin: Object.fromEntries(Object.entries(intervals).map(([k, v]) => [k, Math.round(v / 60000)])),
       schedules: { ...schedules },
       maxClaudeWorkers: num(cfg.maxClaudeWorkers, 2),
@@ -83,6 +84,7 @@ export function Config() {
       includeForks: d.includeForks,
       reviewLoop: d.reviewLoop,
       maxPlanRounds: Number(d.maxPlanRounds),
+      learningsPendingThreshold: Number(d.learningsPendingThreshold),
       intervals: intervalsMs,
       schedules: d.schedules,
       maxClaudeWorkers: Number(d.maxClaudeWorkers),
@@ -129,6 +131,7 @@ export function Config() {
             <Field label="Log retention (days)"><TextInput type="number" value={String(draft.logRetentionDays ?? 0)} onChange={(e) => set("logRetentionDays", e.target.value)} /></Field>
             <Field label="Log retention (per job)"><TextInput type="number" value={String(draft.logRetentionPerJob ?? 0)} onChange={(e) => set("logRetentionPerJob", e.target.value)} /></Field>
             <Field label="Max plan rounds"><TextInput type="number" value={String(draft.maxPlanRounds ?? 3)} onChange={(e) => set("maxPlanRounds", e.target.value)} /></Field>
+            <Field label="Learnings PR threshold"><TextInput type="number" min={1} value={String(draft.learningsPendingThreshold ?? 5)} onChange={(e) => set("learningsPendingThreshold", e.target.value)} /></Field>
             <div className="flex flex-col gap-1">
               <div className="flex items-end gap-6">
                 <Toggle label="Include forks" checked={!!draft.includeForks} disabled={!!lock("includeForks")} onChange={(v) => set("includeForks", v)} />
