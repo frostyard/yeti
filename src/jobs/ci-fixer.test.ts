@@ -19,6 +19,12 @@ const mockLog = vi.hoisted(() => ({
 
 vi.mock("../log.js", () => mockLog);
 
+const mockEnforceLearnings = vi.hoisted(() => vi.fn().mockResolvedValue(undefined));
+vi.mock("../learnings.js", () => ({
+  enforceLearnings: mockEnforceLearnings,
+  stripLearningsDeclaration: (s: string) => s,
+}));
+
 const mockReportError = vi.hoisted(() => vi.fn());
 
 vi.mock("../error-reporter.js", () => ({

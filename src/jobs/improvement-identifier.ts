@@ -7,6 +7,7 @@ import * as db from "../db.js";
 import { reportError } from "../error-reporter.js";
 import { notify } from "../notify.js";
 import { can } from "../capability.js";
+import { enforceLearnings } from "../learnings.js";
 
 const MAX_IMPROVEMENTS_PER_RUN = 10;
 
@@ -157,7 +158,8 @@ async function processRepo(repo: Repo): Promise<void> {
 
       const implPrompt = buildImplementationPrompt(repoAutonomy(repo), fullName, improvement);
       const aiOptions = JOB_AI["improvement-identifier"];
-      await claude.resolveEnqueue(aiOptions)(() => claude.runAI(implPrompt, implWt!, aiOptions));
+      const implOutput = await claude.resolveEnqueue(aiOptions)(() => claude.runAI(implPrompt, implWt!, aiOptions));
+      await enforceLearnings(implOutput, { jobName: "improvement-identifier", repo: fullName, wtPath: implWt, baseBranch: repo.defaultBranch, aiOptions });
 
       if (await claude.hasNewCommits(implWt, repo.defaultBranch) && await claude.hasTreeDiff(implWt, repo.defaultBranch)) {
         await claude.pushBranch(implWt, implBranch, fullName);

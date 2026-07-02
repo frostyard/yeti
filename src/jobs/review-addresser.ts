@@ -9,6 +9,7 @@ import * as db from "../db.js";
 import { reportError } from "../error-reporter.js";
 import { notify } from "../notify.js";
 import { processTextForImages } from "../images.js";
+import { enforceLearnings, stripLearningsDeclaration } from "../learnings.js";
 
 export function buildPrompt(
   autonomy: Autonomy,
@@ -44,6 +45,7 @@ async function processPR(repo: Repo, pr: gh.PR, reviewData: gh.PRReviewData): Pr
 
     const aiOptions = JOB_AI["review-addresser"];
     const claudeOutput = await claude.resolveEnqueue(aiOptions)(() => claude.runAI(prompt, wtPath!, aiOptions), gh.hasPriorityLabel(pr.labels));
+    await enforceLearnings(claudeOutput, { jobName: "review-addresser", repo: fullName, wtPath, baseBranch: pr.headRefName, aiOptions });
 
     if (await claude.hasNewCommits(wtPath, pr.headRefName) && await claude.hasTreeDiff(wtPath, pr.headRefName)) {
       await claude.pushBranch(wtPath, pr.headRefName, fullName);
@@ -57,8 +59,9 @@ async function processPR(repo: Repo, pr: gh.PR, reviewData: gh.PRReviewData): Pr
       notify({ jobName: "review-addresser", message: `Addressed review on ${fullName}#${pr.number}`, url: gh.pullUrl(fullName, pr.number) });
     }
 
-    if (claudeOutput.trim()) {
-      await gh.commentOnIssue(fullName, pr.number, claudeOutput.trim());
+    const commentBody = stripLearningsDeclaration(claudeOutput).trim();
+    if (commentBody) {
+      await gh.commentOnIssue(fullName, pr.number, commentBody);
       log.info(`[review-addresser] Posted comment for ${fullName}#${pr.number}`);
     } else {
       log.warn(`[review-addresser] No response produced for ${fullName}#${pr.number}`);
