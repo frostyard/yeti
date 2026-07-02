@@ -3,6 +3,7 @@ import * as log from "./log.js";
 import { withRunContext } from "./log.js";
 import { reportError } from "./error-reporter.js";
 import { insertJobRun, completeJobRun } from "./db.js";
+import { isUpdatePending } from "./quiesce.js";
 
 export interface Job {
   name: string;
@@ -16,7 +17,7 @@ export interface Scheduler {
   stop(): void;
   drain(timeoutMs?: number): Promise<void>;
   jobStates(): Map<string, boolean>;
-  triggerJob(name: string): "started" | "already-running" | "unknown";
+  triggerJob(name: string): "started" | "already-running" | "unknown" | "update-pending";
   updateInterval(jobName: string, newIntervalMs: number): void;
   updateScheduledHour(jobName: string, newHour: number): void;
   pauseJob(name: string): boolean;
@@ -48,6 +49,13 @@ export function startJobs(jobs: Job[], initialPaused?: readonly string[]): Sched
   function makeTick(job: Job): (manual?: boolean) => Promise<void> {
     return async (manual?: boolean) => {
       if (draining) return;
+
+      // An update is staged — stop starting new work so running jobs can drain
+      // before deploy.sh restarts the service. Blocks manual triggers too.
+      if (isUpdatePending()) {
+        log.info(`Deferring ${job.name} — update pending, draining before deploy`);
+        return;
+      }
 
       if (!manual && pausedFlags.get(job.name)) return;
 
@@ -167,9 +175,10 @@ export function startJobs(jobs: Job[], initialPaused?: readonly string[]): Sched
     return new Map(runningFlags);
   }
 
-  function triggerJob(name: string): "started" | "already-running" | "unknown" {
+  function triggerJob(name: string): "started" | "already-running" | "unknown" | "update-pending" {
     const tick = ticks.get(name);
     if (!tick) return "unknown";
+    if (isUpdatePending()) return "update-pending";
     if (draining) return "already-running";
     if (runningFlags.get(name)) return "already-running";
     tick(true);

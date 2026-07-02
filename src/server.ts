@@ -2,7 +2,8 @@ import http from "node:http";
 import crypto from "node:crypto";
 import { SERVER_PORT } from "./config.js";
 import * as config from "./config.js";
-import { getNotificationsSince } from "./db.js";
+import { getNotificationsSince, getRunningTasks } from "./db.js";
+import { isUpdatePending } from "./quiesce.js";
 import * as log from "./log.js";
 import type { Scheduler } from "./scheduler.js";
 import { VERSION } from "./version.js";
@@ -154,10 +155,15 @@ async function handleRequest(req: http.IncomingMessage, res: http.ServerResponse
     return;
   }
 
-  // ── GET: health ──
+  // ── GET: health ── (also the deploy quiesce signal: activeTasks/updatePending)
   if (req.url === "/health") {
     res.writeHead(200, { "Content-Type": "application/json" });
-    res.end(JSON.stringify({ status: "ok", version: VERSION }));
+    res.end(JSON.stringify({
+      status: "ok",
+      version: VERSION,
+      activeTasks: getRunningTasks().length,
+      updatePending: isUpdatePending(),
+    }));
     return;
   }
 
