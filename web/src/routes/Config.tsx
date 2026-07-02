@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useSearchParams } from "react-router-dom";
-import { Save } from "lucide-react";
+import { Plus, Save, Trash2 } from "lucide-react";
 import { useConfig, useSaveConfig } from "../lib/queries";
 import { Tabs, TabPanel } from "../components/ui/Tabs";
 import { Card, Button, Skeleton, SectionHeader } from "../components/ui/base";
@@ -14,13 +14,24 @@ const TABS = [
   { value: "security", label: "Security" },
 ];
 const LOG_LEVELS = ["debug", "info", "warn", "error"];
+const AUTONOMY_TIERS = ["advisory", "issues", "pr", "automerge"] as const;
 const MASK = "•••• (set — leave blank to keep)";
 
+type AutonomyTier = (typeof AUTONOMY_TIERS)[number];
+type AutonomyRow = { repo: string; tier: AutonomyTier };
 type Draft = Record<string, unknown>;
 const num = (v: unknown, d = 0) => (typeof v === "number" ? v : d);
 const csv = (v: unknown) => (Array.isArray(v) ? v.join(", ") : "");
 const toList = (s: string) => s.split(",").map((x) => x.trim()).filter(Boolean);
 const isMasked = (v: unknown) => typeof v === "string" && v.length > 0 && v !== "Not configured";
+const isAutonomyTier = (v: unknown): v is AutonomyTier =>
+  typeof v === "string" && (AUTONOMY_TIERS as readonly string[]).includes(v);
+const autonomyRows = (v: unknown): AutonomyRow[] =>
+  v && typeof v === "object" && !Array.isArray(v)
+    ? Object.entries(v as Record<string, unknown>)
+      .filter((entry): entry is [string, AutonomyTier] => isAutonomyTier(entry[1]))
+      .map(([repo, tier]) => ({ repo, tier }))
+    : [];
 
 export function Config() {
   const { data, isLoading } = useConfig();
@@ -45,6 +56,8 @@ export function Config() {
       queueScanIntervalMin: Math.round(num(cfg.queueScanIntervalMs, 0) / 60000),
       includeForks: !!cfg.includeForks,
       reviewLoop: !!cfg.reviewLoop,
+      defaultAutonomy: cfg.defaultAutonomy ?? "pr",
+      autonomyRows: autonomyRows(cfg.autonomy),
       maxPlanRounds: num(cfg.maxPlanRounds, 3),
       learningsPendingThreshold: num(cfg.learningsPendingThreshold, 5),
       intervalsMin: Object.fromEntries(Object.entries(intervals).map(([k, v]) => [k, Math.round(v / 60000)])),
@@ -67,9 +80,16 @@ export function Config() {
   const set = (k: string, v: unknown) => setDraft((d) => ({ ...d, [k]: v }));
   const setNested = (parent: string, k: string, v: number) =>
     setDraft((d) => ({ ...d, [parent]: { ...(d[parent] as Record<string, number>), [k]: v } }));
+  const setAutonomyRows = (rows: AutonomyRow[]) => set("autonomyRows", rows);
+  const rows = (draft.autonomyRows as AutonomyRow[] | undefined) ?? [];
 
   const onSave = async () => {
     const d = draft;
+    const autonomy = Object.fromEntries(
+      ((d.autonomyRows as AutonomyRow[] | undefined) ?? [])
+        .map((row) => [row.repo.trim(), row.tier])
+        .filter(([repo]) => repo),
+    );
     const intervalsMs = Object.fromEntries(
       Object.entries(d.intervalsMin as Record<string, number>).map(([k, v]) => [k, v * 60000]),
     );
@@ -83,6 +103,8 @@ export function Config() {
       queueScanIntervalMs: Number(d.queueScanIntervalMin) * 60000,
       includeForks: d.includeForks,
       reviewLoop: d.reviewLoop,
+      defaultAutonomy: d.defaultAutonomy,
+      autonomy,
       maxPlanRounds: Number(d.maxPlanRounds),
       learningsPendingThreshold: Number(d.learningsPendingThreshold),
       intervals: intervalsMs,
@@ -188,6 +210,60 @@ export function Config() {
             </Field>
             <Field label="Enabled jobs (comma-separated)"><TextInput value={draft.enabledJobs as string ?? ""} onChange={(e) => set("enabledJobs", e.target.value)} /></Field>
             <Field label="Allowed repos (comma-separated)" envVar={lock("allowedRepos")}><TextInput value={draft.allowedRepos as string ?? ""} disabled={!!lock("allowedRepos")} onChange={(e) => set("allowedRepos", e.target.value)} /></Field>
+            <Field label="Default autonomy tier" hint="advisory: comments/labels only -> issues: can open issues -> pr: can push and open PRs -> automerge: can merge.">
+              <SelectInput value={draft.defaultAutonomy as string ?? "pr"} onChange={(e) => set("defaultAutonomy", e.target.value)}>
+                {AUTONOMY_TIERS.map((tier) => <option key={tier} value={tier}>{tier}</option>)}
+              </SelectInput>
+            </Field>
+            <div className="md:col-span-2">
+              <SectionHeader
+                label="Per-repo autonomy overrides"
+                action={
+                  <Button
+                    type="button"
+                    size="sm"
+                    onClick={() => setAutonomyRows([...rows, { repo: "", tier: "advisory" }])}
+                  >
+                    <Plus size={13} /> Add row
+                  </Button>
+                }
+              />
+              <div className="grid grid-cols-[minmax(0,1fr)_140px_32px] gap-2 text-[12px] font-medium text-secondary">
+                <span>Repo fullName</span>
+                <span>Tier</span>
+                <span />
+              </div>
+              <div className="mt-2 grid grid-cols-1 gap-2">
+                {rows.length === 0 ? (
+                  <div className="rounded-md border border-dashed border-border px-3 py-4 text-[12px] text-muted">
+                    No per-repo overrides.
+                  </div>
+                ) : rows.map((row, index) => (
+                  <div key={index} className="grid grid-cols-[minmax(0,1fr)_140px_32px] gap-2">
+                    <TextInput
+                      value={row.repo}
+                      placeholder="owner/repo"
+                      onChange={(e) => setAutonomyRows(rows.map((r, i) => i === index ? { ...r, repo: e.target.value } : r))}
+                    />
+                    <SelectInput
+                      value={row.tier}
+                      onChange={(e) => setAutonomyRows(rows.map((r, i) => i === index ? { ...r, tier: e.target.value as AutonomyTier } : r))}
+                    >
+                      {AUTONOMY_TIERS.map((tier) => <option key={tier} value={tier}>{tier}</option>)}
+                    </SelectInput>
+                    <Button
+                      type="button"
+                      variant="danger"
+                      className="h-8 px-0"
+                      aria-label={`Remove autonomy override ${row.repo || index + 1}`}
+                      onClick={() => setAutonomyRows(rows.filter((_, i) => i !== index))}
+                    >
+                      <Trash2 size={13} />
+                    </Button>
+                  </div>
+                ))}
+              </div>
+            </div>
           </Card>
         </TabPanel>
       </Tabs>
