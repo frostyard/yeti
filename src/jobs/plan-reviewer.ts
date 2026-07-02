@@ -116,9 +116,7 @@ async function processIssue(repo: Repo, issue: gh.Issue, planComment: gh.IssueCo
         await gh.removeLabel(fullName, issue.number, LABELS.needsPlanReview);
         await gh.addLabel(fullName, issue.number, LABELS.ready);
       } else {
-        // +1 for the review we just posted
-        const completedRounds = countPlanRounds(comments) + 1;
-        if (completedRounds >= MAX_PLAN_ROUNDS) {
+        if (round >= MAX_PLAN_ROUNDS) {
           await gh.commentOnIssue(
             fullName,
             issue.number,

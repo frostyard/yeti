@@ -4,7 +4,7 @@ import { isYetiComment } from "./github.js";
 /** Header of every review comment plan-reviewer posts. */
 export const REVIEW_HEADER = "## Plan Review";
 
-const VERDICT_RE = /^VERDICT:\s*(APPROVED|NEEDS\s+REVISION)\s*$/i;
+const VERDICT_RE = /^VERDICT:\s*(APPROVED|NEEDS\s+REVISION)\s*[.!?)\]]*\s*$/i;
 
 /**
  * Invisible marker embedded in each posted review, binding it to the exact
@@ -37,7 +37,24 @@ export function parseVerdict(output: string): "approved" | "needs-revision" | "m
 
 /** Counts `- [R<n>-B<n>]` finding bullets, optionally segment-prefixed, in the Blocking list only. */
 export function countBlockingFindings(output: string): number {
-  return (output.match(/^\s*-\s*\[(?:S\d+-)?R\d+-B\d+\]/gm) ?? []).length;
+  let inBlocking = false;
+  let count = 0;
+
+  for (const line of output.split("\n")) {
+    if (/^\s*###\s+Blocking\b/i.test(line)) {
+      inBlocking = true;
+      continue;
+    }
+    if (/^\s*###\s+/i.test(line)) {
+      inBlocking = false;
+      continue;
+    }
+    if (inBlocking && /^\s*-\s*\[(?:S\d+-)?R\d+-B\d+\]/.test(line)) {
+      count++;
+    }
+  }
+
+  return count;
 }
 
 /** Replace the raw VERDICT: line with the bold human-readable form for the posted comment. */
