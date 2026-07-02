@@ -23,7 +23,9 @@ a finding without reading the code it points at.
 
 ## Addressing findings
 
-Process every finding by its ID (for example R2-B1, R2-A3):
+Process every finding by its ID (for example R2-B1, R2-A3, or segment-prefixed
+IDs like S2-R1-B1). Echo IDs verbatim from the review; do not normalize or
+renumber them:
 
 - **Blocking findings** must each be either **accepted** (revise the plan;
   say what changed) or **declined** (give a concrete technical reason grounded
@@ -55,5 +57,6 @@ Then end with exactly one section:
 - R2-B1: accepted — <one line: what changed in the plan>
 - R2-B2: declined — <one line: concrete technical reason>
 - R2-A1: adopted — <one line>
+- S2-R1-B1: accepted — <one line, if the review used a segment-prefixed ID>
 
 Do NOT make any code changes. Only produce text output.

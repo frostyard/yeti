@@ -201,6 +201,11 @@ dedup live in the shared `src/review-contract.ts` module (see
     only on the final round, an explicit instruction not to manufacture
     findings if nothing rises to Blocking (so the loop can actually converge
     to APPROVED at the cap instead of stalling on invented nitpicks).
+  - **Finding ID prefix** — new findings use `R<n>-...` in the first loop
+    segment. After a human-comment reset, new findings use
+    `S<segment>-R<round>-...` so a fresh round 1 cannot collide with findings
+    from an earlier segment, while `ROUND_INFO` and the round budget remain
+    relative to the current segment.
   - The plan comment body itself (`PLAN_BODY`), elided from `THREAD_SECTION`
     so it isn't duplicated in the prompt.
 - Uses the configured backend/model from `JOB_AI["plan-reviewer"]` (uses `enqueueCopilot` for copilot, `enqueueCodex` for codex, `enqueue` for claude)
@@ -211,9 +216,9 @@ dedup live in the shared `src/review-contract.ts` module (see
   explicit maintainer decision in the thread — every Blocking finding must
   cite a `path:line` the reviewer actually read. Everything else (style,
   test-coverage suggestions, "consider also") is **Advisory** and never gates
-  approval. On round 2+, the reviewer must first disposition every finding
-  from the prior round (resolved/not resolved/settled) before raising new
-  ones.
+  approval. When any prior Plan Review exists in the thread, the reviewer must
+  first disposition every earlier finding (resolved/not resolved/settled, or
+  carried-over after a human-comment reset) before raising new ones.
 - **Verdict is always requested and always rendered**, whether or not
   `reviewLoop` is on: the AI ends its output with `VERDICT: APPROVED` or
   `VERDICT: NEEDS REVISION` on its own line (last such line wins if more than
@@ -272,7 +277,9 @@ short-circuits straight back to issue-refiner instead of stopping at
 4. This repeats until either APPROVED, or `maxPlanRounds` review rounds
    (counted since the most recent human comment via `countPlanRounds()`)
    have completed, at which point plan-reviewer posts a warning and forces
-   `Ready` regardless of verdict
+   `Ready` regardless of verdict. The companion `countSegments()` value keeps
+   finding IDs unique across those human-comment resets by adding an
+   `S<n>-` prefix only in segment 2 and later.
 5. **A human comment posted at any point outranks the loop**: issue-refiner's
    label routing checks for unreacted human feedback first, routes it (and
    any pending review) to a full `processRefinement()` pass instead of
