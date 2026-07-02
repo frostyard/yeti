@@ -572,3 +572,79 @@ proposed prompt change before applying it — no automatic prompt
 modifications are made. Notifications are sent when an improvement is
 found.
 
+## learning-consolidator
+
+**Source**: `src/jobs/learning-consolidator.ts`
+**Trigger**: Daily schedule, or immediately when the pending-learnings count
+reaches `learningsPendingThreshold`
+**Schedule**: Runs at hour configured by `schedules.learningConsolidatorHour`
+(default: 6 AM local time)
+
+Closes the yeti-side (environment/tooling) half of the self-improvement loop
+(see `src/learnings.ts` in [Modules](modules.md)). Operates only on
+`SELF_REPO` — the repo Yeti's own source lives in — since its job is to edit
+Yeti's own policies and docs, not a target repo.
+
+**Inputs**: pending `"yeti"`-kind rows from the `learnings` table (see
+[Database Schema](database-schema.md)), fetched via
+`db.getPendingLearnings("yeti")`. If there are none, the job returns
+immediately without creating a worktree or task record.
+
+**Guards**:
+
+- **Tier check**: skips (info log only) if `SELF_REPO` doesn't have at least
+  the `createPR` capability tier — mirrors the guard other PR-creating jobs use.
+- **Fresh duplicate-PR check**: before doing any work, lists open PRs on
+  `SELF_REPO` with `fresh: true` (bypassing the `listPRs` 60s TTL cache — same
+  rationale as `getOpenPRForIssue()`) and skips if any open PR's head branch
+  starts with `yeti/learnings-`. This prevents pile-up when a previous
+  consolidation PR hasn't been merged yet, and avoids the race where a
+  just-created PR is invisible during the cache window.
+- **Tree-diff guard**: after the AI pass, only pushes/creates a PR if both
+  `hasNewCommits(wtPath, defaultBranch)` and `hasTreeDiff(wtPath,
+  defaultBranch)` are true (the standard PR-creating-job guard — see Key
+  Patterns). If the AI dismissed every pending learning (no commits expected)
+  this is simply skipped; if some learnings were left neither dismissed nor
+  committed, a warning is logged and they remain `pending` for the next run.
+
+**Policy**: `learning-consolidator.md`, rendered with a single `${LEARNINGS}`
+variable — `formatLearnings(rows)` renders each pending row as one bullet:
+`- [id] (reported by <job_name> while working on <repo>, <created_at>)
+<summary>`. The policy instructs the AI to read `yeti/OVERVIEW.md` and
+`src/policies/_preamble.md`, then for each learning either fold it into
+`_preamble.md` (environment-wide), a specific job policy (job-specific),
+a `yeti/` doc (architectural knowledge about Yeti itself), or leave it
+alone (already covered / not actionable) — editing and merging existing
+guidance rather than appending changelog-style entries.
+
+**DISMISSED line protocol**: after committing its edits (or making none), the
+AI prints one line per learning it chose *not* to fold in, in the exact form
+`DISMISSED: <id>: <one-line reason>`. `parseDismissals(output)` extracts these
+via `/^DISMISSED:\s*(\d+)\s*:\s*(.+)$/gim`, and the job filters the parsed IDs
+against the actual pending set (`pendingIds`) before acting — an AI
+hallucinating an ID that wasn't in the pending list is silently ignored
+rather than crashing or dismissing an unrelated row. Each valid dismissal
+calls `db.dismissLearning(id, reason)`.
+
+**Outputs / status transitions**:
+
+- Dismissed learnings (from the parsed `DISMISSED:` lines) → `status =
+  'dismissed'`, `reason` set.
+- Remaining pending learnings that survived to a successful push → `status =
+  'consolidated'`, `pr_number` set, via `db.markLearningsConsolidated(ids,
+  prNumber)`.
+- A learning that was neither dismissed nor consolidated (AI produced no
+  usable diff for it) stays `pending` and is picked up again on the next run.
+- On success: opens a PR titled `chore(learnings): consolidate <N>
+  environment learning(s)` against `SELF_REPO`'s default branch, branch name
+  `yeti/learnings-<datestamp>-<hex4>`. The PR body (`buildPRBody()`) lists
+  each consolidated learning (with reporting job/repo) and, if any, a
+  "Dismissed" section with `[id] <reason>` bullets, plus a footer noting that
+  merging deploys the learnings into every future agent prompt. Sends a
+  `notify()` on success.
+
+Unlike other PR-creating jobs, learning-consolidator does not invoke
+`enforceLearnings()` on itself — its own AI pass edits Yeti's policies/docs
+directly rather than doing general-purpose repo work, so there is no
+work-session learning to gate.
+
