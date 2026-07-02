@@ -710,6 +710,8 @@ export interface IssueComment {
   id: number;
   body: string;
   login: string;
+  /** ISO timestamp of the comment's last edit (updated_at). Changes when a comment is edited in place. */
+  updatedAt: string;
 }
 
 export async function getIssueComments(repo: string, issueNumber: number): Promise<IssueComment[]> {
@@ -718,8 +720,8 @@ export async function getIssueComments(repo: string, issueNumber: number): Promi
       "api",
       `repos/${repo}/issues/${issueNumber}/comments`,
     ]);
-    const comments = safeJsonParse(raw, "issue comments") as { id: number; body: string; user: { login: string } }[];
-    return comments.filter((c) => c.body.trim()).map((c) => ({ id: c.id, body: c.body, login: c.user.login }));
+    const comments = safeJsonParse(raw, "issue comments") as { id: number; body: string; user: { login: string }; updated_at?: string }[];
+    return comments.filter((c) => c.body.trim()).map((c) => ({ id: c.id, body: c.body, login: c.user.login, updatedAt: c.updated_at ?? "" }));
   }) as Promise<IssueComment[]>;
 }
 

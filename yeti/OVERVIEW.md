@@ -29,6 +29,7 @@ src/
 ├── images.ts            Image/attachment extraction + download for issue/PR context
 ├── version.ts           Build-time injected version string
 ├── plan-parser.ts       Parses multi-PR implementation plans into phases; exports PLAN_HEADER constant
+├── review-contract.ts   Shared review protocol: review marker dedup, verdict parse/render, round counting (used by plan-reviewer and issue-refiner)
 ├── startup-announce.ts  Announces new deployments via notify (version-change detection)
 ├── shutdown.ts          Graceful shutdown flag + ShutdownError class (shared across modules)
 ├── test-helpers.ts      Test factories (mockRepo, mockIssue, mockPR)
@@ -44,7 +45,7 @@ src/
 │   └── layout.ts        Shared layout (header, theme, siteTitle, formatters, TOAST_SCRIPT)
 └── jobs/
     ├── issue-refiner.ts        Discovers issues needing plans via comment analysis
-    ├── plan-reviewer.ts        Adversarial plan review using configurable AI backend
+    ├── plan-reviewer.ts        Adversarial plan review with thread context; Blocking/Advisory verdict contract
     ├── issue-worker.ts         Implements issues labelled "Refined" as PRs
     ├── ci-fixer.ts             Fixes failing CI and resolves merge conflicts
     ├── review-addresser.ts     Addresses review comments on Yeti PRs
@@ -135,7 +136,7 @@ not labels. Six labels are used:
 ```
 Issues:
   Needs Refinement label →  (refiner posts plan)         →  Needs Plan Review added (if plan-reviewer enabled and plan actionable) or Ready added (if actionable) or no label (if blocking questions — waits for human)
-  Needs Plan Review label → (plan-reviewer critiques)    →  Ready added (default) or Needs Refinement (if reviewLoop + NEEDS REVISION + under maxPlanRounds)
+  Needs Plan Review label → (plan-reviewer critiques)    →  Ready added (default, or reviewLoop off) or Needs Refinement (if reviewLoop on + NEEDS REVISION + under maxPlanRounds) or Ready + warning comment (if reviewLoop on + at maxPlanRounds)
   Unreacted feedback     →  (refiner refines plan)       →  Needs Plan Review or Ready (if actionable) or no label (if blocking questions)
   Open PR + follow-up Q  →  (refiner posts response)     →  👍 reactions added (no label changes)
   Refined label          →  (worker creates PR)          →  Refined removed, Ready removed, In Review added
@@ -147,8 +148,21 @@ PRs:
   Doc PR (yeti/docs-*) + doc-only files + CI passing/skipped  →  (auto-merger)  →  merged (no LGTM required)
 ```
 
+With `reviewLoop` on, a rejected plan converges autonomously without human
+intervention: `NEEDS REVISION → Needs Refinement → (issue-refiner revises the
+plan in place via processReviewRevision) → Needs Plan Review → …` repeating
+until either `APPROVED → Ready` or the round budget (`maxPlanRounds`, counted
+since the most recent human comment) is exhausted, at which point the issue
+falls through to `Ready` with a warning comment for human review. A human
+comment posted at any point outranks the loop: issue-refiner routes it to a
+full refinement pass (absorbing any pending review into the same revision)
+and resets the round count.
+
 Jobs track processed items via 👍 reactions on comments (issue-refiner,
 review-addresser) and by checking for existing report comments (triage jobs).
+Plan-review dedup uses an invisible `<!-- yeti-review-of:id:updatedAt -->`
+marker rather than reactions — see the `review-contract.ts` entry in
+[Modules](modules.md).
 The issue-auditor reconciles label state daily, adding missing `In Review`
 labels to issues with open PRs and removing stale ones.
 
@@ -454,8 +468,8 @@ defaults.
 | `allowedRepos` | `YETI_ALLOWED_REPOS` | `null` (all repos) |
 | `prioritizedItems` | — | `[]` (array of `{repo, number}` processed first) |
 | `queueScanIntervalMs` | — | `300000` (5 min — how often the dashboard queue refreshes from GitHub labels; infrastructure, always runs) |
-| `reviewLoop` | — | `false` (when true, plan-reviewer can send plans back to issue-refiner for re-refinement) |
-| `maxPlanRounds` | — | `3` (max plan→review cycles before falling through to human review; minimum 1) |
+| `reviewLoop` | — | `false` (when true, a NEEDS REVISION verdict kicks the plan back to issue-refiner for a targeted in-place revision, converging autonomously without a human in the loop) |
+| `maxPlanRounds` | — | `3` (max plan→review cycles counted since the most recent human comment; a human comment resets the count; at the cap the issue falls through to `Ready` for human review; minimum 1) |
 | `learningsPendingThreshold` | — | `5` (pending environment learnings that immediately trigger learning-consolidator; minimum 1) |
 
 ### enabledJobs

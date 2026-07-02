@@ -203,7 +203,9 @@ Issues move through labels to track state:
 
 ```
 (new issue)         →  (refiner runs)  →  Plan comment posted  →  Ready
-                    →  (reviewer runs) →  Plan reviewed         →  Ready  [if plan-reviewer enabled]
+                    →  (reviewer runs) →  Plan reviewed         →  Ready       [reviewLoop off, or approved]
+                                                                →  Needs Refinement  [reviewLoop on + blocking findings; loops
+                                                                                       back to refiner, up to maxPlanRounds]
                     →  Human reviews plan + critique, then either:
                          • Adds "Refined" to approve implementation
                          • Posts feedback → refiner refines → reviewer re-reviews
@@ -211,7 +213,11 @@ Refined             →  (worker runs)   →  PR created  →  In Review
 In Review + LGTM    →  (merger runs)   →  PR merged
 ```
 
-The `Ready` label always means "waiting for a human decision." When plan-reviewer is enabled, the human sees both the plan and an adversarial critique before deciding whether to proceed. The review is **for the human**, not for automatic refinement — this prevents infinite back-and-forth between AIs.
+The `Ready` label always means "waiting for a human decision" — a person still has to add `Refined` before implementation starts, in both modes below.
+
+By default, plan-reviewer posts a single adversarial critique with a verdict and the issue goes straight to `Ready`: the human reads the plan and critique together and decides whether to approve or send feedback back to the refiner.
+
+With `reviewLoop: true`, the refiner and reviewer instead converge on their own first: a review with zero blocking findings is approved and the issue goes to `Ready`; a review with any blocking finding sends the issue back to `Needs Refinement` for a targeted, in-place plan revision, and the two jobs iterate up to `maxPlanRounds` (default 3) rounds. The round budget resets whenever a human comments — human feedback always wins over the automated loop — and after the round limit is reached the issue falls through to `Ready` for a person to resolve. Either way, the loop only ever prepares the plan for approval; it never adds `Refined` itself.
 
 The `Priority` label is used for queue ordering across all jobs but does not trigger any job on its own.
 

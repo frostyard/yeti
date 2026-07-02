@@ -45,7 +45,7 @@ vi.mock("node:fs", () => ({
   },
 }));
 
-import { enqueue, queueStatus, randomSuffix, datestamp, hasNewCommits, hasTreeDiff, generatePRDescription, generateDocsPRDescription, regeneratePRDescription, cancelCurrentTask, cancelQueuedTasks, createWorktree, createWorktreeFromBranch, pushBranch, ensureClone, ClaudeTimeoutError, runAI, copilotQueueStatus, enqueueCopilot, codexQueueStatus, enqueueCodex, AiTimeoutError, resolveEnqueue } from "./claude.js";
+import { enqueue, queueStatus, randomSuffix, datestamp, hasNewCommits, hasTreeDiff, generatePRDescription, generateDocsPRDescription, regeneratePRDescription, cancelCurrentTask, cancelQueuedTasks, createWorktree, createWorktreeFromBranch, pushBranch, ensureClone, ClaudeTimeoutError, runAI, copilotQueueStatus, enqueueCopilot, codexQueueStatus, enqueueCodex, AiTimeoutError, resolveEnqueue, scrubWorktreePaths } from "./claude.js";
 import { ShutdownError } from "./shutdown.js";
 import * as shutdown from "./shutdown.js";
 import * as capability from "./capability.js";
@@ -1222,5 +1222,24 @@ describe("runAI with codex backend", () => {
     child.emit("close", 2, null);
 
     await expect(promise).rejects.toThrow("Codex exited with code 2");
+  });
+});
+
+describe("scrubWorktreePaths", () => {
+  it("strips the exact worktree prefix, leaving repo-relative paths", () => {
+    const wt = "/home/debian/.yeti/worktrees/frostyard/updex/plan-reviewer/yeti/review-84-ab12";
+    const text = `See [updex/install.go](${wt}/updex/install.go#L36) and ${wt}/config/transfer.go:152.`;
+    expect(scrubWorktreePaths(text, wt)).toBe(
+      "See [updex/install.go](updex/install.go#L36) and config/transfer.go:152.",
+    );
+  });
+
+  it("defensively strips other users' worktree path variants without wtPath", () => {
+    const text = "link: /home/yeti/.yeti/worktrees/frostyard/updex/plan-reviewer/yeti/review-84-4dc7/updex/install.go";
+    expect(scrubWorktreePaths(text)).toBe("link: updex/install.go");
+  });
+
+  it("returns text unchanged when nothing matches", () => {
+    expect(scrubWorktreePaths("plain text, src/api.ts:12")).toBe("plain text, src/api.ts:12");
   });
 });

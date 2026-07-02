@@ -239,6 +239,52 @@ issue-refiner (to gate label assignment), issue-auditor (to classify issues with
 blocking questions as `needs-refinement`), and issue-worker to implement
 multi-phase plans sequentially.
 
+**`review-contract.ts`** — Shared plan-review protocol consumed by both
+`plan-reviewer.ts` and `issue-refiner.ts`, so the two jobs agree on marker
+format, verdict parsing, and round counting without duplicating logic:
+
+- `REVIEW_HEADER` (`"## Plan Review"`) — the header prefix plan-reviewer
+  posts every review comment with; used by `countPlanRounds()` to recognize
+  review comments in the thread.
+- `reviewMarker(planCommentId, planUpdatedAt)` — builds the invisible
+  `<!-- yeti-review-of:<planCommentId>:<planUpdatedAt> -->` marker embedded in
+  every posted review. Binding the marker to `planUpdatedAt` (not just the
+  comment's identity) means editing the plan comment in place — which is
+  what `processRefinement()`/`processReviewRevision()` in issue-refiner do —
+  changes `updatedAt` and automatically invalidates the old marker, re-arming
+  plan-reviewer for the new version with no explicit "clear the old review"
+  step needed.
+- `findReviewOfPlanVersion(comments, planCommentId, planUpdatedAt)` — returns
+  the last Yeti comment (`isYetiComment()`) containing the marker for this
+  exact plan version, or `undefined`. Used by plan-reviewer (skip re-review of
+  an already-reviewed version) and by issue-refiner (detect a pending
+  reviewer kickback to route into `processReviewRevision()`).
+- `parseVerdict(output)` — scans the AI's raw review output bottom-up for a
+  `VERDICT: APPROVED` / `VERDICT: NEEDS REVISION` line (case-insensitive; the
+  last matching line wins if the AI emits more than one) and returns
+  `"approved" | "needs-revision" | "missing"`. `"missing"` lets the caller log
+  a warning before falling back to treating it as needs-revision, rather than
+  silently mis-parsing.
+- `countBlockingFindings(output)` — counts `- [R<n>-B<n>]` bullet lines (the
+  Blocking findings list only, not prior-round disposition lines), used to
+  annotate the rendered verdict with a count.
+- `renderVerdict(output)` — replaces the raw `VERDICT:` line with a bold
+  human-readable form for the comment actually posted to GitHub:
+  `**Verdict: APPROVED**` or `**Verdict: NEEDS REVISION** (N blocking)`.
+- `countPlanRounds(comments)` — counts completed review rounds for the
+  *current* loop: Yeti review comments (`REVIEW_HEADER` + `isYetiComment()`)
+  posted after the most recent non-bot human comment. Because a maintainer
+  comment resets the count, the round budget (`maxPlanRounds`) always
+  measures cycles since a human last spoke, not cycles since the plan was
+  first created — a human commenting mid-loop gets a fresh `maxPlanRounds`
+  budget for whatever comes next.
+
+`IssueComment` (`github.ts`) now carries an `updatedAt: string` field (the
+comment's ISO `updated_at` timestamp) specifically to support
+`reviewMarker()`'s version binding — it changes whenever a comment is edited
+in place, which is exactly the "re-arm the reviewer" signal the marker scheme
+depends on.
+
 **`log.ts`** — Timestamped console logging with four levels: `debug`, `info`,
 `warn`, `error`. Each level (except `error`) is gated by the `LOG_LEVEL` config
 setting — messages below the configured threshold are suppressed from both

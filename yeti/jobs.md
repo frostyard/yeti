@@ -28,7 +28,7 @@ comments and reactions — no trigger labels required.
 Issues without a body are still processed — the prompt uses "(No description
 provided)" as a fallback, allowing Claude to plan from the title alone.
 
-Three modes:
+Four modes:
 
 ### Fresh planning (no plan comment exists)
 
@@ -67,7 +67,50 @@ Three modes:
 - If `plan-reviewer` is in `enabledJobs`: adds `Needs Plan Review` label (triggers adversarial review)
 - Otherwise: adds the `Ready` label (signals "Yeti is done, your turn")
 
+### Needs Refinement label routing (plan already exists)
+
+When a plan comment already exists and the issue currently carries the
+`Needs Refinement` label — the state plan-reviewer puts an issue into on a
+NEEDS REVISION verdict, or a human can re-apply manually — `run()` picks one
+of three paths per issue, in priority order:
+
+1. **Human feedback present** (`findUnreactedHumanComments()` on comments
+   after the plan returns non-empty) → `processRefinement()`. Human feedback
+   always outranks a pending review: if `findReviewOfPlanVersion()` also
+   finds a review of the current plan version, that review comment is
+   prepended to the feedback list and addressed in the *same* revision pass,
+   rather than running two separate revisions.
+2. **No human feedback, but a review of the current plan version exists**
+   (`findReviewOfPlanVersion()` — the reviewer's `<!-- yeti-review-of:id:updatedAt -->`
+   marker matches the plan comment's current `id`/`updatedAt`) →
+   `processReviewRevision()`: a **targeted** revision, not a replan. Renders
+   `issue-refiner.revise.md` with the plan and the review body, and requires
+   Claude to disposition every finding by ID (accepted/declined for Blocking,
+   adopted/declined for Advisory) rather than silently dropping any. Claude
+   edits the plan in place (same structure, only touched sections change) and
+   ends with a separate `### Review Response` section, which is split off
+   and posted as its own comment — the plan comment itself stays clean of
+   disposition notes. If Claude instead emits `### Clarifying Questions
+   (blocking)` with no revised plan, that block is posted verbatim as a
+   comment and no label is added (waits for a human). Otherwise: removes
+   `Needs Refinement`, adds `Needs Plan Review` — sending the issue back
+   through plan-reviewer for the next round.
+3. **Neither** (the label was re-added with no new comment and no pending
+   review) → `processIssue()`, the same fresh-planning path as when no plan
+   exists — a deliberate "start over" escape hatch for a human who wants a
+   from-scratch replan rather than an incremental revision.
+
+Both `processRefinement` and `processReviewRevision` remove the
+`Needs Refinement` label whether or not the resulting plan is actionable —
+an issue with only clarifying questions is left with no work-triggering
+label at all, waiting for a human answer.
+
 ### Refinement (unreacted human comments after plan)
+
+Runs via `processRefinement()` — reached both when a plan exists without the
+`Needs Refinement` label (comment-driven state machine) and as case 1 of the
+label-routing above (human feedback present with the label applied, which may
+also absorb a pending review comment into the same pass).
 
 - Finds human comments posted after the latest plan comment
 - Checks each comment for a 👍 reaction from Yeti (tracked items)
@@ -127,35 +170,113 @@ visual context.
 Adversarial review job that critiques implementation plans using a configurable
 AI backend (defaults to the backend specified in `jobAi["plan-reviewer"]`).
 Designed for cross-AI adversarial review — e.g. Claude produces the plan,
-Copilot (or Gemini via Copilot) critiques it.
+Copilot (or Gemini via Copilot) critiques it. Verdict mechanics and marker
+dedup live in the shared `src/review-contract.ts` module (see
+[Modules](modules.md)), used by both plan-reviewer and issue-refiner.
 
 - Scans open issues with the `Needs Plan Review` label
 - Skips issues with the `Refined` label (being implemented)
 - Finds the most recent `## Implementation Plan` comment
-- Skips if the plan comment already has a 👍 reaction from Yeti (already reviewed)
+- Skips if a review already exists for this **exact plan version** —
+  `findReviewOfPlanVersion()` checks for a posted review comment containing
+  `<!-- yeti-review-of:<planCommentId>:<planUpdatedAt> -->`. Because the
+  marker binds to the plan comment's `updatedAt`, editing the plan in place
+  (as `processRefinement`/`processReviewRevision` in issue-refiner do)
+  automatically invalidates the old marker and re-arms the reviewer — no
+  reaction bookkeeping is used for this dedup.
 - Creates a worktree for codebase context
+- Builds the review prompt (`buildReviewPrompt()`, rendering
+  `plan-reviewer.md`) with:
+  - **`THREAD_SECTION`** — every other comment on the issue, in order, each
+    labeled by provenance: `Comment by @user (automated by Yeti):`,
+    `Comment by @user (bot):`, or `MAINTAINER (binding) — comment by @user:`
+    for human comments. The `MAINTAINER (binding)` label tells the reviewer
+    a human decision is not up for re-litigation.
+  - **`ROUND_INFO`** — `"This is review round N of maxPlanRounds."`, plus,
+    only on the final round, an explicit instruction not to manufacture
+    findings if nothing rises to Blocking (so the loop can actually converge
+    to APPROVED at the cap instead of stalling on invented nitpicks).
+  - The plan comment body itself (`PLAN_BODY`), elided from `THREAD_SECTION`
+    so it isn't duplicated in the prompt.
 - Uses the configured backend/model from `JOB_AI["plan-reviewer"]` (uses `enqueueCopilot` for copilot, `enqueueCodex` for codex, `enqueue` for claude)
-- Posts review as a comment prefixed with `## Plan Review`
-- Reacts 👍 to the plan comment (marks as processed)
-- Removes `Needs Plan Review` label, adds `Ready` label
+- **Blocking/Advisory contract** (full rules in `src/policies/plan-reviewer.md`):
+  a finding is **Blocking** only if implementing the plan as written would
+  fail an explicit issue requirement, break existing behavior/build/tests,
+  rest on a codebase claim the reviewer verified is false, or contradict an
+  explicit maintainer decision in the thread — every Blocking finding must
+  cite a `path:line` the reviewer actually read. Everything else (style,
+  test-coverage suggestions, "consider also") is **Advisory** and never gates
+  approval. On round 2+, the reviewer must first disposition every finding
+  from the prior round (resolved/not resolved/settled) before raising new
+  ones.
+- **Verdict is always requested and always rendered**, whether or not
+  `reviewLoop` is on: the AI ends its output with `VERDICT: APPROVED` or
+  `VERDICT: NEEDS REVISION` on its own line (last such line wins if more than
+  one appears); `renderVerdict()` replaces that raw line with a bold
+  human-readable form in the posted comment — `**Verdict: APPROVED**` or
+  `**Verdict: NEEDS REVISION** (N blocking)`, counting `[R<n>-B<n>]` bullets.
+  A missing verdict line is logged and treated as needs-revision.
+- Posts the review as a comment prefixed with `## Plan Review`, worktree
+  paths scrubbed (`claude.scrubWorktreePaths()`), followed by the invisible
+  `<!-- yeti-review-of:id:updatedAt -->` marker (not shown to humans)
+- Label transition depends on `reviewLoop`:
+  - **`reviewLoop` off** (default): always removes `Needs Plan Review`, adds
+    `Ready` — the human-in-the-loop workflow below.
+  - **`reviewLoop` on, verdict APPROVED**: removes `Needs Plan Review`, adds
+    `Ready`.
+  - **`reviewLoop` on, verdict NEEDS REVISION, under `maxPlanRounds`**:
+    removes `Needs Plan Review`, adds `Needs Refinement` — sends the issue
+    back to issue-refiner's label-routing (see issue-refiner's
+    `processReviewRevision`) for a targeted revision, no human involved.
+  - **`reviewLoop` on, verdict NEEDS REVISION, at `maxPlanRounds`**: posts a
+    "⚠️ Maximum plan review rounds reached" warning comment, then removes
+    `Needs Plan Review` and adds `Ready` — the loop always terminates at the
+    cap rather than cycling indefinitely.
 
-### Human-in-the-loop workflow
+### Human-in-the-loop workflow (`reviewLoop` off — the default)
 
 The adversarial review is **for the human**, not for automatic refinement.
-When plan-reviewer is enabled, the full lifecycle is:
+With `reviewLoop` off, the full lifecycle is:
 
 1. **issue-refiner** produces or refines a plan → adds `Needs Plan Review`
-2. **plan-reviewer** critiques the plan via a different AI → posts `## Plan Review` → adds `Ready`
+2. **plan-reviewer** critiques the plan via a different AI → posts `## Plan Review` (with verdict) → adds `Ready`
 3. **Human** reads both the plan and the adversarial critique, then decides:
    - **Plan is good** → add `Refined` label to start implementation
    - **Review raised valid concerns** → post feedback comments on the issue →
      issue-refiner detects unreacted comments, refines the plan, and routes it
      back through plan-reviewer for another review cycle
 
-The review does **not** automatically feed back into refinement. This is
-intentional — without a human gatekeeper, the two AIs could enter an infinite
-loop of critiquing and revising each other's plans. The `Ready` label always
-means "a human needs to look at this."
+Without a human gatekeeper, two AIs critiquing and revising each other's
+plans could loop indefinitely — `reviewLoop` off avoids that by always
+landing on `Ready` and waiting for a human. The `Ready` label always means
+"a human needs to look at this" whenever `reviewLoop` is off.
+
+### Convergent loop workflow (`reviewLoop` on)
+
+With `reviewLoop` on, the same review runs but a NEEDS REVISION verdict
+short-circuits straight back to issue-refiner instead of stopping at
+`Ready`:
+
+1. **issue-refiner** produces or refines a plan → adds `Needs Plan Review`
+2. **plan-reviewer** reviews with full thread context → posts `## Plan Review` with a verdict
+3. **APPROVED** → `Ready` (human implements or approves); **NEEDS REVISION
+   under the round cap** → `Needs Refinement`, and issue-refiner's
+   `processReviewRevision()` (see the issue-refiner section) makes a
+   targeted, in-place revision addressing every finding by ID, then re-adds
+   `Needs Plan Review` — repeating from step 2
+4. This repeats until either APPROVED, or `maxPlanRounds` review rounds
+   (counted since the most recent human comment via `countPlanRounds()`)
+   have completed, at which point plan-reviewer posts a warning and forces
+   `Ready` regardless of verdict
+5. **A human comment posted at any point outranks the loop**: issue-refiner's
+   label routing checks for unreacted human feedback first, routes it (and
+   any pending review) to a full `processRefinement()` pass instead of
+   `processReviewRevision()`, and the next `countPlanRounds()` call resets to
+   0 since rounds only count reviews posted after the last human comment
+
+No AI-to-AI loop runs unbounded: the round cap and the "don't manufacture
+findings on the final round" prompt instruction both push the loop toward
+termination.
 
 ## issue-worker
 

@@ -295,6 +295,22 @@ export async function removeWorktree(repo: Repo, wtPath: string): Promise<void> 
 }
 
 /**
+ * Strip worktree absolute-path prefixes from AI output before posting to
+ * GitHub, so file references are repo-relative instead of dead links.
+ * The generic pattern matches ~/.yeti/worktrees/<owner>/<repo>/<job>/<branch...>/
+ * where the branch segment is the yeti/<name> pair worktree branches use.
+ */
+export function scrubWorktreePaths(text: string, wtPath?: string): string {
+  let out = text;
+  if (wtPath) {
+    out = out.replaceAll(wtPath.endsWith("/") ? wtPath : wtPath + "/", "");
+  }
+  // Defensive: any other run's worktree path (different user/branch).
+  out = out.replace(/\/home\/[^/\s]+\/\.yeti\/worktrees\/[^/\s]+\/[^/\s]+\/[^/\s]+\/yeti\/[^/\s]+\//g, "");
+  return out;
+}
+
+/**
  * Start a merge of origin/<baseBranch> into the current branch.
  * Returns whether the merge was clean and, if not, the list of conflicted files.
  */
