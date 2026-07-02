@@ -15,7 +15,7 @@ import { discordStatus } from "./discord.js";
 import { VERSION } from "./version.js";
 import { isOAuthConfigured } from "./oauth.js";
 import { JOB_DESCRIPTIONS, type JobInfo } from "./job-meta.js";
-import { readBody, parseCookies, safeCompare, isAuthEnabled, getSession, requireApiAuth, sendJson } from "./http-util.js";
+import { readBody, parseCookies, safeCompare, isAuthEnabled, getSession, requireApiAuth, sendJson, tokenCookie } from "./http-util.js";
 
 /** Maps don't survive JSON.stringify — flatten to a plain object for the wire. */
 function mapToObject<V>(m: Map<string, V>): Record<string, V> {
@@ -249,7 +249,7 @@ export async function handleApi(
     }
     res.writeHead(200, {
       "Content-Type": "application/json",
-      "Set-Cookie": `yeti_token=${encodeURIComponent(token)}; HttpOnly; Secure; SameSite=Strict; Path=/`,
+      "Set-Cookie": tokenCookie(token, req),
     });
     res.end(JSON.stringify({ ok: true, username: null }));
     return;
@@ -372,7 +372,7 @@ export async function handleApi(
         writeConfig(updates);
         const newToken = config.AUTH_TOKEN;
         const headers: Record<string, string> = { "Content-Type": "application/json" };
-        if (newToken) headers["Set-Cookie"] = `yeti_token=${encodeURIComponent(newToken)}; HttpOnly; Secure; SameSite=Strict; Path=/`;
+        if (newToken) headers["Set-Cookie"] = tokenCookie(newToken, req);
         res.writeHead(200, headers);
         res.end(JSON.stringify({ saved: true, tab }));
       } catch (err) {

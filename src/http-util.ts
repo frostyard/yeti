@@ -21,6 +21,15 @@ export function safeCompare(a: string, b: string): boolean {
   return crypto.timingSafeEqual(bufA, bufB);
 }
 
+export function isSecureRequest(req: http.IncomingMessage): boolean {
+  const socket = req.socket as typeof req.socket & { encrypted?: boolean };
+  return socket.encrypted === true || req.headers["x-forwarded-proto"] === "https";
+}
+
+export function tokenCookie(token: string, req: http.IncomingMessage): string {
+  return `yeti_token=${encodeURIComponent(token)}; HttpOnly; SameSite=Strict; Path=/${isSecureRequest(req) ? "; Secure" : ""}`;
+}
+
 export function readBody(req: http.IncomingMessage, maxBytes = 1024 * 1024): Promise<string> {
   return new Promise((resolve, reject) => {
     const chunks: Buffer[] = [];
