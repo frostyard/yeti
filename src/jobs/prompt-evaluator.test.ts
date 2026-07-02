@@ -5,7 +5,7 @@ vi.mock("../config.js", () => ({
   WORK_DIR: "/tmp/yeti-promptev-test",
   SELF_REPO: "frostyard/yeti",
   JOB_AI: {},
-  repoAutonomy: (r: { autonomy?: string }) => r?.autonomy ?? "pr",
+  repoAutonomy: () => "pr",
 }));
 
 vi.mock("../log.js", () => ({

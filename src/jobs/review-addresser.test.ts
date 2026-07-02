@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { mockRepo, mockPR } from "../test-helpers.js";
 
+const { __tier } = vi.hoisted(() => ({ __tier: {} as Record<string, string> }));
 vi.mock("../config.js", () => ({
   LABELS: {
     refined: "Refined",
@@ -11,7 +12,7 @@ vi.mock("../config.js", () => ({
   // WORK_DIR is pulled in transitively by policy.ts; point it at a dir with no
   // policies/ so renderPolicy falls through to the bundled src/policies template.
   WORK_DIR: "/tmp/yeti-ra-test",
-  repoAutonomy: (r: { autonomy?: string }) => r?.autonomy ?? "pr",
+  repoAutonomy: (r: { fullName: string }) => __tier[r.fullName] ?? "pr",
 }));
 
 vi.mock("../log.js", () => ({
@@ -82,6 +83,7 @@ describe("review-addresser", () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    for (const k in __tier) delete __tier[k];
     mockGh.listPRs.mockResolvedValue([]);
     mockGh.addLabel.mockResolvedValue(undefined);
     mockGh.removeLabel.mockResolvedValue(undefined);
@@ -130,7 +132,8 @@ describe("review-addresser", () => {
   });
 
   it("autonomy below 'push' — skips repo before any worktree/AI work", async () => {
-    const advisoryRepo = { ...mockRepo(), autonomy: "advisory" as const };
+    const advisoryRepo = mockRepo();
+    __tier[advisoryRepo.fullName] = "advisory";
     const pr = mockPR({ headRefName: "yeti/fix-123" });
     mockGh.listPRs.mockResolvedValue([pr]);
 

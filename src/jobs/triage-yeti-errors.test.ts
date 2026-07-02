@@ -7,7 +7,7 @@ vi.mock("../config.js", () => ({
   // WORK_DIR is pulled in transitively by policy.ts; point it at a nonexistent
   // dir so renderPolicy falls through to the bundled src/policies template.
   WORK_DIR: "/tmp/yeti-triage-test",
-  repoAutonomy: (r: { autonomy?: string }) => r?.autonomy ?? "pr",
+  repoAutonomy: () => "pr",
 }));
 
 vi.mock("../log.js", () => ({

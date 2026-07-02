@@ -1,13 +1,14 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { mockRepo, mockPR } from "../test-helpers.js";
 
+const { __tier } = vi.hoisted(() => ({ __tier: {} as Record<string, string> }));
 vi.mock("../config.js", () => ({
   LABELS: {
     refined: "Refined",
     ready: "Ready",
     inReview: "In Review",
   },
-  repoAutonomy: (r: { autonomy?: string } | undefined) => r?.autonomy ?? "pr",
+  repoAutonomy: (r: { fullName: string } | undefined) => __tier[r?.fullName ?? ""] ?? "pr",
 }));
 
 vi.mock("../log.js", () => ({
@@ -51,10 +52,14 @@ import { reportError } from "../error-reporter.js";
 import * as log from "../log.js";
 
 describe("auto-merger", () => {
-  const repo = mockRepo({ autonomy: "automerge" as const });
+  const repo = mockRepo();
 
   beforeEach(() => {
     vi.clearAllMocks();
+    for (const k in __tier) delete __tier[k];
+    // The shared `repo` fixture drives the ~24 merge-asserting tests below;
+    // keep it at automerge tier by default so those tests exercise the merge path.
+    __tier[repo.fullName] = "automerge";
     mockGh.listPRs.mockResolvedValue([]);
     mockGh.getPRCheckStatus.mockResolvedValue("pending");
     mockGh.hasValidLGTM.mockResolvedValue(false);
@@ -167,7 +172,8 @@ describe("auto-merger", () => {
   });
 
   it("reports errors without crashing the loop", async () => {
-    const repo2 = mockRepo({ name: "test-repo-2", fullName: "test-org/test-repo-2", autonomy: "automerge" as const });
+    const repo2 = mockRepo({ name: "test-repo-2", fullName: "test-org/test-repo-2" });
+    __tier[repo2.fullName] = "automerge";
     const pr = mockPR({ author: { login: "dependabot[bot]" } });
 
     mockGh.listPRs
@@ -383,7 +389,10 @@ describe("auto-merger", () => {
   });
 
   it("skips repo below automerge tier without merging", async () => {
-    const prRepo = { ...mockRepo(), autonomy: "pr" as const };
+    const prRepo = mockRepo();
+    // Overrides the beforeEach default (automerge) for this shared fullName so
+    // this test exercises the below-tier skip path.
+    __tier[prRepo.fullName] = "pr";
     const pr = mockPR({ author: { login: "dependabot[bot]" } });
     mockGh.listPRs.mockResolvedValue([pr]);
     mockGh.getPRCheckStatus.mockResolvedValue("passing");

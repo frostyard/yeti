@@ -14,7 +14,7 @@ const mockConfig = vi.hoisted(() => ({
   REVIEW_LOOP: false,
   MAX_PLAN_ROUNDS: 3,
   WORK_DIR: "/tmp/yeti-pr-test",
-  repoAutonomy: (r: { autonomy?: string } | undefined) => r?.autonomy ?? "pr",
+  repoAutonomy: () => "pr",
 }));
 
 vi.mock("../config.js", () => mockConfig);

@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { mockRepo, mockIssue, mockPR } from "../test-helpers.js";
 import * as planParser from "../plan-parser.js";
 
+const { __tier } = vi.hoisted(() => ({ __tier: {} as Record<string, string> }));
 vi.mock("../config.js", () => ({
   LABELS: {
     refined: "Refined",
@@ -13,7 +14,7 @@ vi.mock("../config.js", () => ({
   // WORK_DIR is pulled in transitively by policy.ts; point it at a dir with no
   // policies/ so renderPolicy falls through to the bundled src/policies template.
   WORK_DIR: "/tmp/yeti-iw-test",
-  repoAutonomy: (r: { autonomy?: string }) => r?.autonomy ?? "pr",
+  repoAutonomy: (r: { fullName: string }) => __tier[r.fullName] ?? "pr",
 }));
 
 vi.mock("../log.js", () => ({
@@ -95,6 +96,7 @@ describe("issue-worker", () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    for (const k in __tier) delete __tier[k];
     mockClaude.createWorktree.mockResolvedValue("/tmp/worktree");
     mockClaude.enqueue.mockImplementation((fn: () => Promise<string>) => fn());
     mockClaude.resolveEnqueue.mockReturnValue(mockClaude.enqueue);
@@ -484,7 +486,8 @@ describe("issue-worker", () => {
 
   describe("autonomy pre-flight gate", () => {
     it("skips before worktree/AI when repo tier is below 'createPR' (advisory)", async () => {
-      const advisoryRepo = { ...mockRepo(), autonomy: "advisory" as const };
+      const advisoryRepo = mockRepo();
+      __tier[advisoryRepo.fullName] = "advisory";
       // No listIssuesByLabel stub: the hoisted gate skips before listing, and a
       // queued mockResolvedValueOnce would leak to the next test (clearAllMocks
       // doesn't drain "once" queues).

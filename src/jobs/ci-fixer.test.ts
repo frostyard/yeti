@@ -3,10 +3,11 @@ import { mockRepo, mockPR } from "../test-helpers.js";
 import { ShutdownError } from "../shutdown.js";
 import type * as gh from "../github.js";
 
+const { __tier } = vi.hoisted(() => ({ __tier: {} as Record<string, string> }));
 vi.mock("../config.js", () => ({
   JOB_AI: {},
   WORK_DIR: "/tmp/yeti-cifix-test",
-  repoAutonomy: (r: { autonomy?: string } | undefined) => r?.autonomy ?? "pr",
+  repoAutonomy: (r: { fullName: string } | undefined) => __tier[r?.fullName ?? ""] ?? "pr",
 }));
 
 const mockLog = vi.hoisted(() => ({
@@ -95,6 +96,7 @@ describe("ci-fixer", () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    for (const k in __tier) delete __tier[k];
     mockGh.listPRs.mockResolvedValue([]);
     mockGh.mergePR.mockResolvedValue(undefined);
     mockGh.rerunWorkflow.mockResolvedValue(undefined);
@@ -156,7 +158,8 @@ describe("ci-fixer", () => {
   });
 
   it("autonomy below 'push' — skips repo before any worktree/AI work", async () => {
-    const advisoryRepo = { ...mockRepo(), autonomy: "advisory" as const };
+    const advisoryRepo = mockRepo();
+    __tier[advisoryRepo.fullName] = "advisory";
     const pr = mockPR();
     mockGh.listPRs.mockResolvedValue([pr]);
     mockGh.getFailingCheck.mockResolvedValue({
