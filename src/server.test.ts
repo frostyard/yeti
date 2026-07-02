@@ -491,6 +491,16 @@ describe("JSON API (auth enabled)", () => {
     expect(JSON.parse(bad.body)).toEqual({ error: "invalid_token" });
   });
 
+  it("POST /api/login over HTTP sets a browser-usable non-secure token cookie", async () => {
+    const res = await request(server, "POST", "/api/login", {
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ token: "test-secret-token" }),
+    });
+    const cookie = res.headers["set-cookie"]?.[0] ?? "";
+    expect(cookie).toContain("yeti_token=test-secret-token");
+    expect(cookie).not.toContain(" Secure");
+  });
+
   it("POST /api/logout clears cookies", async () => {
     const res = await request(server, "POST", "/api/logout");
     expect(res.status).toBe(200);
