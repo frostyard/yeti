@@ -93,13 +93,12 @@ async function processIssue(repo: Repo, issue: gh.Issue, planComment: gh.IssueCo
       return;
     }
 
-    const commentBody = renderVerdict(reviewOutput);
-    await gh.commentOnIssue(fullName, issue.number, `${REVIEW_HEADER}\n\n${stripLearningsDeclaration(commentBody)}`);
+    const rendered = renderVerdict(stripLearningsDeclaration(reviewOutput));
+    const scrubbed = claude.scrubWorktreePaths(rendered, wtPath);
+    const marker = reviewMarker(planComment.id, planComment.updatedAt);
+    await gh.commentOnIssue(fullName, issue.number, `${REVIEW_HEADER}\n\n${scrubbed}\n\n${marker}`);
     log.info(`[plan-reviewer] Posted review for ${fullName}#${issue.number}`);
     notify({ jobName: "plan-reviewer", message: `Review posted for ${fullName}#${issue.number}`, url: gh.issueUrl(fullName, issue.number) });
-
-    // Mark plan comment as processed
-    await gh.addReaction(fullName, planComment.id, "+1");
 
     if (REVIEW_LOOP) {
       const parsed = parseVerdict(reviewOutput);
@@ -150,7 +149,6 @@ export async function run(repos: Repo[]): Promise<void> {
     if (isRateLimited()) break;
     try {
       const issues = await gh.listOpenIssues(repo.fullName);
-      const selfLogin = await gh.getSelfLogin();
 
       for (const issue of issues) {
         if (isRateLimited()) break;
@@ -170,17 +168,9 @@ export async function run(repos: Repo[]): Promise<void> {
 
         if (!planComment) continue;
 
-        // Check if we already reviewed this plan (thumbsup reaction from us)
-        try {
-          const reactions = await gh.getCommentReactions(repo.fullName, planComment.id);
-          const alreadyReviewed = reactions.some(
-            (r) => r.user.login === selfLogin && r.content === "+1",
-          );
-          if (alreadyReviewed) continue;
-        } catch {
-          // If we can't check reactions, skip to be safe
-          continue;
-        }
+        // Skip if this exact plan version already has a review (identity-independent,
+        // re-arms automatically when the plan comment is edited in place).
+        if (findReviewOfPlanVersion(comments, planComment.id, planComment.updatedAt)) continue;
 
         gh.populateQueueCache("needs-plan-review", repo.fullName, {
           number: issue.number,

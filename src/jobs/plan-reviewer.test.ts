@@ -67,6 +67,7 @@ const { mockGh, mockClaude, mockDb } = vi.hoisted(() => ({
     runAI: vi.fn(),
     resolveEnqueue: vi.fn(),
     randomSuffix: vi.fn().mockReturnValue("ab12"),
+    scrubWorktreePaths: (text: string) => text,
   },
   mockDb: {
     recordTaskStart: vi.fn().mockReturnValue(1),
@@ -86,6 +87,7 @@ import { reportError } from "../error-reporter.js";
 describe("plan-reviewer", () => {
   const repo = mockRepo();
   const planCommentBody = "<!-- yeti-automated -->## Implementation Plan\n\nDo the thing step by step";
+  const planComment = { id: 501, body: planCommentBody, login: "yeti-bot", updatedAt: "2026-07-01T10:00:00Z" };
 
   beforeEach(() => {
     vi.clearAllMocks();
@@ -115,9 +117,7 @@ describe("plan-reviewer", () => {
       labels: [{ name: "Needs Plan Review" }],
     });
     mockGh.listOpenIssues.mockResolvedValueOnce([issue]);
-    mockGh.getIssueComments.mockResolvedValue([
-      { id: 501, body: planCommentBody, login: "yeti-bot" },
-    ]);
+    mockGh.getIssueComments.mockResolvedValue([planComment]);
     mockGh.getCommentReactions.mockResolvedValue([]);
 
     await run([repo]);
@@ -139,8 +139,13 @@ describe("plan-reviewer", () => {
       expect.stringContaining("## Plan Review"),
     );
 
-    // Reacts thumbsup to the plan comment
-    expect(mockGh.addReaction).toHaveBeenCalledWith(repo.fullName, 501, "+1");
+    // Marks the reviewed plan version via a marker in the posted comment, not a reaction
+    expect(mockGh.commentOnIssue).toHaveBeenCalledWith(
+      repo.fullName,
+      issue.number,
+      expect.stringContaining("<!-- yeti-review-of:501:2026-07-01T10:00:00Z -->"),
+    );
+    expect(mockGh.addReaction).not.toHaveBeenCalled();
 
     // Removes Needs Plan Review label
     expect(mockGh.removeLabel).toHaveBeenCalledWith(repo.fullName, issue.number, "Needs Plan Review");
@@ -172,24 +177,57 @@ describe("plan-reviewer", () => {
     expect(mockGh.commentOnIssue).not.toHaveBeenCalled();
   });
 
-  it("skips already-reviewed plans (thumbsup reaction exists)", async () => {
-    const issue = mockIssue({
-      body: "Test issue body",
-      labels: [{ name: "Needs Plan Review" }],
-    });
+  it("skips a plan version that already has a review marker", async () => {
+    const issue = mockIssue({ labels: [{ name: "Needs Plan Review" }] });
     mockGh.listOpenIssues.mockResolvedValueOnce([issue]);
     mockGh.getIssueComments.mockResolvedValue([
-      { id: 501, body: planCommentBody, login: "yeti-bot" },
-    ]);
-    // Plan comment already has a thumbsup from self
-    mockGh.getCommentReactions.mockResolvedValue([
-      { user: { login: "yeti-bot[bot]" }, content: "+1" },
+      planComment,
+      {
+        id: 601,
+        body: `<!-- yeti-automated -->## Plan Review\n\nold\n\n<!-- yeti-review-of:501:2026-07-01T10:00:00Z -->`,
+        login: "someone-else[bot]", // identity-independent: not the current selfLogin
+        updatedAt: "",
+      },
     ]);
 
     await run([repo]);
 
-    expect(mockClaude.createWorktree).not.toHaveBeenCalled();
-    expect(mockGh.commentOnIssue).not.toHaveBeenCalled();
+    expect(mockClaude.runAI).not.toHaveBeenCalled();
+  });
+
+  it("re-reviews when the plan was edited after the last review (marker mismatch)", async () => {
+    const issue = mockIssue({ labels: [{ name: "Needs Plan Review" }] });
+    mockGh.listOpenIssues.mockResolvedValueOnce([issue]);
+    mockGh.getIssueComments.mockResolvedValue([
+      { ...planComment, updatedAt: "2026-07-02T09:00:00Z" },
+      {
+        id: 601,
+        body: `<!-- yeti-automated -->## Plan Review\n\nold\n\n<!-- yeti-review-of:501:2026-07-01T10:00:00Z -->`,
+        login: "yeti-bot",
+        updatedAt: "",
+      },
+    ]);
+    mockClaude.runAI.mockResolvedValue("Fresh look.\nVERDICT: APPROVED");
+
+    await run([repo]);
+
+    expect(mockClaude.runAI).toHaveBeenCalled();
+  });
+
+  it("posts the review with a marker for the reviewed plan version", async () => {
+    const issue = mockIssue({ labels: [{ name: "Needs Plan Review" }] });
+    mockGh.listOpenIssues.mockResolvedValueOnce([issue]);
+    mockGh.getIssueComments.mockResolvedValue([planComment]);
+    mockClaude.runAI.mockResolvedValue("Fine.\nVERDICT: APPROVED");
+
+    await run([repo]);
+
+    expect(mockGh.commentOnIssue).toHaveBeenCalledWith(
+      repo.fullName,
+      issue.number,
+      expect.stringContaining("<!-- yeti-review-of:501:2026-07-01T10:00:00Z -->"),
+    );
+    expect(mockGh.addReaction).not.toHaveBeenCalled();
   });
 
   it("skips issues with Refined label", async () => {
@@ -211,9 +249,7 @@ describe("plan-reviewer", () => {
       labels: [{ name: "Needs Plan Review" }],
     });
     mockGh.listOpenIssues.mockResolvedValueOnce([issue]);
-    mockGh.getIssueComments.mockResolvedValue([
-      { id: 501, body: planCommentBody, login: "yeti-bot" },
-    ]);
+    mockGh.getIssueComments.mockResolvedValue([planComment]);
     mockGh.getCommentReactions.mockResolvedValue([]);
 
     await run([repo]);
@@ -242,9 +278,7 @@ describe("plan-reviewer", () => {
       labels: [{ name: "Needs Plan Review" }],
     });
     mockGh.listOpenIssues.mockResolvedValueOnce([issue]);
-    mockGh.getIssueComments.mockResolvedValue([
-      { id: 501, body: planCommentBody, login: "yeti-bot" },
-    ]);
+    mockGh.getIssueComments.mockResolvedValue([planComment]);
     mockGh.getCommentReactions.mockResolvedValue([]);
 
     await run([repo]);
@@ -264,9 +298,7 @@ describe("plan-reviewer", () => {
       labels: [{ name: "Needs Plan Review" }],
     });
     mockGh.listOpenIssues.mockResolvedValueOnce([issue]);
-    mockGh.getIssueComments.mockResolvedValue([
-      { id: 501, body: planCommentBody, login: "yeti-bot" },
-    ]);
+    mockGh.getIssueComments.mockResolvedValue([planComment]);
     mockGh.getCommentReactions.mockResolvedValue([]);
     mockClaude.runAI.mockResolvedValue("");
 
@@ -287,9 +319,7 @@ describe("plan-reviewer", () => {
       labels: [{ name: "Needs Plan Review" }],
     });
     mockGh.listOpenIssues.mockResolvedValueOnce([issue]);
-    mockGh.getIssueComments.mockResolvedValue([
-      { id: 501, body: planCommentBody, login: "yeti-bot" },
-    ]);
+    mockGh.getIssueComments.mockResolvedValue([planComment]);
     mockGh.getCommentReactions.mockResolvedValue([]);
     mockClaude.runAI.mockRejectedValueOnce(
       new Error("Codex exited with code 2: error: unexpected argument '--approval-mode' found"),
@@ -322,8 +352,8 @@ describe("plan-reviewer", () => {
       });
       mockGh.listOpenIssues.mockResolvedValueOnce([issue]);
 
-      const comments: Array<{ id: number; body: string; login: string }> = [
-        { id: 501, body: planCommentBody, login: "yeti-bot" },
+      const comments: Array<{ id: number; body: string; login: string; updatedAt: string }> = [
+        planComment,
       ];
       // Add existing review comments to simulate prior rounds
       for (let i = 0; i < existingReviewComments; i++) {
@@ -331,6 +361,7 @@ describe("plan-reviewer", () => {
           id: 600 + i,
           body: "<!-- yeti-automated -->## Plan Review\n\nPrior review",
           login: "yeti-bot",
+          updatedAt: "",
         });
       }
       mockGh.getIssueComments.mockResolvedValue(comments);
@@ -352,25 +383,22 @@ describe("plan-reviewer", () => {
       );
     });
 
-    it("does not add verdict instruction when review loop is disabled", async () => {
+    it("includes the verdict instruction even when review loop is disabled", async () => {
       mockConfig.REVIEW_LOOP = false;
-      const issue = mockIssue({
-        body: "Add feature X",
-        labels: [{ name: "Needs Plan Review" }],
-      });
+      const issue = mockIssue({ labels: [{ name: "Needs Plan Review" }] });
       mockGh.listOpenIssues.mockResolvedValueOnce([issue]);
-      mockGh.getIssueComments.mockResolvedValue([
-        { id: 501, body: planCommentBody, login: "yeti-bot" },
-      ]);
-      mockGh.getCommentReactions.mockResolvedValue([]);
+      mockGh.getIssueComments.mockResolvedValue([planComment]);
+      mockClaude.runAI.mockResolvedValue("Fine.\nVERDICT: APPROVED");
 
       await run([repo]);
 
       expect(mockClaude.runAI).toHaveBeenCalledWith(
-        expect.not.stringContaining("VERDICT"),
+        expect.stringContaining("VERDICT:"),
         "/tmp/worktree",
         { backend: "copilot" },
       );
+      // Loop off: labels still go straight to Ready
+      expect(mockGh.addLabel).toHaveBeenCalledWith(repo.fullName, issue.number, "Ready");
     });
 
     it("approves: adds Ready label when verdict is APPROVED", async () => {
@@ -383,20 +411,44 @@ describe("plan-reviewer", () => {
       expect(mockGh.addLabel).not.toHaveBeenCalledWith(repo.fullName, issue.number, "Needs Refinement");
     });
 
-    it("strips verdict line from posted comment", async () => {
-      setupIssueWithReview("Plan is solid.\nVERDICT: APPROVED");
+    it("renders the verdict human-readably in the posted comment", async () => {
+      setupIssueWithReview("### Blocking\n- [R1-B1] bad thing (src/x.ts:1)\n\nVERDICT: NEEDS REVISION");
 
       await run([repo]);
 
       expect(mockGh.commentOnIssue).toHaveBeenCalledWith(
         repo.fullName,
         1,
-        expect.not.stringContaining("VERDICT"),
+        expect.stringContaining("**Verdict: NEEDS REVISION** (1 blocking)"),
       );
       expect(mockGh.commentOnIssue).toHaveBeenCalledWith(
         repo.fullName,
         1,
-        expect.stringContaining("Plan is solid."),
+        expect.not.stringMatching(/^VERDICT:/m),
+      );
+    });
+
+    it("round budget resets after a human comment", async () => {
+      mockConfig.MAX_PLAN_ROUNDS = 3;
+      const issue = mockIssue({ labels: [{ name: "Needs Plan Review" }] });
+      mockGh.listOpenIssues.mockResolvedValueOnce([issue]);
+      // 2 old reviews, then a human comment, then the current plan: rounds-in-loop = 0
+      mockGh.getIssueComments.mockResolvedValue([
+        { id: 601, body: "<!-- yeti-automated -->## Plan Review\n\nold 1", login: "yeti-bot", updatedAt: "" },
+        { id: 602, body: "<!-- yeti-automated -->## Plan Review\n\nold 2", login: "yeti-bot", updatedAt: "" },
+        { id: 603, body: "human weighs in", login: "bsherman", updatedAt: "" },
+        planComment,
+      ]);
+      mockClaude.runAI.mockResolvedValue("Still broken.\nVERDICT: NEEDS REVISION");
+
+      await run([repo]);
+
+      // Not at max: kicks back to refinement instead of forcing Ready
+      expect(mockGh.addLabel).toHaveBeenCalledWith(repo.fullName, issue.number, "Needs Refinement");
+      expect(mockGh.commentOnIssue).not.toHaveBeenCalledWith(
+        repo.fullName,
+        issue.number,
+        expect.stringContaining("Maximum plan review rounds"),
       );
     });
 
