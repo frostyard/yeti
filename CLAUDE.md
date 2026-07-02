@@ -16,23 +16,30 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## Build & Run Commands
 
 ```sh
-npm ci                  # install dependencies
-npm run build           # compile TypeScript (tsc → dist/)
-npm run typecheck       # type-check only, no emit (tsc --noEmit)
-npm run dev             # run with tsx (development)
-npm start               # run compiled output (node dist/main.ts)
-npm test                # typecheck + run all tests (mirrors CI)
+npm ci                  # install dependencies (includes the web/ SPA toolchain, dev-only)
+npm run build           # compile daemon (tsc → dist/) AND build the SPA (vite → dist/public/)
+npm run build:server    # compile only the daemon (tsc)
+npm run build:web       # build only the SPA (vite → dist/public/)
+npm run typecheck       # type-check the daemon (tsc --noEmit)
+npm run typecheck:web   # type-check the SPA (tsc -p web/tsconfig.json)
+npm run dev             # run the daemon with tsx (development)
+npm run dev:web         # Vite dev server on :5173, proxying /api,/auth,/webhooks,/health → :9384
+npm start               # run compiled output (node dist/main.js), serves dist/public
+npm test                # typecheck (daemon + web) + run all tests (mirrors CI)
 npm run test:watch      # run tests in watch mode (no typecheck, fast TDD)
-npx vitest run src/scheduler.test.ts          # run a single test file
+npx vitest run src/scheduler.test.ts          # run a single daemon test file
+npx vitest run --project web                  # run only the SPA (jsdom) tests
 npx vitest run -t "returns ms until"          # run tests matching a name pattern
 ```
+
+**Local UI development**: run `npm run dev` (daemon on :9384) and `npm run dev:web` (Vite on :5173) together; open :5173. The daemon must have `initDb()`'d state and jobs registered. `vitest.config.ts` defines two projects: `server` (node, `src/**`) and `web` (jsdom, `web/**`).
 
 ## Development
 
 - **TDD** - Use TDD (test driven development) for all code changes
 - **Worktrees** - Use git worktrees
 - **Branching** - Before making any changes, create a branch. One branch per plan.
-- **Dashboard awareness** — Any change to config fields, job behavior, queue categories, or status data must be reflected in the web dashboard (`src/server.ts` and `src/pages/`). Before considering a task complete, check whether the dashboard needs updates: new config fields need form controls in `src/pages/config.ts`, new job states or queue categories need display in `src/pages/dashboard.ts` or `src/pages/queue.ts`, and changes to log/task schemas need corresponding updates in `src/pages/logs.ts`.
+- **Dashboard awareness** — The dashboard is a React + Vite SPA in `web/` served by the daemon; the daemon exposes data over a JSON API in `src/api.ts` and serves the built SPA via `src/static.ts`. Any change to config fields, job behavior, queue categories, or status data must be reflected in **both** the API (`src/api.ts` — add/extend the relevant `/api/*` payload) and the SPA (`web/src/` — the matching route in `web/src/routes/` and the shared types in `web/src/lib/types.ts`). New config fields need form controls in `web/src/routes/Config.tsx` **and** validation/whitelisting in `buildConfigUpdate()` in `src/api.ts`; new job states or queue categories need display in `web/src/routes/Jobs.tsx` / `web/src/routes/Queue.tsx` (and `web/src/lib/categories.ts`); log/task schema changes need updates in `web/src/routes/Logs.tsx`/`LogDetail.tsx`/`IssueLogs.tsx`.
 
 ## Architecture
 
@@ -49,7 +56,10 @@ Yeti is a self-hosted GitHub automation daemon that polls repositories on timers
 - **`db.ts`** — SQLite (`~/.yeti/yeti.db`) with tables: `tasks`, `job_runs`, `job_logs`, `notifications`. Log capture via `AsyncLocalStorage` run context.
 - **`oauth.ts`** — GitHub OAuth flow for dashboard sign-in. Handles authorization URL generation, code-for-token exchange, org membership verification, and HMAC-signed stateless session cookies (24h expiry). Zero dependencies beyond Node.js `crypto` and `fetch()`. Active when `githubAppClientId`, `githubAppClientSecret`, and `externalUrl` are all configured.
 - **`webhooks.ts`** — GitHub webhook handler. Receives events via `POST /webhooks/github` with HMAC-SHA256 verification (`X-Hub-Signature-256`). Routes `issues.labeled`/`issues.unlabeled` to job triggers and queue cache updates, `check_run.completed` (failure/timed_out with PR association) to ci-fixer, `pull_request_review.submitted` (approved, on yeti/issue-*/yeti/improve-*/dependabot PRs) to auto-merger, and `pull_request.closed` to queue cache removal via `removeQueueItem`. Uses `scheduler.triggerJob()` — jobs run their normal scan logic, just triggered immediately. `isRepoAllowed()` mirrors `filterRepos()` semantics including `SELF_REPO` exception. Webhooks supplement polling (hybrid model), never replace it.
-- **`server.ts`** — HTTP dashboard with job status, jobs detail page (`/jobs`), work queue, log viewer, config editor, notifications page (`/notifications`), SSE endpoint (`/notifications/stream`), webhook endpoint (`/webhooks/github`), and OAuth routes (`/auth/github`, `/auth/callback`, `/auth/logout`). Auth is enabled when `authToken` is set or OAuth is configured (either or both). `createServer(scheduler, allJobs)` accepts job metadata for the Jobs page. `closeSSEConnections()` is exported for graceful shutdown.
+- **`server.ts`** — HTTP entrypoint. Serves the webhook endpoint (`/webhooks/github`), the notification SSE stream (`/api/notifications/stream`), OAuth routes (`/auth/github`, `/auth/callback`, `/auth/logout`), `GET /health`, delegates everything under `/api/*` to `handleApi` (`src/api.ts`), and finally serves the built SPA + client-side-routing fallback via `src/static.ts`. Auth is enabled when `authToken` is set or OAuth is configured (either or both). `createServer(scheduler, allJobs)` accepts job metadata for `/api/jobs`. `closeSSEConnections()` is exported for graceful shutdown.
+- **`api.ts`** — JSON API for the SPA. `handleApi()` routes `/api/*`: `GET /api/session` (auth probe, never 401s), `GET /api/overview|jobs|queue|runs|runs/:id|runs/:id/tail|runs/issue|notifications|config|repos`, and `POST /api/login|logout|jobs/:name/{trigger,pause}|tasks/cancel|queue/{merge,skip,unskip,prioritize,deprioritize}|repos|config`. `requireApiAuth` (from `src/http-util.ts`) returns JSON 401 (not an HTML redirect). Maps (`getLogsForRuns`/`getWorkItemsForRuns`) are flattened to objects before serialization.
+- **`static.ts`** — Dependency-free static file server for the built SPA (`dist/public`). Hashed `/assets/*` are cached `immutable`; `index.html` is `no-cache` (deploys hot-swap bundles); unknown non-asset GET paths fall back to `index.html` for client-side routing; missing assets 404.
+- **`http-util.ts`** — Shared cookie/body parsing, `safeCompare`, `getSession`, and `requireApiAuth`. **`format.ts`** / **`job-meta.ts`** — pure formatting helpers and `JobInfo`/`JOB_DESCRIPTIONS`, shared by the API and the SPA (ported into `web/src/lib/format.ts`).
 - **`error-reporter.ts`** — Deduplicating error reporter: logs + Discord + GitHub issues (`[yeti-error]`). 30-min cooldown per fingerprint. Filters `ShutdownError` and `RateLimitError`.
 - **`discord.ts`** — Discord bot integration for notifications and job control commands. Uses discord.js. Supports GitHub commands: issue creation (`!yeti issue`), issue/PR analysis via Claude (`!yeti look`), labeling issues as Refined (`!yeti assign`), and listing items needing human attention (`!yeti for-me`). Repos are short names scoped to the configured GitHub org.
 - **`notify.ts`** — Notification dispatcher. Exports `Notification` interface, `NotificationLevel` type, and `notificationEmitter` (EventEmitter). `notify(n: Notification)` persists to the `notifications` DB table, emits on `notificationEmitter` for SSE fan-out, and forwards to Discord.
@@ -87,10 +97,10 @@ Tests are co-located (`*.test.ts` next to source). Heavy mocking of external bou
 
 ## Cross-Cutting Concerns
 
-After any change to `src/config.ts` (new config fields, removed fields, env var changes), update both `deploy/install.sh` **and** `src/pages/config.ts`.
+After any change to `src/config.ts` (new config fields, removed fields, env var changes), update `deploy/install.sh`, the `buildConfigUpdate()` whitelist in `src/api.ts`, **and** the config form in `web/src/routes/Config.tsx`.
 
-After any change to job behavior or queue categories, review `src/pages/dashboard.ts` and `src/pages/queue.ts`.
+After any change to job behavior or queue categories, review the `/api/jobs` and `/api/queue` payloads in `src/api.ts` and the matching routes in `web/src/routes/` (`Jobs.tsx`, `Queue.tsx`, `Overview.tsx`) plus `web/src/lib/categories.ts`.
 
-After adding or changing API routes in `src/server.ts`, ensure corresponding page builders in `src/pages/` are updated.
+After adding or changing API routes in `src/api.ts`, update the typed client in `web/src/lib/api.ts`, the response types in `web/src/lib/types.ts`, and the query hooks in `web/src/lib/queries.ts`.
 
 Also review `deploy/deploy.sh` if the deployment lifecycle changes.
