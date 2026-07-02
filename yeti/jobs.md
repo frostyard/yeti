@@ -94,15 +94,20 @@ of three paths per issue, in priority order:
    (blocking)` with no revised plan, that block is posted verbatim as a
    comment and no label is added (waits for a human). Otherwise: removes
    `Needs Refinement`, adds `Needs Plan Review` — sending the issue back
-   through plan-reviewer for the next round.
+   through plan-reviewer for the next round. If Claude returns empty output,
+   the task fails and the unchanged labels cause the next scan to retry, but
+   after 3 consecutive empty review-revision outputs for the same issue the
+   job reports an error, removes `Needs Refinement`, adds `Ready`, and posts a
+   warning comment so a human takes over; the streak is counted from task
+   history and resets after a non-empty task or a prior escalation.
 3. **Neither** (the label was re-added with no new comment and no pending
    review) → `processIssue()`, the same fresh-planning path as when no plan
    exists — a deliberate "start over" escape hatch for a human who wants a
    from-scratch replan rather than an incremental revision.
 
-Both `processRefinement` and `processReviewRevision` remove the
-`Needs Refinement` label whether or not the resulting plan is actionable —
-an issue with only clarifying questions is left with no work-triggering
+Both `processRefinement` and non-empty `processReviewRevision` runs remove
+the `Needs Refinement` label whether or not the resulting plan is actionable
+— an issue with only clarifying questions is left with no work-triggering
 label at all, waiting for a human answer.
 
 ### Refinement (unreacted human comments after plan)
@@ -776,4 +781,3 @@ Unlike other PR-creating jobs, learning-consolidator does not invoke
 `enforceLearnings()` on itself — its own AI pass edits Yeti's policies/docs
 directly rather than doing general-purpose repo work, so there is no
 work-session learning to gate.
-
