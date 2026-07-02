@@ -407,6 +407,43 @@ export function getConfigForDisplay(): Record<string, unknown> {
   return display;
 }
 
+// Maps a config field to the env var that overrides it. When the env var is set,
+// it wins over ~/.yeti/config.json, so the dashboard must show that field as locked.
+export const ENV_OVERRIDE_MAP: Readonly<Record<string, string>> = {
+  githubOwners: "YETI_GITHUB_OWNERS",
+  selfRepo: "YETI_SELF_REPO",
+  port: "PORT",
+  discordBotToken: "YETI_DISCORD_BOT_TOKEN",
+  discordChannelId: "YETI_DISCORD_CHANNEL_ID",
+  discordAllowedUsers: "YETI_DISCORD_ALLOWED_USERS",
+  authToken: "YETI_AUTH_TOKEN",
+  maxClaudeWorkers: "YETI_MAX_CLAUDE_WORKERS",
+  claudeTimeoutMs: "YETI_CLAUDE_TIMEOUT_MS",
+  maxCopilotWorkers: "YETI_MAX_COPILOT_WORKERS",
+  copilotTimeoutMs: "YETI_COPILOT_TIMEOUT_MS",
+  maxCodexWorkers: "YETI_MAX_CODEX_WORKERS",
+  codexTimeoutMs: "YETI_CODEX_TIMEOUT_MS",
+  logLevel: "YETI_LOG_LEVEL",
+  allowedRepos: "YETI_ALLOWED_REPOS",
+  includeForks: "YETI_INCLUDE_FORKS",
+  githubAppId: "YETI_GITHUB_APP_ID",
+  githubAppInstallationId: "YETI_GITHUB_APP_INSTALLATION_ID",
+  githubAppPrivateKeyPath: "YETI_GITHUB_APP_PRIVATE_KEY_PATH",
+  githubAppClientId: "YETI_GITHUB_APP_CLIENT_ID",
+  githubAppClientSecret: "YETI_GITHUB_APP_CLIENT_SECRET",
+  externalUrl: "YETI_EXTERNAL_URL",
+  webhookSecret: "YETI_WEBHOOK_SECRET",
+};
+
+/** Returns { configField: ENV_VAR } for env vars currently set (i.e. locking that field). */
+export function getEnvOverrides(): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const [field, envVar] of Object.entries(ENV_OVERRIDE_MAP)) {
+    if (process.env[envVar] !== undefined) out[field] = envVar;
+  }
+  return out;
+}
+
 export function writeConfig(updates: Partial<ConfigFile>): void {
   let existing: ConfigFile = {};
   try {

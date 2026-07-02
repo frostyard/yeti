@@ -160,6 +160,12 @@ export interface NotificationRow {
   createdAt: string;
 }
 
+export interface ConfigResponse {
+  values: Record<string, unknown>;
+  /** field name → env var that currently locks it. */
+  envOverrides: Record<string, string>;
+}
+
 export interface Repo {
   owner: string;
   name: string;

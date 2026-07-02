@@ -23,7 +23,9 @@ const toList = (s: string) => s.split(",").map((x) => x.trim()).filter(Boolean);
 const isMasked = (v: unknown) => typeof v === "string" && v.length > 0 && v !== "Not configured";
 
 export function Config() {
-  const { data: cfg, isLoading } = useConfig();
+  const { data, isLoading } = useConfig();
+  const cfg = data?.values;
+  const env = data?.envOverrides ?? {};
   const save = useSaveConfig();
   const [params, setParams] = useSearchParams();
   const tab = params.get("tab") ?? "general";
@@ -60,6 +62,7 @@ export function Config() {
 
   if (isLoading || !cfg) return <Skeleton className="h-64" />;
 
+  const lock = (field: string): string | undefined => env[field];
   const set = (k: string, v: unknown) => setDraft((d) => ({ ...d, [k]: v }));
   const setNested = (parent: string, k: string, v: number) =>
     setDraft((d) => ({ ...d, [parent]: { ...(d[parent] as Record<string, number>), [k]: v } }));
@@ -92,6 +95,8 @@ export function Config() {
     };
     if (d.discordBotToken) payload.discordBotToken = d.discordBotToken;
     if (d.authToken) payload.authToken = d.authToken;
+    // Don't submit env-locked fields (the server ignores them anyway).
+    for (const field of Object.keys(env)) delete payload[field];
     await save.mutateAsync(payload);
     setSaved(true);
     setTimeout(() => setSaved(false), 2500);
@@ -113,10 +118,10 @@ export function Config() {
       <Tabs value={tab} onValueChange={(v) => setParams({ tab: v }, { replace: true })} tabs={TABS}>
         <TabPanel value="general">
           <Card className="grid grid-cols-1 gap-4 p-4 md:grid-cols-2">
-            <Field label="GitHub owners (comma-separated)"><TextInput value={draft.githubOwners as string ?? ""} onChange={(e) => set("githubOwners", e.target.value)} /></Field>
-            <Field label="Self repo"><TextInput value={draft.selfRepo as string ?? ""} onChange={(e) => set("selfRepo", e.target.value)} /></Field>
-            <Field label="Log level">
-              <SelectInput value={draft.logLevel as string} onChange={(e) => set("logLevel", e.target.value)}>
+            <Field label="GitHub owners (comma-separated)" envVar={lock("githubOwners")}><TextInput value={draft.githubOwners as string ?? ""} disabled={!!lock("githubOwners")} onChange={(e) => set("githubOwners", e.target.value)} /></Field>
+            <Field label="Self repo" envVar={lock("selfRepo")}><TextInput value={draft.selfRepo as string ?? ""} disabled={!!lock("selfRepo")} onChange={(e) => set("selfRepo", e.target.value)} /></Field>
+            <Field label="Log level" envVar={lock("logLevel")}>
+              <SelectInput value={draft.logLevel as string} disabled={!!lock("logLevel")} onChange={(e) => set("logLevel", e.target.value)}>
                 {LOG_LEVELS.map((l) => <option key={l} value={l}>{l}</option>)}
               </SelectInput>
             </Field>
@@ -124,9 +129,12 @@ export function Config() {
             <Field label="Log retention (days)"><TextInput type="number" value={String(draft.logRetentionDays ?? 0)} onChange={(e) => set("logRetentionDays", e.target.value)} /></Field>
             <Field label="Log retention (per job)"><TextInput type="number" value={String(draft.logRetentionPerJob ?? 0)} onChange={(e) => set("logRetentionPerJob", e.target.value)} /></Field>
             <Field label="Max plan rounds"><TextInput type="number" value={String(draft.maxPlanRounds ?? 3)} onChange={(e) => set("maxPlanRounds", e.target.value)} /></Field>
-            <div className="flex items-end gap-6">
-              <Toggle label="Include forks" checked={!!draft.includeForks} onChange={(v) => set("includeForks", v)} />
-              <Toggle label="Review loop" checked={!!draft.reviewLoop} onChange={(v) => set("reviewLoop", v)} />
+            <div className="flex flex-col gap-1">
+              <div className="flex items-end gap-6">
+                <Toggle label="Include forks" checked={!!draft.includeForks} disabled={!!lock("includeForks")} onChange={(v) => set("includeForks", v)} />
+                <Toggle label="Review loop" checked={!!draft.reviewLoop} onChange={(v) => set("reviewLoop", v)} />
+              </div>
+              {lock("includeForks") && <span className="text-[11px] text-warning">Include forks set via env var {lock("includeForks")}.</span>}
             </div>
           </Card>
         </TabPanel>
@@ -154,29 +162,29 @@ export function Config() {
 
         <TabPanel value="ai">
           <Card className="grid grid-cols-1 gap-4 p-4 md:grid-cols-3">
-            <Field label="Max Claude workers"><TextInput type="number" value={String(draft.maxClaudeWorkers ?? 0)} onChange={(e) => set("maxClaudeWorkers", e.target.value)} /></Field>
-            <Field label="Max Copilot workers"><TextInput type="number" value={String(draft.maxCopilotWorkers ?? 0)} onChange={(e) => set("maxCopilotWorkers", e.target.value)} /></Field>
-            <Field label="Max Codex workers"><TextInput type="number" value={String(draft.maxCodexWorkers ?? 0)} onChange={(e) => set("maxCodexWorkers", e.target.value)} /></Field>
+            <Field label="Max Claude workers" envVar={lock("maxClaudeWorkers")}><TextInput type="number" value={String(draft.maxClaudeWorkers ?? 0)} disabled={!!lock("maxClaudeWorkers")} onChange={(e) => set("maxClaudeWorkers", e.target.value)} /></Field>
+            <Field label="Max Copilot workers" envVar={lock("maxCopilotWorkers")}><TextInput type="number" value={String(draft.maxCopilotWorkers ?? 0)} disabled={!!lock("maxCopilotWorkers")} onChange={(e) => set("maxCopilotWorkers", e.target.value)} /></Field>
+            <Field label="Max Codex workers" envVar={lock("maxCodexWorkers")}><TextInput type="number" value={String(draft.maxCodexWorkers ?? 0)} disabled={!!lock("maxCodexWorkers")} onChange={(e) => set("maxCodexWorkers", e.target.value)} /></Field>
           </Card>
         </TabPanel>
 
         <TabPanel value="integrations">
           <Card className="grid grid-cols-1 gap-4 p-4 md:grid-cols-2">
-            <Field label="Discord bot token" hint={isMasked(cfg.discordBotToken) ? "A token is currently set." : undefined}>
-              <TextInput type="password" placeholder={isMasked(cfg.discordBotToken) ? MASK : "Not set"} value={draft.discordBotToken as string ?? ""} onChange={(e) => set("discordBotToken", e.target.value)} />
+            <Field label="Discord bot token" envVar={lock("discordBotToken")} hint={isMasked(cfg.discordBotToken) ? "A token is currently set." : undefined}>
+              <TextInput type="password" placeholder={isMasked(cfg.discordBotToken) ? MASK : "Not set"} value={draft.discordBotToken as string ?? ""} disabled={!!lock("discordBotToken")} onChange={(e) => set("discordBotToken", e.target.value)} />
             </Field>
-            <Field label="Discord channel ID"><TextInput value={draft.discordChannelId as string ?? ""} onChange={(e) => set("discordChannelId", e.target.value)} /></Field>
-            <Field label="Discord allowed users (comma-separated)"><TextInput value={draft.discordAllowedUsers as string ?? ""} onChange={(e) => set("discordAllowedUsers", e.target.value)} /></Field>
+            <Field label="Discord channel ID" envVar={lock("discordChannelId")}><TextInput value={draft.discordChannelId as string ?? ""} disabled={!!lock("discordChannelId")} onChange={(e) => set("discordChannelId", e.target.value)} /></Field>
+            <Field label="Discord allowed users (comma-separated)" envVar={lock("discordAllowedUsers")}><TextInput value={draft.discordAllowedUsers as string ?? ""} disabled={!!lock("discordAllowedUsers")} onChange={(e) => set("discordAllowedUsers", e.target.value)} /></Field>
           </Card>
         </TabPanel>
 
         <TabPanel value="security">
           <Card className="grid grid-cols-1 gap-4 p-4 md:grid-cols-2">
-            <Field label="Auth token" hint={isMasked(cfg.authToken) ? "A token is currently set." : undefined}>
-              <TextInput type="password" placeholder={isMasked(cfg.authToken) ? MASK : "Not set"} value={draft.authToken as string ?? ""} onChange={(e) => set("authToken", e.target.value)} />
+            <Field label="Auth token" envVar={lock("authToken")} hint={isMasked(cfg.authToken) ? "A token is currently set." : undefined}>
+              <TextInput type="password" placeholder={isMasked(cfg.authToken) ? MASK : "Not set"} value={draft.authToken as string ?? ""} disabled={!!lock("authToken")} onChange={(e) => set("authToken", e.target.value)} />
             </Field>
             <Field label="Enabled jobs (comma-separated)"><TextInput value={draft.enabledJobs as string ?? ""} onChange={(e) => set("enabledJobs", e.target.value)} /></Field>
-            <Field label="Allowed repos (comma-separated)"><TextInput value={draft.allowedRepos as string ?? ""} onChange={(e) => set("allowedRepos", e.target.value)} /></Field>
+            <Field label="Allowed repos (comma-separated)" envVar={lock("allowedRepos")}><TextInput value={draft.allowedRepos as string ?? ""} disabled={!!lock("allowedRepos")} onChange={(e) => set("allowedRepos", e.target.value)} /></Field>
           </Card>
         </TabPanel>
       </Tabs>

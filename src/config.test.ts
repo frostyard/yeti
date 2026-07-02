@@ -541,3 +541,34 @@ describe("autonomy config", () => {
     expect(mod.repoAutonomy(repo("acme/bad"))).toBe("pr");
   });
 });
+
+describe("getEnvOverrides", () => {
+  it("returns only fields whose env var is currently set", async () => {
+    const { getEnvOverrides } = await import("./config.js");
+    delete process.env["YETI_AUTH_TOKEN"];
+    delete process.env["YETI_LOG_LEVEL"];
+    expect(getEnvOverrides()).toEqual({});
+
+    process.env["YETI_LOG_LEVEL"] = "warn";
+    process.env["YETI_AUTH_TOKEN"] = "secret";
+    try {
+      const overrides = getEnvOverrides();
+      expect(overrides.logLevel).toBe("YETI_LOG_LEVEL");
+      expect(overrides.authToken).toBe("YETI_AUTH_TOKEN");
+      expect(overrides).not.toHaveProperty("selfRepo");
+    } finally {
+      delete process.env["YETI_LOG_LEVEL"];
+      delete process.env["YETI_AUTH_TOKEN"];
+    }
+  });
+
+  it("treats an empty-string env var as an override (it still wins at load)", async () => {
+    const { getEnvOverrides } = await import("./config.js");
+    process.env["YETI_SELF_REPO"] = "";
+    try {
+      expect(getEnvOverrides().selfRepo).toBe("YETI_SELF_REPO");
+    } finally {
+      delete process.env["YETI_SELF_REPO"];
+    }
+  });
+});
