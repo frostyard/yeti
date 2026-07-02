@@ -10,6 +10,7 @@ import { processTextForImages } from "../images.js";
 import { extractFingerprint, REPORT_HEADER as YETI_ERROR_REPORT_HEADER } from "./triage-yeti-errors.js";
 import { PLAN_HEADER, isPlanActionable } from "../plan-parser.js";
 import { renderPolicy, type Autonomy } from "../policy.js";
+import { stripLearningsDeclaration } from "../learnings.js";
 
 function isCiUnrelatedIssue(issue: gh.Issue): boolean {
   return issue.title.startsWith("[ci-unrelated]");
@@ -120,7 +121,7 @@ async function processIssue(repo: Repo, issue: gh.Issue): Promise<void> {
     const planOutput = await claude.resolveEnqueue(aiOptions)(() => claude.runAI(prompt, wtPath!, aiOptions), gh.hasPriorityLabel(issue.labels));
 
     if (planOutput.trim()) {
-      await gh.commentOnIssue(fullName, issue.number, `${PLAN_HEADER}\n\n${planOutput}`);
+      await gh.commentOnIssue(fullName, issue.number, `${PLAN_HEADER}\n\n${stripLearningsDeclaration(planOutput)}`);
       log.info(`[issue-refiner] Posted plan for ${fullName}#${issue.number}`);
       notify({ jobName: "issue-refiner", message: `Plan produced for ${fullName}#${issue.number}`, url: gh.issueUrl(fullName, issue.number) });
     } else {
@@ -185,7 +186,7 @@ async function processRefinement(
       refinedOutput = planOutput;
 
       if (planOutput.trim()) {
-        await gh.commentOnIssue(fullName, issue.number, `${PLAN_HEADER}\n\n${planOutput}`);
+        await gh.commentOnIssue(fullName, issue.number, `${PLAN_HEADER}\n\n${stripLearningsDeclaration(planOutput)}`);
         log.info(`[issue-refiner] Posted fresh plan for ${fullName}#${issue.number}`);
         notify({ jobName: "issue-refiner", message: `Plan produced for ${fullName}#${issue.number}`, url: gh.issueUrl(fullName, issue.number) });
       } else {
@@ -207,7 +208,7 @@ async function processRefinement(
           ? planOutput.slice(0, noteMatch.index).trim()
           : planOutput;
 
-        await gh.editIssueComment(fullName, planComment.id, `${PLAN_HEADER}\n\n${planBody}`);
+        await gh.editIssueComment(fullName, planComment.id, `${PLAN_HEADER}\n\n${stripLearningsDeclaration(planBody)}`);
         log.info(`[issue-refiner] Updated plan comment for ${fullName}#${issue.number}`);
         notify({ jobName: "issue-refiner", message: `Plan updated for ${fullName}#${issue.number}`, url: gh.issueUrl(fullName, issue.number) });
 
@@ -281,7 +282,7 @@ async function processFollowUp(
     const response = await claude.resolveEnqueue(aiOptions)(() => claude.runAI(prompt, wtPath!, aiOptions), gh.hasPriorityLabel(issue.labels));
 
     if (response.trim()) {
-      await gh.commentOnIssue(fullName, issue.number, response);
+      await gh.commentOnIssue(fullName, issue.number, stripLearningsDeclaration(response));
       log.info(`[issue-refiner] Posted follow-up response for ${fullName}#${issue.number}`);
     } else {
       log.warn(`[issue-refiner] Empty follow-up response for ${fullName}#${issue.number}`);

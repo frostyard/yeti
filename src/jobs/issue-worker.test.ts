@@ -24,6 +24,12 @@ vi.mock("../log.js", () => ({
   error: vi.fn(),
 }));
 
+const mockEnforceLearnings = vi.hoisted(() => vi.fn().mockResolvedValue(undefined));
+vi.mock("../learnings.js", () => ({
+  enforceLearnings: mockEnforceLearnings,
+  stripLearningsDeclaration: (s: string) => s,
+}));
+
 vi.mock("../error-reporter.js", () => ({
   reportError: vi.fn(),
 }));
@@ -193,6 +199,19 @@ describe("issue-worker", () => {
 
       expect(mockGh.removeLabel).toHaveBeenCalledWith(repo.fullName, 1, "Ready");
       expect(mockGh.removeLabel).toHaveBeenCalledWith(repo.fullName, 1, "Refined");
+    });
+
+    it("runs the learnings gate after the AI session", async () => {
+      const issue = mockIssue({ labels: [{ name: "Refined" }] });
+      mockGh.listIssuesByLabel.mockResolvedValueOnce([issue]);
+
+      await run([repo]);
+
+      expect(mockEnforceLearnings).toHaveBeenCalledWith("implemented", expect.objectContaining({
+        jobName: "issue-worker",
+        repo: repo.fullName,
+        baseBranch: repo.defaultBranch,
+      }));
     });
   });
 

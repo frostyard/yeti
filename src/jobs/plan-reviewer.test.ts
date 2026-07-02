@@ -26,6 +26,11 @@ vi.mock("../log.js", () => ({
   error: vi.fn(),
 }));
 
+vi.mock("../learnings.js", () => ({
+  enforceLearnings: vi.fn().mockResolvedValue(undefined),
+  stripLearningsDeclaration: (s: string) => s,
+}));
+
 vi.mock("../error-reporter.js", () => ({
   reportError: vi.fn(),
 }));

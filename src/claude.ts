@@ -340,9 +340,12 @@ export async function hasNewCommits(wtPath: string, baseBranch: string): Promise
   return parseInt(count, 10) > 0;
 }
 
-/** Check if the worktree tree actually differs from the base branch (guards against no-op commits). */
-export async function hasTreeDiff(wtPath: string, baseBranch: string): Promise<boolean> {
-  const result = await gitRaw(["diff", "--quiet", `origin/${baseBranch}`, "HEAD"], wtPath);
+/** Check if the worktree tree actually differs from the base branch (guards against no-op commits).
+ *  With `pathspec`, checks only that subtree (e.g. "yeti/" for the learnings gate). */
+export async function hasTreeDiff(wtPath: string, baseBranch: string, pathspec?: string): Promise<boolean> {
+  const args = ["diff", "--quiet", `origin/${baseBranch}`, "HEAD"];
+  if (pathspec) args.push("--", pathspec);
+  const result = await gitRaw(args, wtPath);
   return result.code !== 0;
 }
 

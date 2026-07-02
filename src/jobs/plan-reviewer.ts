@@ -8,6 +8,7 @@ import { reportError } from "../error-reporter.js";
 import { notify } from "../notify.js";
 import { PLAN_HEADER } from "../plan-parser.js";
 import { renderPolicy, type Autonomy } from "../policy.js";
+import { stripLearningsDeclaration } from "../learnings.js";
 const REVIEW_HEADER = "## Plan Review";
 
 export function buildReviewPrompt(
@@ -89,7 +90,7 @@ async function processIssue(repo: Repo, issue: gh.Issue, planComment: gh.IssueCo
     }
 
     const commentBody = REVIEW_LOOP ? stripVerdictLine(reviewOutput) : reviewOutput;
-    await gh.commentOnIssue(fullName, issue.number, `${REVIEW_HEADER}\n\n${commentBody}`);
+    await gh.commentOnIssue(fullName, issue.number, `${REVIEW_HEADER}\n\n${stripLearningsDeclaration(commentBody)}`);
     log.info(`[plan-reviewer] Posted review for ${fullName}#${issue.number}`);
     notify({ jobName: "plan-reviewer", message: `Review posted for ${fullName}#${issue.number}`, url: gh.issueUrl(fullName, issue.number) });
 

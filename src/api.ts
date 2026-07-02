@@ -8,6 +8,7 @@ import {
   getJobRunLogsSince, getLatestRunIdsByJob, getRunningTasks, getTasksByRunId, getWorkItemsForRuns,
   searchRunsByItem, getRunsForIssue, getLogsForRuns, getRecentCompletedTasks,
   getRecentNotifications, getNotificationsSince,
+  getLearnings, countPendingLearnings, dismissLearning,
 } from "./db.js";
 import type { Scheduler } from "./scheduler.js";
 import { msUntilHour } from "./scheduler.js";
@@ -102,6 +103,7 @@ function buildOverviewPayload(scheduler: Scheduler, startedAt: string): Record<s
     queuePending: getQueueSnapshot(ALL_CATEGORIES).items.length,
     recentDone,
     recentFailed,
+    pendingLearnings: countPendingLearnings(),
   };
   return { ...status, version: VERSION, counts, system: getSystemStats(), updatePending: isUpdatePending(), pendingUpdateTag: pendingUpdateTag() };
 }
@@ -167,6 +169,9 @@ function buildConfigUpdate(body: unknown): { updates: Partial<ConfigFile>; tab: 
   if (typeof b.reviewLoop === "boolean") updates.reviewLoop = b.reviewLoop;
   if (typeof b.maxPlanRounds === "number" && Number.isFinite(b.maxPlanRounds) && b.maxPlanRounds >= 1) {
     updates.maxPlanRounds = b.maxPlanRounds;
+  }
+  if (typeof b.learningsPendingThreshold === "number" && Number.isFinite(b.learningsPendingThreshold) && b.learningsPendingThreshold >= 1) {
+    updates.learningsPendingThreshold = b.learningsPendingThreshold;
   }
 
   // Intervals (ms, each > 0) & Schedules (hour 0..23)
@@ -383,6 +388,24 @@ export async function handleApi(
       return;
     }
 
+    // /api/learnings/:id/dismiss
+    const learningMatch = /^\/api\/learnings\/(\d+)\/dismiss$/.exec(p);
+    if (learningMatch) {
+      try {
+        const id = parseInt(learningMatch[1], 10);
+        let reason: string | undefined;
+        const raw = await readBody(req);
+        if (raw) {
+          try { reason = String((JSON.parse(raw) as { reason?: unknown }).reason ?? "") || undefined; } catch { /* invalid json — dismiss without reason */ }
+        }
+        dismissLearning(id, reason);
+        sendJson(res, 200, { result: "dismissed" });
+      } catch (err) {
+        sendJson(res, 500, { error: String(err) });
+      }
+      return;
+    }
+
     sendJson(res, 404, { error: "not_found" });
     return;
   }
@@ -465,6 +488,15 @@ export async function handleApi(
       const rows = Number.isFinite(after) ? getNotificationsSince(after) : getRecentNotifications(50);
       sendJson(res, 200, rows.map(r => ({
         id: r.id, jobName: r.job_name, message: r.message, url: r.url, level: r.level, createdAt: r.created_at,
+      })));
+      return;
+    }
+
+    if (p === "/api/learnings") {
+      const status = urlObj.searchParams.get("status") ?? undefined;
+      sendJson(res, 200, getLearnings(status).map(l => ({
+        id: l.id, jobName: l.job_name, repo: l.repo, kind: l.kind, summary: l.summary,
+        status: l.status, reason: l.reason, prNumber: l.pr_number, createdAt: l.created_at,
       })));
       return;
     }

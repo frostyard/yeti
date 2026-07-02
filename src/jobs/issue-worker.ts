@@ -10,6 +10,7 @@ import { reportError } from "../error-reporter.js";
 import { notify } from "../notify.js";
 import { processTextForImages } from "../images.js";
 import * as planParser from "../plan-parser.js";
+import { enforceLearnings } from "../learnings.js";
 
 /** Format issue comments as the ${COMMENTS} block (empty string when there are none). */
 function formatComments(comments: gh.IssueComment[]): string {
@@ -193,7 +194,8 @@ async function processIssue(repo: Repo, issue: gh.Issue): Promise<void> {
     const prompt = buildPrompt(repoAutonomy(repo), fullName, issue, plan, currentPhase, totalPhases, mergedPRs, comments, imageContext);
 
     const aiOptions = JOB_AI["issue-worker"];
-    await claude.resolveEnqueue(aiOptions)(() => claude.runAI(prompt, wtPath!, aiOptions), gh.isItemPrioritized(fullName, issue.number) || gh.hasPriorityLabel(issue.labels));
+    const output = await claude.resolveEnqueue(aiOptions)(() => claude.runAI(prompt, wtPath!, aiOptions), gh.isItemPrioritized(fullName, issue.number) || gh.hasPriorityLabel(issue.labels));
+    await enforceLearnings(output, { jobName: "issue-worker", repo: fullName, wtPath, baseBranch: repo.defaultBranch, aiOptions });
 
     if (await claude.hasNewCommits(wtPath, repo.defaultBranch) && await claude.hasTreeDiff(wtPath, repo.defaultBranch)) {
       await claude.pushBranch(wtPath, branchName, fullName);

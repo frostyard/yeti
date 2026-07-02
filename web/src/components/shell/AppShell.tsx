@@ -16,6 +16,7 @@ const NAV = [
   { to: "/logs", label: "Logs" },
   { to: "/repos", label: "Repos" },
   { to: "/notifications", label: "Notifications" },
+  { to: "/learnings", label: "Learnings" },
   { to: "/config", label: "Config" },
 ];
 

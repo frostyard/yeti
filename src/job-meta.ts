@@ -19,4 +19,5 @@ export const JOB_DESCRIPTIONS: Record<string, string> = {
   "improvement-identifier": "Identifies codebase improvements and implements as PRs",
   "mkdocs-update": "Daily MkDocs documentation update from recent changes",
   "issue-auditor": "Daily audit ensuring no issues fall between the cracks",
+  "learning-consolidator": "Consolidates agent-reported environment learnings into policies via PR",
 };

@@ -80,7 +80,8 @@ if [[ ! -f "$CONFIG_FILE" ]]; then
     "improvementIdentifierHour": 3,
     "issueAuditorHour": 5,
     "mkdocsUpdateHour": 4,
-    "promptEvaluatorHour": 0
+    "promptEvaluatorHour": 0,
+    "learningConsolidatorHour": 6
   },
   "logLevel": "debug",
   "logRetentionDays": 14,
@@ -93,6 +94,7 @@ if [[ ! -f "$CONFIG_FILE" ]]; then
   "enabledJobs": [],
   "reviewLoop": false,
   "maxPlanRounds": 3,
+  "learningsPendingThreshold": 5,
   "queueScanIntervalMs": 300000,
   "githubAppId": "",
   "githubAppInstallationId": "",

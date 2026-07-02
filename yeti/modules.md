@@ -260,6 +260,94 @@ is a `ClaudeTimeoutError`, the report includes a diagnostics section with
 working directory, stdout byte count, whether Claude was producing output,
 and collapsible last stdout/stderr snippets.
 
+**`learnings.ts`** — Self-improvement loop gate, declaration parser, and
+consolidator trigger. Two write-back targets:
+
+- **Repo learnings** (`LEARNINGS-REPO: yeti/learnings/<slug>.md: <summary>`) —
+  the agent commits the file itself, in the target repo, as part of its normal
+  work; `enforceLearnings()` only *verifies* the claim (see below), it never
+  writes these files.
+- **Environment/yeti learnings** (`LEARNINGS-YETI: <summary>`) — parsed and
+  persisted to the `learnings` table (see [Database Schema](database-schema.md)).
+
+`parseLearnings(output)` regex-matches `^\s*LEARNINGS-(REPO|YETI):\s*(.*)$`
+lines (case-insensitive, multiline) out of an agent's final output. Returns
+`{ declared, repo, yeti }`: `declared` is `true` if either line was present
+at all (including `none`); `repo` entries require the `<path>.md: <summary>`
+shape (malformed `LEARNINGS-REPO` lines are silently dropped, not error'd);
+`yeti` is the list of non-empty, non-`"none"` summary strings.
+`stripLearningsDeclaration(output)` removes `LEARNINGS-REPO:`/`LEARNINGS-YETI:`
+lines (and collapses resulting blank-line runs) from AI output before it is
+posted to GitHub — used at every GitHub-posting call site so the declaration
+never leaks into a plan, review, report, or comment: issue-refiner (plan
+comments and follow-up responses), plan-reviewer (review comments),
+triage-yeti-errors (investigation reports), and review-addresser (PR reply
+comment; review-addresser also calls `enforceLearnings()` beforehand, since it
+both writes code and posts a comment).
+
+`enforceLearnings(output, ctx: GateContext)` is the mechanical gate, called
+once after the main `runAI()` call in each work job:
+
+```ts
+interface GateContext {
+  jobName: string;       // recorded with any persisted learning
+  repo: string;           // target repo fullName, recorded with the learning
+  wtPath: string;         // worktree to retry/verify in
+  baseBranch: string;     // defaultBranch or PR head — the tree-diff base
+  aiOptions?: AiOptions;  // forwarded to the retry call so it uses the same backend/model
+}
+```
+
+Steps:
+
+1. `parseLearnings(output)` on the main call's output.
+2. If `declared` is `false`: re-prompt once, in the **same worktree**, with a
+   fixed `RETRY_PROMPT` asking for exactly the two declaration lines (with
+   `none` as the explicit "nothing to report" value). Re-parses the retry
+   output. If still not declared, logs a warning and returns — no second retry.
+3. If `repo.length > 0`: verifies the claim against reality rather than
+   trusting the agent's word — calls the extended `hasTreeDiff(wtPath,
+   baseBranch, "yeti/")` (a `git diff --quiet -- <pathspec>` check scoped to
+   the `yeti/` pathspec) to confirm the worktree actually has committed
+   changes under `yeti/`. A claim with no matching diff is logged as ignored,
+   not persisted or retried further — repo learnings live entirely in the
+   target repo's git history, not in Yeti's DB.
+4. Each `yeti` summary is persisted via `db.insertLearning(jobName, repo,
+   "yeti", summary)` (dedups identical pending summaries — see Database
+   Schema).
+5. If any `yeti` summaries were recorded and
+   `db.countPendingLearnings("yeti") >= LEARNINGS_PENDING_THRESHOLD`, calls the
+   trigger registered via `setConsolidatorTrigger()` (wired in `main.ts` to
+   `scheduler.triggerJob("learning-consolidator")`) — this fires the
+   consolidator immediately rather than waiting for its daily schedule.
+
+**Never-throws contract**: the entire body of `enforceLearnings()` is wrapped
+in a `try/catch` that logs and returns on any failure (parse error, retry
+`runAI()` throwing, DB error, etc.). Learnings are strictly best-effort —
+a bug in the gate must never fail the work job's task, since the gate always
+runs *after* the job's actual work (commits, PR, comment) is already done.
+
+**Exempt call sites**: `doc-maintainer`, `repo-standards`, `auto-merger`,
+`issue-auditor`, `prompt-evaluator`, and `learning-consolidator` itself do not
+call `enforceLearnings()` — the gate is wired only into the four jobs that run
+a general-purpose implementation/investigation prompt against a target repo
+(issue-worker, ci-fixer at both its conflict-resolution and CI-fix call sites,
+review-addresser, improvement-identifier's implementation phase). Jobs whose
+AI calls are narrowly scoped (e.g. improvement-identifier's analysis phase,
+which only proposes work, or plan-reviewer, which only critiques text) are not
+gated — there is no "session" producing durable repo changes to reflect on.
+
+**`setConsolidatorTrigger(fn)`** stores a single callback, overwritten (not
+appended) on each call; `main.ts` calls it once at startup after
+`startJobs()`, so the trigger is a no-op until the scheduler exists.
+
+**Preamble mandate**: `src/policies/_preamble.md` (prepended to every rendered
+prompt by `renderPolicy()`) instructs every agent to end its final message
+with exactly two lines, `LEARNINGS-REPO: none` / `LEARNINGS-YETI: none` (or
+their populated forms) — this is what `parseLearnings()` looks for. See the
+Dashboard/Deployment note in [OVERVIEW.md](OVERVIEW.md) about user-override
+preambles shadowing (not merging with) this mandate.
+
 **`images.ts`** — Extracts image references (markdown `![](url)` and HTML
 `<img>` tags) from issue/PR text, downloads them (up to 10 images, 10 MB
 each, 30s timeout), and writes them into the worktree under `.yeti-images/`.

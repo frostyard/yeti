@@ -5,6 +5,7 @@ export type QueueCategory =
   | "ready" | "needs-refinement" | "refined" | "needs-review-addressing"
   | "auto-mergeable" | "needs-triage" | "needs-plan-review";
 export type NotificationLevel = "info" | "warn" | "error";
+export type LearningStatus = "pending" | "consolidated" | "dismissed";
 export type LogLevel = "debug" | "info" | "warn" | "error";
 export type RunStatus = "running" | "completed" | "failed";
 
@@ -62,7 +63,7 @@ export interface Overview {
   jobSchedules: Record<string, JobSchedule>;
   jobAi: Record<string, { backend?: AiBackend; model?: string }>;
   discord: DiscordStatus;
-  counts: { running: number; queuePending: number; recentDone: number; recentFailed: number };
+  counts: { running: number; queuePending: number; recentDone: number; recentFailed: number; pendingLearnings: number };
   system: SystemStats;
   updatePending: boolean;
   pendingUpdateTag: string | null;
@@ -170,6 +171,18 @@ export interface NotificationRow {
   message: string;
   url: string | null;
   level: NotificationLevel;
+  createdAt: string;
+}
+
+export interface LearningRow {
+  id: number;
+  jobName: string;
+  repo: string;
+  kind: "repo" | "yeti";
+  summary: string;
+  status: LearningStatus;
+  reason: string | null;
+  prNumber: number | null;
   createdAt: string;
 }
 

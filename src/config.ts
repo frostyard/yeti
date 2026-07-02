@@ -102,6 +102,7 @@ export interface ConfigFile {
     issueAuditorHour?: number;
     mkdocsUpdateHour?: number;
     promptEvaluatorHour?: number;
+    learningConsolidatorHour?: number;
   };
   logLevel?: LogLevel;
   logRetentionDays?: number;
@@ -114,6 +115,7 @@ export interface ConfigFile {
   enabledJobs?: string[];
   reviewLoop?: boolean;
   maxPlanRounds?: number;
+  learningsPendingThreshold?: number;
   queueScanIntervalMs?: number;
   githubAppId?: string;
   githubAppInstallationId?: string;
@@ -164,6 +166,7 @@ function loadConfig() {
     issueAuditorHour: file.schedules?.issueAuditorHour ?? 5, // 5 AM local time
     mkdocsUpdateHour: file.schedules?.mkdocsUpdateHour ?? 4, // 4 AM local time
     promptEvaluatorHour: file.schedules?.promptEvaluatorHour ?? 0, // midnight local time
+    learningConsolidatorHour: file.schedules?.learningConsolidatorHour ?? 6, // 6 AM local time
   };
 
   const discordBotToken =
@@ -254,6 +257,10 @@ function loadConfig() {
   const maxPlanRounds = Number.isFinite(parsedMaxPlanRounds) && parsedMaxPlanRounds >= 1
     ? Math.floor(parsedMaxPlanRounds)
     : 3;
+  const parsedLearningsThreshold = file.learningsPendingThreshold ?? 5;
+  const learningsPendingThreshold = Number.isFinite(parsedLearningsThreshold) && parsedLearningsThreshold >= 1
+    ? Math.floor(parsedLearningsThreshold)
+    : 5;
   const jobAi = file.jobAi ?? {};
   const queueScanIntervalMs = file.queueScanIntervalMs ?? 5 * 60 * 1000;
 
@@ -279,7 +286,7 @@ function loadConfig() {
 
   const webhookSecret = process.env["YETI_WEBHOOK_SECRET"] ?? file.webhookSecret ?? "";
 
-  return { githubOwners, selfRepo, port, intervals, schedules, logLevel, logRetentionDays, logRetentionPerJob, discordBotToken, discordChannelId, discordAllowedUsers, authToken, maxClaudeWorkers, claudeTimeoutMs, maxCopilotWorkers, copilotTimeoutMs, maxCodexWorkers, codexTimeoutMs, pausedJobs, skippedItems, prioritizedItems, allowedRepos, includeForks, enabledJobs, reviewLoop, maxPlanRounds, jobAi, queueScanIntervalMs, githubAppId, githubAppInstallationId, githubAppPrivateKeyPath, githubAppClientId, githubAppClientSecret, externalUrl, webhookSecret, defaultAutonomy, autonomy };
+  return { githubOwners, selfRepo, port, intervals, schedules, logLevel, logRetentionDays, logRetentionPerJob, discordBotToken, discordChannelId, discordAllowedUsers, authToken, maxClaudeWorkers, claudeTimeoutMs, maxCopilotWorkers, copilotTimeoutMs, maxCodexWorkers, codexTimeoutMs, pausedJobs, skippedItems, prioritizedItems, allowedRepos, includeForks, enabledJobs, reviewLoop, maxPlanRounds, learningsPendingThreshold, jobAi, queueScanIntervalMs, githubAppId, githubAppInstallationId, githubAppPrivateKeyPath, githubAppClientId, githubAppClientSecret, externalUrl, webhookSecret, defaultAutonomy, autonomy };
 }
 
 const config = loadConfig();
@@ -303,6 +310,7 @@ export let INCLUDE_FORKS = config.includeForks;
 export let ENABLED_JOBS: readonly string[] = config.enabledJobs;
 export let REVIEW_LOOP = config.reviewLoop;
 export let MAX_PLAN_ROUNDS = config.maxPlanRounds;
+export let LEARNINGS_PENDING_THRESHOLD = config.learningsPendingThreshold;
 export let MAX_COPILOT_WORKERS = config.maxCopilotWorkers;
 export let COPILOT_TIMEOUT_MS = config.copilotTimeoutMs;
 export let MAX_CODEX_WORKERS = config.maxCodexWorkers;
@@ -372,6 +380,7 @@ export function reloadConfig(): void {
   ENABLED_JOBS = fresh.enabledJobs;
   REVIEW_LOOP = fresh.reviewLoop;
   MAX_PLAN_ROUNDS = fresh.maxPlanRounds;
+  LEARNINGS_PENDING_THRESHOLD = fresh.learningsPendingThreshold;
   MAX_COPILOT_WORKERS = fresh.maxCopilotWorkers;
   COPILOT_TIMEOUT_MS = fresh.copilotTimeoutMs;
   MAX_CODEX_WORKERS = fresh.maxCodexWorkers;

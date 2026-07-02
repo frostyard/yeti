@@ -5,6 +5,7 @@ import * as log from "../log.js";
 import * as db from "../db.js";
 import { reportError } from "../error-reporter.js";
 import { renderPolicy, type Autonomy } from "../policy.js";
+import { stripLearningsDeclaration } from "../learnings.js";
 
 export const REPORT_HEADER = "## Yeti Error Investigation Report";
 
@@ -267,7 +268,7 @@ async function processIssue(
     if (output.trim()) {
       const relatedNumbers = parseRelatedIssues(output);
 
-      const reportBody = output.replace(/\nRELATED_ISSUES:.*$/m, "").trim();
+      const reportBody = stripLearningsDeclaration(output.replace(/\nRELATED_ISSUES:.*$/m, "")).trim();
       await gh.commentOnIssue(repo, issue.number, `${REPORT_HEADER}\n\n${reportBody}`);
       log.info(`[triage-yeti-errors] Posted investigation report for ${repo}#${issue.number}`);
 
