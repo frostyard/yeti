@@ -72,6 +72,21 @@ export function initDb(): void {
     )
   `);
 
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS learnings (
+      id         INTEGER PRIMARY KEY AUTOINCREMENT,
+      job_name   TEXT NOT NULL,
+      repo       TEXT NOT NULL,
+      kind       TEXT NOT NULL,
+      summary    TEXT NOT NULL,
+      status     TEXT NOT NULL DEFAULT 'pending',
+      reason     TEXT,
+      pr_number  INTEGER,
+      created_at TEXT NOT NULL
+    )
+  `);
+  db.exec(`CREATE INDEX IF NOT EXISTS idx_learnings_status ON learnings(status)`);
+
   log.info("Database initialized");
 }
 
@@ -449,6 +464,77 @@ export function pruneOldNotifications(days = 7): number {
     .prepare(`DELETE FROM notifications WHERE created_at < ?`)
     .run(cutoff);
   return result.changes;
+}
+
+// ── Learnings ──
+
+export type LearningKind = "repo" | "yeti";
+
+export interface LearningRow {
+  id: number;
+  job_name: string;
+  repo: string;
+  kind: string;
+  summary: string;
+  status: string;
+  reason: string | null;
+  pr_number: number | null;
+  created_at: string;
+}
+
+export function insertLearning(
+  jobName: string,
+  repo: string,
+  kind: LearningKind,
+  summary: string,
+): number {
+  const d = getDb();
+  const dup = d
+    .prepare(`SELECT id FROM learnings WHERE kind = ? AND summary = ? AND status = 'pending' LIMIT 1`)
+    .get(kind, summary) as { id: number } | undefined;
+  if (dup) return dup.id;
+  const result = d
+    .prepare(`INSERT INTO learnings (job_name, repo, kind, summary, status, created_at) VALUES (?, ?, ?, ?, 'pending', datetime('now'))`)
+    .run(jobName, repo, kind, summary);
+  return Number(result.lastInsertRowid);
+}
+
+export function getLearnings(status?: string, limit = 100): LearningRow[] {
+  if (status) {
+    return getDb()
+      .prepare(`SELECT * FROM learnings WHERE status = ? ORDER BY id DESC LIMIT ?`)
+      .all(status, limit) as LearningRow[];
+  }
+  return getDb()
+    .prepare(`SELECT * FROM learnings ORDER BY id DESC LIMIT ?`)
+    .all(limit) as LearningRow[];
+}
+
+export function getPendingLearnings(kind: LearningKind): LearningRow[] {
+  return getDb()
+    .prepare(`SELECT * FROM learnings WHERE status = 'pending' AND kind = ? ORDER BY id ASC`)
+    .all(kind) as LearningRow[];
+}
+
+export function countPendingLearnings(kind?: LearningKind): number {
+  const row = kind
+    ? getDb().prepare(`SELECT COUNT(*) AS n FROM learnings WHERE status = 'pending' AND kind = ?`).get(kind)
+    : getDb().prepare(`SELECT COUNT(*) AS n FROM learnings WHERE status = 'pending'`).get();
+  return Number((row as { n: number }).n);
+}
+
+export function markLearningsConsolidated(ids: number[], prNumber: number): void {
+  if (ids.length === 0) return;
+  const placeholders = ids.map(() => "?").join(",");
+  getDb()
+    .prepare(`UPDATE learnings SET status = 'consolidated', pr_number = ? WHERE id IN (${placeholders})`)
+    .run(prNumber, ...ids);
+}
+
+export function dismissLearning(id: number, reason?: string): void {
+  getDb()
+    .prepare(`UPDATE learnings SET status = 'dismissed', reason = ? WHERE id = ?`)
+    .run(reason ?? null, id);
 }
 
 /** @internal — only for tests that need raw SQL (e.g. backdating timestamps) */
