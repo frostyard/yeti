@@ -41,7 +41,12 @@ interface BackendConfig {
 const BACKENDS: Record<AiBackend, BackendConfig> = {
   claude: { binary: "claude", args: ["-p", "--dangerously-skip-permissions"], promptVia: "stdin", name: "Claude" },
   copilot: { binary: "copilot", args: ["--allow-all-tools", "-s", "--no-ask-user"], promptVia: "flag", name: "Copilot" },
-  codex: { binary: "codex", args: ["exec", "--full-auto"], promptVia: "positional", name: "Codex" },
+  // Yeti runs as trusted automation in an isolated environment (systemd host / container),
+  // so Codex must run without its internal sandbox — `--full-auto` (= `--sandbox workspace-write`)
+  // mounts `.git` read-only, which silently breaks committing jobs (issue-worker, ci-fixer,
+  // review-addresser): the model edits files but `git commit` fails and yeti reports "no commits".
+  // `danger-full-access` mirrors the claude backend's `--dangerously-skip-permissions` posture.
+  codex: { binary: "codex", args: ["exec", "--sandbox", "danger-full-access"], promptVia: "positional", name: "Codex" },
 };
 
 // ── Bounded concurrent queue ──
