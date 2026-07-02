@@ -16,6 +16,7 @@ import {
   parseVerdict,
   renderVerdict,
   countPlanRounds,
+  countSegments,
 } from "../review-contract.js";
 
 export function buildThreadSection(comments: gh.IssueComment[], planCommentId: number): string {
@@ -48,8 +49,10 @@ export function buildReviewPrompt(
   planBody: string,
   threadSection: string,
   roundInfo: string,
+  segment: number,
 ): string {
   const roundNumber = roundInfo.match(/round (\d+)/)?.[1] ?? "1";
+  const findingPrefix = segment > 1 ? `S${segment}-R${roundNumber}` : `R${roundNumber}`;
   return renderPolicy("plan-reviewer", autonomy, {
     FULL_NAME: fullName,
     ISSUE_NUMBER: String(issue.number),
@@ -58,7 +61,8 @@ export function buildReviewPrompt(
     PLAN_BODY: planBody,
     THREAD_SECTION: threadSection,
     ROUND_INFO: roundInfo,
-    ROUND_NUMBER: roundNumber,
+    SEGMENT_NUMBER: String(segment),
+    FINDING_PREFIX: findingPrefix,
   });
 }
 
@@ -76,10 +80,12 @@ async function processIssue(repo: Repo, issue: gh.Issue, planComment: gh.IssueCo
 
     const aiOptions = JOB_AI["plan-reviewer"];
     const round = countPlanRounds(comments) + 1;
+    const segment = countSegments(comments);
     const prompt = buildReviewPrompt(
       repoAutonomy(repo), fullName, issue, planComment.body,
       buildThreadSection(comments, planComment.id),
       buildRoundInfo(round, MAX_PLAN_ROUNDS),
+      segment,
     );
 
     const reviewOutput = await claude.resolveEnqueue(aiOptions)(

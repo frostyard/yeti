@@ -35,9 +35,9 @@ export function parseVerdict(output: string): "approved" | "needs-revision" | "m
   return "missing";
 }
 
-/** Counts `- [R<n>-B<n>]` finding bullets — the Blocking list only, not prior-finding dispositions. */
+/** Counts `- [R<n>-B<n>]` finding bullets, optionally segment-prefixed, in the Blocking list only. */
 export function countBlockingFindings(output: string): number {
-  return (output.match(/^\s*-\s*\[R\d+-B\d+\]/gm) ?? []).length;
+  return (output.match(/^\s*-\s*\[(?:S\d+-)?R\d+-B\d+\]/gm) ?? []).length;
 }
 
 /** Replace the raw VERDICT: line with the bold human-readable form for the posted comment. */
@@ -68,4 +68,13 @@ export function countPlanRounds(comments: IssueComment[]): number {
   return comments
     .slice(lastHumanIdx + 1)
     .filter((c) => c.body.includes(REVIEW_HEADER) && isYetiComment(c.body)).length;
+}
+
+/**
+ * Loop segment index used to disambiguate finding IDs across human-comment
+ * resets. Uses the same non-Yeti, non-bot human-comment boundary as
+ * countPlanRounds() so the segment and budget counter stay in lockstep.
+ */
+export function countSegments(comments: IssueComment[]): number {
+  return comments.filter((c) => !isYetiComment(c.body) && !c.login.endsWith("[bot]")).length + 1;
 }

@@ -12,6 +12,7 @@ import {
   countBlockingFindings,
   renderVerdict,
   countPlanRounds,
+  countSegments,
 } from "./review-contract.js";
 
 const YETI = "<!-- yeti-automated -->";
@@ -82,6 +83,26 @@ describe("countBlockingFindings", () => {
   it("returns 0 when there are no blocking findings", () => {
     expect(countBlockingFindings("### Advisory\n- [R1-A1] nit")).toBe(0);
   });
+
+  it("counts segment-prefixed blocking finding IDs", () => {
+    const review = [
+      "### Blocking",
+      "- [S2-R1-B1] reset-segment defect",
+      "- [S2-R1-B2] another reset-segment defect",
+      "### Advisory",
+      "- [S2-R1-A1] suggestion",
+    ].join("\n");
+    expect(countBlockingFindings(review)).toBe(2);
+  });
+
+  it("counts mixed segment-prefixed and unprefixed blocking finding IDs", () => {
+    const review = [
+      "### Blocking",
+      "- [R1-B1] original-segment defect",
+      "- [S2-R1-B1] reset-segment defect",
+    ].join("\n");
+    expect(countBlockingFindings(review)).toBe(2);
+  });
 });
 
 describe("renderVerdict", () => {
@@ -116,5 +137,23 @@ describe("countPlanRounds", () => {
 
   it("does not treat [bot] comments as human", () => {
     expect(countPlanRounds([review(1), bot(2), review(3)])).toBe(2);
+  });
+});
+
+describe("countSegments", () => {
+  const review = (id: number) => comment({ id, body: `${YETI}## Plan Review\n\nstuff`, login: "yeti[bot]" });
+  const human = (id: number) => comment({ id, body: "please change X", login: "bsherman" });
+  const bot = (id: number) => comment({ id, body: "coverage report", login: "codecov[bot]" });
+
+  it("returns segment 1 when no human has commented", () => {
+    expect(countSegments([review(1), review(2)])).toBe(1);
+  });
+
+  it("increments after a human comment", () => {
+    expect(countSegments([review(1), human(2), review(3)])).toBe(2);
+  });
+
+  it("does not treat [bot] comments as human", () => {
+    expect(countSegments([review(1), bot(2), review(3)])).toBe(1);
   });
 });

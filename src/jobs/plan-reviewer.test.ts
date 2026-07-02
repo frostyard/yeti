@@ -554,7 +554,7 @@ describe("prompt building", () => {
   describe("buildReviewPrompt", () => {
     it("renders issue, plan, thread, round info, and the contract", () => {
       const out = stripPreamble(
-        buildReviewPrompt("pr", "acme/widget", issue, planBody, "THREAD-CONTENT", "This is review round 2 of 3."),
+        buildReviewPrompt("pr", "acme/widget", issue, planBody, "THREAD-CONTENT", "This is review round 2 of 3.", 1),
       );
       expect(out).toContain("acme/widget#42");
       expect(out).toContain("Add dark mode");
@@ -572,8 +572,30 @@ describe("prompt building", () => {
     });
 
     it("always includes the verdict instruction (no reviewLoop parameter)", () => {
-      const out = buildReviewPrompt("pr", "acme/widget", issue, planBody, "(No other comments on the issue.)", "This is review round 1 of 3.");
+      const out = buildReviewPrompt("pr", "acme/widget", issue, planBody, "(No other comments on the issue.)", "This is review round 1 of 3.", 1);
       expect(out).toContain("VERDICT:");
+    });
+
+    it("uses unprefixed finding IDs in the first segment", () => {
+      const out = stripPreamble(
+        buildReviewPrompt("pr", "acme/widget", issue, planBody, "THREAD-CONTENT", "This is review round 1 of 3.", 1),
+      );
+      expect(out).toContain("- [R1-B1]");
+      expect(out).toContain("- [R1-A1]");
+      expect(out).not.toContain("- [S1-R1-B1]");
+      expect(out).not.toContain("${FINDING_PREFIX}");
+      expect(out).not.toContain("${SEGMENT_NUMBER}");
+    });
+
+    it("uses segment-prefixed finding IDs after a human-comment reset", () => {
+      const out = stripPreamble(
+        buildReviewPrompt("pr", "acme/widget", issue, planBody, "THREAD-CONTENT", "This is review round 1 of 3.", 2),
+      );
+      expect(out).toContain("- [S2-R1-B1]");
+      expect(out).toContain("- [S2-R1-A1]");
+      expect(out).not.toContain("- [R1-B1]");
+      expect(out).not.toContain("${FINDING_PREFIX}");
+      expect(out).not.toContain("${SEGMENT_NUMBER}");
     });
   });
 });

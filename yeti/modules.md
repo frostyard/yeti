@@ -265,9 +265,10 @@ format, verdict parsing, and round counting without duplicating logic:
   `"approved" | "needs-revision" | "missing"`. `"missing"` lets the caller log
   a warning before falling back to treating it as needs-revision, rather than
   silently mis-parsing.
-- `countBlockingFindings(output)` — counts `- [R<n>-B<n>]` bullet lines (the
-  Blocking findings list only, not prior-round disposition lines), used to
-  annotate the rendered verdict with a count.
+- `countBlockingFindings(output)` — counts `- [R<n>-B<n>]` and
+  `- [S<n>-R<n>-B<n>]` bullet lines (the Blocking findings list only, not
+  prior-round disposition lines), used to annotate the rendered verdict with a
+  count.
 - `renderVerdict(output)` — replaces the raw `VERDICT:` line with a bold
   human-readable form for the comment actually posted to GitHub:
   `**Verdict: APPROVED**` or `**Verdict: NEEDS REVISION** (N blocking)`.
@@ -278,6 +279,13 @@ format, verdict parsing, and round counting without duplicating logic:
   measures cycles since a human last spoke, not cycles since the plan was
   first created — a human commenting mid-loop gets a fresh `maxPlanRounds`
   budget for whatever comes next.
+- `countSegments(comments)` — counts loop segments as one plus the number of
+  non-Yeti, non-bot human comments, using the same reset boundary as
+  `countPlanRounds()`. plan-reviewer uses this segment index only to
+  disambiguate finding IDs after a reset: segment 1 keeps the historical
+  `R<n>-B<n>`/`R<n>-A<n>` form, while segment 2+ prefixes new IDs as
+  `S<n>-R<m>-...` so a later "round 1" cannot collide with an earlier
+  `R1-B1`.
 
 `IssueComment` (`github.ts`) now carries an `updatedAt: string` field (the
 comment's ISO `updated_at` timestamp) specifically to support
