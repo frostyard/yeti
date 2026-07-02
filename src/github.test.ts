@@ -1355,19 +1355,19 @@ describe("getIssueComments", () => {
     clearApiCache();
   });
 
-  it("returns comments with id, body, and login, filtering empty bodies", async () => {
+  it("returns comments with id, body, login, and updatedAt, filtering empty bodies", async () => {
     mockExecFile.mockImplementation((_cmd: string, _args: string[], _opts: any, cb: any) => {
       cb(null, JSON.stringify([
-        { id: 1, body: "First comment", user: { login: "alice" } },
-        { id: 2, body: "  ", user: { login: "bob" } },
+        { id: 1, body: "First comment", user: { login: "alice" }, updated_at: "2026-07-01T10:00:00Z" },
+        { id: 2, body: "  ", user: { login: "bob" }, updated_at: "2026-07-01T11:00:00Z" },
         { id: 3, body: "Third comment", user: { login: "charlie" } },
       ]), "");
     });
 
     const comments = await getIssueComments("org/repo", 1);
     expect(comments).toEqual([
-      { id: 1, body: "First comment", login: "alice" },
-      { id: 3, body: "Third comment", login: "charlie" },
+      { id: 1, body: "First comment", login: "alice", updatedAt: "2026-07-01T10:00:00Z" },
+      { id: 3, body: "Third comment", login: "charlie", updatedAt: "" },
     ]);
   });
 });

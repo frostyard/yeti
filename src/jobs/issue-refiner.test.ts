@@ -765,8 +765,8 @@ describe("buildNewPlanPrompt (policy template)", () => {
   it("matches the pre-migration inline builder — with comments", () => {
     const issue = { number: 4, title: "Fix login bug", body: "Login fails intermittently" };
     const comments = [
-      { id: 1, body: "Can you add more detail?", login: "reviewer1" },
-      { id: 2, body: "<!-- yeti-automated -->Investigated, seems related to session expiry.", login: "yeti-bot" },
+      { id: 1, body: "Can you add more detail?", login: "reviewer1", updatedAt: "" },
+      { id: 2, body: "<!-- yeti-automated -->Investigated, seems related to session expiry.", login: "yeti-bot", updatedAt: "" },
     ];
     const out = buildNewPlanPrompt("pr", "acme/widget", issue as never, comments);
     expect(stripPreamble(out).trimEnd()).toBe(expected("acme/widget", issue, comments).trimEnd());
@@ -897,8 +897,8 @@ describe("buildRefinementPrompt (policy template)", () => {
     const issue = { number: 7, title: "Add dark mode", body: "Please add a dark mode toggle" };
     const existingPlan = "1. Add a theme context\n2. Wire up the toggle";
     const feedback = [
-      { id: 10, body: "Please also handle system preference detection", login: "reviewer" },
-      { id: 11, body: "<!-- yeti-automated -->\n*— Automated by Yeti —*\nNote: theme persistence not addressed", login: "yeti-bot" },
+      { id: 10, body: "Please also handle system preference detection", login: "reviewer", updatedAt: "" },
+      { id: 11, body: "<!-- yeti-automated -->\n*— Automated by Yeti —*\nNote: theme persistence not addressed", login: "yeti-bot", updatedAt: "" },
     ];
     const out = buildRefinementPrompt("pr", "acme/widget", issue as never, existingPlan, feedback);
     expect(stripPreamble(out).trimEnd()).toBe(expected("acme/widget", issue, existingPlan, feedback).trimEnd());
@@ -958,7 +958,7 @@ describe("buildFollowUpPrompt (policy template)", () => {
     const issue = { number: 9, title: "Add dark mode", body: "Please add a dark mode toggle" };
     const existingPlan = "1. Add a theme context\n2. Wire up the toggle";
     const followUpComments = [
-      { id: 20, body: "Is this done yet?", login: "reviewer" },
+      { id: 20, body: "Is this done yet?", login: "reviewer", updatedAt: "" },
     ];
     const out = buildFollowUpPrompt("pr", "acme/widget", issue as never, existingPlan, 42, followUpComments);
     expect(stripPreamble(out).trimEnd()).toBe(expected("acme/widget", issue, existingPlan, 42, followUpComments).trimEnd());
