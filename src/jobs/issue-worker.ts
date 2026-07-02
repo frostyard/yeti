@@ -148,11 +148,6 @@ function buildPRBody(
 }
 
 async function processIssue(repo: Repo, issue: gh.Issue): Promise<void> {
-  if (!can(repo, "createPR")) {
-    log.info(`[issue-worker] skip ${repo.fullName} — tier below 'createPR' requirement`);
-    return;
-  }
-
   const fullName = repo.fullName;
   log.info(`[issue-worker] Processing ${fullName}#${issue.number}: ${issue.title}`);
 
@@ -267,6 +262,10 @@ export async function run(repos: Repo[]): Promise<void> {
 
   for (const repo of repos) {
     if (isRateLimited()) break;
+    if (!can(repo, "createPR")) {
+      log.info(`[issue-worker] skip ${repo.fullName} — tier below 'createPR' requirement`);
+      continue;
+    }
     try {
       // Track issues processed this tick to avoid re-processing in checkAndContinue
       const processedIssues = new Set<number>();

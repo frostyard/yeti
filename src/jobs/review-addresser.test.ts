@@ -136,6 +136,8 @@ describe("review-addresser", () => {
 
     await run([advisoryRepo]);
 
+    // Gate is hoisted to the per-repo loop: skip before even listing PRs.
+    expect(mockGh.listPRs).not.toHaveBeenCalled();
     expect(mockClaude.createWorktreeFromBranch).not.toHaveBeenCalled();
     expect(mockClaude.runAI).not.toHaveBeenCalled();
   });

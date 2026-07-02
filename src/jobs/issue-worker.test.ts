@@ -485,11 +485,14 @@ describe("issue-worker", () => {
   describe("autonomy pre-flight gate", () => {
     it("skips before worktree/AI when repo tier is below 'createPR' (advisory)", async () => {
       const advisoryRepo = { ...mockRepo(), autonomy: "advisory" as const };
-      const issue = mockIssue({ labels: [{ name: "Refined" }] });
-      mockGh.listIssuesByLabel.mockResolvedValueOnce([issue]);
+      // No listIssuesByLabel stub: the hoisted gate skips before listing, and a
+      // queued mockResolvedValueOnce would leak to the next test (clearAllMocks
+      // doesn't drain "once" queues).
 
       await run([advisoryRepo]);
 
+      // Gate is hoisted to the per-repo loop: skip before even listing issues.
+      expect(mockGh.listIssuesByLabel).not.toHaveBeenCalled();
       expect(mockClaude.createWorktree).not.toHaveBeenCalled();
       expect(mockClaude.runAI).not.toHaveBeenCalled();
     });

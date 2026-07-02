@@ -28,11 +28,6 @@ export function buildPrompt(
 }
 
 async function processPR(repo: Repo, pr: gh.PR, reviewData: gh.PRReviewData): Promise<void> {
-  if (!can(repo, "push")) {
-    log.info(`[review-addresser] skip ${repo.fullName} — tier below 'push' requirement`);
-    return;
-  }
-
   const fullName = repo.fullName;
   log.info(`[review-addresser] Processing PR #${pr.number} in ${fullName}`);
 
@@ -94,6 +89,10 @@ export async function run(repos: Repo[]): Promise<void> {
 
   for (const repo of repos) {
     if (isRateLimited()) break;
+    if (!can(repo, "push")) {
+      log.info(`[review-addresser] skip ${repo.fullName} — tier below 'push' requirement`);
+      continue;
+    }
     try {
       const prs = await gh.listPRs(repo.fullName);
       for (const pr of prs) {
