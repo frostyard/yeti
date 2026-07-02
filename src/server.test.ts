@@ -154,6 +154,11 @@ vi.mock("./db.js", () => ({
   getRecentCompletedTasks: vi.fn().mockReturnValue([]),
   getRecentNotifications: vi.fn().mockReturnValue([]),
   getNotificationsSince: vi.fn().mockReturnValue([]),
+  getLearnings: vi.fn().mockReturnValue([
+    { id: 1, job_name: "issue-worker", repo: "org/repo", kind: "repo", summary: "test summary", status: "pending", reason: null, pr_number: null, created_at: "2025-01-01 00:00:00" },
+  ]),
+  countPendingLearnings: vi.fn().mockReturnValue(1),
+  dismissLearning: vi.fn(),
 }));
 
 import { formatUptime, closeSSEConnections } from "./server.js";
@@ -303,6 +308,7 @@ describe("JSON API (auth disabled)", () => {
     expect(body.counts.recentDone).toBe(1);
     expect(body.counts.recentFailed).toBe(1);
     expect(body.counts.running).toBe(1);
+    expect(body.counts.pendingLearnings).toBe(1);
     expect(body.updatePending).toBe(false);
     expect(body.pendingUpdateTag).toBeNull();
     expect(body.system).toEqual({
@@ -458,6 +464,29 @@ describe("JSON API (auth disabled)", () => {
     expect(JSON.parse(res.body).result).toBe("ok");
     expect((configMod as unknown as { writeConfig: ReturnType<typeof vi.fn> }).writeConfig)
       .toHaveBeenCalledWith(expect.objectContaining({ prioritizedItems: [{ repo: "org/repo", number: 7 }] }));
+  });
+
+  it("GET /api/learnings returns learnings as camelCase JSON", async () => {
+    const res = await request(server, "GET", "/api/learnings");
+    expect(res.status).toBe(200);
+    const body = JSON.parse(res.body);
+    expect(body).toHaveLength(1);
+    expect(body[0]).toEqual({
+      id: 1, jobName: "issue-worker", repo: "org/repo", kind: "repo", summary: "test summary",
+      status: "pending", reason: null, prNumber: null, createdAt: "2025-01-01 00:00:00",
+    });
+  });
+
+  it("POST /api/learnings/:id/dismiss flips status", async () => {
+    const dbMod = await import("./db.js");
+    const res = await request(server, "POST", "/api/learnings/1/dismiss", {
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ reason: "not applicable" }),
+    });
+    expect(res.status).toBe(200);
+    expect(JSON.parse(res.body)).toEqual({ result: "dismissed" });
+    expect((dbMod as unknown as { dismissLearning: ReturnType<typeof vi.fn> }).dismissLearning)
+      .toHaveBeenCalledWith(1, "not applicable");
   });
 
   it("unknown /api route returns JSON 404", async () => {
