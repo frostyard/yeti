@@ -371,7 +371,7 @@ async function processFollowUp(
     const response = await claude.resolveEnqueue(aiOptions)(() => claude.runAI(prompt, wtPath!, aiOptions), gh.hasPriorityLabel(issue.labels));
 
     if (response.trim()) {
-      await gh.commentOnIssue(fullName, issue.number, stripLearningsDeclaration(response));
+      await gh.commentOnIssue(fullName, issue.number, claude.scrubWorktreePaths(stripLearningsDeclaration(response), wtPath));
       log.info(`[issue-refiner] Posted follow-up response for ${fullName}#${issue.number}`);
     } else {
       log.warn(`[issue-refiner] Empty follow-up response for ${fullName}#${issue.number}`);
