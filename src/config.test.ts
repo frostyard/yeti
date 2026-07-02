@@ -540,6 +540,50 @@ describe("autonomy config", () => {
     // Invalid map value is coerced to "pr" at load time, so it wins over the default.
     expect(mod.repoAutonomy(repo("acme/bad"))).toBe("pr");
   });
+
+  it("writeConfig live-reloads autonomy so capability checks use new tiers", async () => {
+    const mod = await import("./config.js");
+    const { can } = await import("./capability.js");
+
+    fs.mkdirSync(path.dirname(mod.CONFIG_PATH), { recursive: true });
+    fs.writeFileSync(mod.CONFIG_PATH, JSON.stringify({ defaultAutonomy: "advisory", autonomy: {} }));
+    mod.reloadConfig();
+
+    expect(can(repo("frostyard/updex"), "merge")).toBe(false);
+
+    mod.writeConfig({
+      defaultAutonomy: "pr",
+      autonomy: { "frostyard/updex": "automerge" },
+    });
+
+    expect(mod.DEFAULT_AUTONOMY).toBe("pr");
+    expect(mod.AUTONOMY_MAP).toEqual({ "frostyard/updex": "automerge" });
+    expect(can(repo("frostyard/updex"), "merge")).toBe(true);
+  });
+
+  it("writeConfig replaces autonomy wholesale so removed entries stay removed", async () => {
+    const mod = await import("./config.js");
+    const { can } = await import("./capability.js");
+
+    fs.mkdirSync(path.dirname(mod.CONFIG_PATH), { recursive: true });
+    fs.writeFileSync(
+      mod.CONFIG_PATH,
+      JSON.stringify({
+        defaultAutonomy: "advisory",
+        autonomy: { "frostyard/updex": "automerge" },
+      }),
+    );
+    mod.reloadConfig();
+
+    expect(can(repo("frostyard/updex"), "merge")).toBe(true);
+
+    mod.writeConfig({ autonomy: {} });
+
+    const written = JSON.parse(fs.readFileSync(mod.CONFIG_PATH, "utf-8"));
+    expect(written.autonomy).toEqual({});
+    expect(mod.AUTONOMY_MAP).toEqual({});
+    expect(can(repo("frostyard/updex"), "merge")).toBe(false);
+  });
 });
 
 describe("getEnvOverrides", () => {

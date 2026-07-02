@@ -19,6 +19,7 @@ import { JOB_DESCRIPTIONS, type JobInfo } from "./job-meta.js";
 import { isUpdatePending, pendingUpdateTag } from "./quiesce.js";
 import { getSystemStats } from "./sysstats.js";
 import { readBody, parseCookies, safeCompare, isAuthEnabled, getSession, requireApiAuth, sendJson, tokenCookie } from "./http-util.js";
+import type { Autonomy } from "./policy.js";
 
 /** Maps don't survive JSON.stringify — flatten to a plain object for the wire. */
 function mapToObject<V>(m: Map<string, V>): Record<string, V> {
@@ -138,7 +139,14 @@ function buildJobsPayload(scheduler: Scheduler, allJobs: JobInfo[]): unknown[] {
 
 // ── Config update validation (JSON body) ──
 
-function buildConfigUpdate(body: unknown): { updates: Partial<ConfigFile>; tab: string } {
+const AUTONOMY_TIERS = ["advisory", "issues", "pr", "automerge"] as const satisfies readonly Autonomy[];
+const REPO_FULL_NAME = /^[^/\s]+\/[^/\s]+$/;
+
+function autonomyTier(v: unknown): Autonomy | undefined {
+  return typeof v === "string" && (AUTONOMY_TIERS as readonly string[]).includes(v) ? v as Autonomy : undefined;
+}
+
+export function buildConfigUpdate(body: unknown): { updates: Partial<ConfigFile>; tab: string } {
   const b = (body && typeof body === "object" ? body : {}) as Record<string, unknown>;
   const updates: Partial<ConfigFile> = {};
   const tab = typeof b._tab === "string" ? b._tab : "general";
@@ -165,6 +173,17 @@ function buildConfigUpdate(body: unknown): { updates: Partial<ConfigFile>; tab: 
   // Jobs & Repos
   if (strArray(b.enabledJobs)) updates.enabledJobs = strArray(b.enabledJobs)!;
   if (strArray(b.allowedRepos)) updates.allowedRepos = strArray(b.allowedRepos)!;
+  const defaultAutonomy = autonomyTier(b.defaultAutonomy);
+  if (defaultAutonomy) updates.defaultAutonomy = defaultAutonomy;
+  if (b.autonomy && typeof b.autonomy === "object" && !Array.isArray(b.autonomy)) {
+    const out: Record<string, Autonomy> = {};
+    for (const [rawRepo, rawTier] of Object.entries(b.autonomy as Record<string, unknown>)) {
+      const repo = rawRepo.trim();
+      const repoTier = autonomyTier(rawTier);
+      if (REPO_FULL_NAME.test(repo) && repoTier) out[repo] = repoTier;
+    }
+    updates.autonomy = out;
+  }
   if (typeof b.includeForks === "boolean") updates.includeForks = b.includeForks;
   if (typeof b.reviewLoop === "boolean") updates.reviewLoop = b.reviewLoop;
   if (typeof b.maxPlanRounds === "number" && Number.isFinite(b.maxPlanRounds) && b.maxPlanRounds >= 1) {
