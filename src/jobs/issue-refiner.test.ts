@@ -63,6 +63,7 @@ const { mockGh, mockClaude, mockDb } = vi.hoisted(() => ({
     runAI: vi.fn(),
     resolveEnqueue: vi.fn(),
     randomSuffix: vi.fn().mockReturnValue("ab12"),
+    scrubWorktreePaths: (text: string) => text,
   },
   mockDb: {
     recordTaskStart: vi.fn().mockReturnValue(1),
@@ -616,6 +617,108 @@ describe("issue-refiner", () => {
       issue.number,
       expect.stringContaining("## Implementation Plan"),
     );
+  });
+
+  describe("review-revision routing", () => {
+    const planComment = {
+      id: 501,
+      body: "<!-- yeti-automated -->## Implementation Plan\n\nOriginal plan",
+      login: "yeti-bot",
+      updatedAt: "2026-07-01T10:00:00Z",
+    };
+    const reviewComment = {
+      id: 601,
+      body: "<!-- yeti-automated -->## Plan Review\n\n### Blocking\n- [R1-B1] bad (src/a.ts:1)\n\n**Verdict: NEEDS REVISION** (1 blocking)\n\n<!-- yeti-review-of:501:2026-07-01T10:00:00Z -->",
+      login: "yeti-bot",
+      updatedAt: "",
+    };
+
+    function setupKickedBackIssue(comments: unknown[]) {
+      const issue = mockIssue({ labels: [{ name: "Needs Refinement" }] });
+      mockGh.listOpenIssues.mockResolvedValueOnce([issue]);
+      mockGh.getOpenPRForIssue.mockResolvedValue(null);
+      mockGh.getIssueComments.mockResolvedValue(comments);
+      mockGh.getCommentReactions.mockResolvedValue([]);
+      return issue;
+    }
+
+    it("routes reviewer kickback to a review revision that edits the plan in place", async () => {
+      const issue = setupKickedBackIssue([planComment, reviewComment]);
+      mockClaude.runAI.mockResolvedValue(
+        "## Updated plan\n\nBetter plan\n\n### Review Response\n- R1-B1: accepted — added the guard",
+      );
+
+      await run([repo]);
+
+      // Edits the existing plan comment rather than posting a new plan
+      expect(mockGh.editIssueComment).toHaveBeenCalledWith(
+        repo.fullName,
+        501,
+        expect.stringContaining("Better plan"),
+      );
+      // Review Response is split into its own comment
+      expect(mockGh.commentOnIssue).toHaveBeenCalledWith(
+        repo.fullName,
+        issue.number,
+        expect.stringContaining("### Review Response"),
+      );
+      // Plan body posted does NOT contain the response section
+      expect(mockGh.editIssueComment).toHaveBeenCalledWith(
+        repo.fullName,
+        501,
+        expect.not.stringContaining("### Review Response"),
+      );
+      // Re-arms the reviewer
+      expect(mockGh.removeLabel).toHaveBeenCalledWith(repo.fullName, issue.number, "Needs Refinement");
+      expect(mockGh.addLabel).toHaveBeenCalledWith(repo.fullName, issue.number, "Needs Plan Review");
+      // Prompt uses the revise policy: carries the review body and the finding ID
+      expect(mockClaude.runAI).toHaveBeenCalledWith(
+        expect.stringContaining("[R1-B1]"),
+        expect.any(String),
+        undefined,
+      );
+    });
+
+    it("prefers human feedback over the review kickback and absorbs the review into the same revision", async () => {
+      const humanComment = { id: 700, body: "actually, keep the old name", login: "bsherman", updatedAt: "" };
+      setupKickedBackIssue([planComment, reviewComment, humanComment]);
+      mockClaude.runAI.mockResolvedValue("## Updated plan\n\nCombined revision");
+
+      await run([repo]);
+
+      // Human path: refinement prompt contains BOTH the human comment and the review
+      const prompt = mockClaude.runAI.mock.calls[0][0] as string;
+      expect(prompt).toContain("keep the old name");
+      expect(prompt).toContain("[R1-B1]");
+    });
+
+    it("falls back to a fresh replan when the label is set but no review matches the current plan version", async () => {
+      // Plan was edited after the review — marker is stale, and no human comments
+      setupKickedBackIssue([{ ...planComment, updatedAt: "2026-07-02T09:00:00Z" }, reviewComment]);
+      mockClaude.runAI.mockResolvedValue("## Implementation Plan\n\nFresh plan");
+
+      await run([repo]);
+
+      // Fresh replan posts a NEW plan comment (does not edit in place)
+      expect(mockGh.commentOnIssue).toHaveBeenCalledWith(
+        repo.fullName,
+        1,
+        expect.stringContaining("Fresh plan"),
+      );
+      expect(mockGh.editIssueComment).not.toHaveBeenCalled();
+    });
+
+    it("waits for human input when the revision has blocking clarifying questions", async () => {
+      const issue = setupKickedBackIssue([planComment, reviewComment]);
+      mockClaude.runAI.mockResolvedValue(
+        "### Clarifying Questions (blocking)\n1. Which behavior do you want?",
+      );
+
+      await run([repo]);
+
+      expect(mockGh.removeLabel).toHaveBeenCalledWith(repo.fullName, issue.number, "Needs Refinement");
+      expect(mockGh.addLabel).not.toHaveBeenCalledWith(repo.fullName, issue.number, "Needs Plan Review");
+    });
   });
 });
 

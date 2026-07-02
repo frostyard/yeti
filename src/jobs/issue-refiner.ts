@@ -11,6 +11,7 @@ import { extractFingerprint, REPORT_HEADER as YETI_ERROR_REPORT_HEADER } from ".
 import { PLAN_HEADER, isPlanActionable } from "../plan-parser.js";
 import { renderPolicy, type Autonomy } from "../policy.js";
 import { stripLearningsDeclaration } from "../learnings.js";
+import { findReviewOfPlanVersion } from "../review-contract.js";
 
 function isCiUnrelatedIssue(issue: gh.Issue): boolean {
   return issue.title.startsWith("[ci-unrelated]");
@@ -48,6 +49,23 @@ export function buildRefinementPrompt(
     ISSUE_BODY: issue.body || "(No description provided)",
     EXISTING_PLAN: existingPlan,
     FEEDBACK_SECTION: feedbackSection,
+  });
+}
+
+export function buildReviseFromReviewPrompt(
+  autonomy: Autonomy,
+  fullName: string,
+  issue: gh.Issue,
+  existingPlan: string,
+  reviewBody: string,
+): string {
+  return renderPolicy("issue-refiner.revise", autonomy, {
+    FULL_NAME: fullName,
+    ISSUE_NUMBER: String(issue.number),
+    ISSUE_TITLE: issue.title,
+    ISSUE_BODY: issue.body || "(No description provided)",
+    EXISTING_PLAN: existingPlan,
+    REVIEW_BODY: reviewBody,
   });
 }
 
@@ -121,7 +139,7 @@ async function processIssue(repo: Repo, issue: gh.Issue): Promise<void> {
     const planOutput = await claude.resolveEnqueue(aiOptions)(() => claude.runAI(prompt, wtPath!, aiOptions), gh.hasPriorityLabel(issue.labels));
 
     if (planOutput.trim()) {
-      await gh.commentOnIssue(fullName, issue.number, `${PLAN_HEADER}\n\n${stripLearningsDeclaration(planOutput)}`);
+      await gh.commentOnIssue(fullName, issue.number, `${PLAN_HEADER}\n\n${claude.scrubWorktreePaths(stripLearningsDeclaration(planOutput), wtPath)}`);
       log.info(`[issue-refiner] Posted plan for ${fullName}#${issue.number}`);
       notify({ jobName: "issue-refiner", message: `Plan produced for ${fullName}#${issue.number}`, url: gh.issueUrl(fullName, issue.number) });
     } else {
@@ -208,12 +226,12 @@ async function processRefinement(
           ? planOutput.slice(0, noteMatch.index).trim()
           : planOutput;
 
-        await gh.editIssueComment(fullName, planComment.id, `${PLAN_HEADER}\n\n${stripLearningsDeclaration(planBody)}`);
+        await gh.editIssueComment(fullName, planComment.id, `${PLAN_HEADER}\n\n${claude.scrubWorktreePaths(stripLearningsDeclaration(planBody), wtPath)}`);
         log.info(`[issue-refiner] Updated plan comment for ${fullName}#${issue.number}`);
         notify({ jobName: "issue-refiner", message: `Plan updated for ${fullName}#${issue.number}`, url: gh.issueUrl(fullName, issue.number) });
 
         if (noteMatch) {
-          await gh.commentOnIssue(fullName, issue.number, `### Note\n${noteMatch[1].trim()}`);
+          await gh.commentOnIssue(fullName, issue.number, `### Note\n${claude.scrubWorktreePaths(noteMatch[1].trim(), wtPath)}`);
           log.info(`[issue-refiner] Posted note comment for ${fullName}#${issue.number}`);
         }
       } else {
@@ -235,6 +253,77 @@ async function processRefinement(
       }
     }
     // If not actionable: no label — issue waits for human response.
+    await gh.removeLabel(fullName, issue.number, LABELS.needsRefinement);
+    db.recordTaskComplete(taskId);
+  } catch (err) {
+    db.recordTaskFailed(taskId, String(err));
+    throw err;
+  } finally {
+    if (wtPath) {
+      await claude.removeWorktree(repo, wtPath);
+    }
+  }
+}
+
+async function processReviewRevision(
+  repo: Repo,
+  issue: gh.Issue,
+  planComment: gh.IssueComment,
+  reviewComment: gh.IssueComment,
+): Promise<void> {
+  const fullName = repo.fullName;
+  log.info(`[issue-refiner] Revising plan from review for ${fullName}#${issue.number}: ${issue.title}`);
+
+  const taskId = db.recordTaskStart("issue-refiner", fullName, issue.number, null);
+  let wtPath: string | undefined;
+  const aiOptions = JOB_AI["issue-refiner"];
+
+  try {
+    const branchName = `yeti/plan-${issue.number}-${claude.randomSuffix()}`;
+    wtPath = await claude.createWorktree(repo, branchName, "issue-refiner");
+    db.updateTaskWorktree(taskId, wtPath, branchName);
+
+    const prompt = buildReviseFromReviewPrompt(
+      repoAutonomy(repo), fullName, issue,
+      gh.stripYetiMarker(planComment.body), gh.stripYetiMarker(reviewComment.body),
+    );
+    const planOutput = await claude.resolveEnqueue(aiOptions)(
+      () => claude.runAI(prompt, wtPath!, aiOptions),
+      gh.hasPriorityLabel(issue.labels),
+    );
+
+    if (!planOutput.trim()) {
+      log.warn(`[issue-refiner] Empty revision output for ${fullName}#${issue.number}`);
+      db.recordTaskFailed(taskId, "Empty revision output");
+      return;
+    }
+
+    // Split the Review Response into its own comment so the plan stays clean.
+    const respMatch = planOutput.match(/### Review Response\s*\n([\s\S]*)$/);
+    const planBody = respMatch ? planOutput.slice(0, respMatch.index).trim() : planOutput;
+
+    const actionable = isPlanActionable(planOutput);
+    if (actionable) {
+      const scrubbedPlan = claude.scrubWorktreePaths(stripLearningsDeclaration(planBody), wtPath);
+      await gh.editIssueComment(fullName, planComment.id, `${PLAN_HEADER}\n\n${scrubbedPlan}`);
+      log.info(`[issue-refiner] Revised plan comment for ${fullName}#${issue.number}`);
+      notify({ jobName: "issue-refiner", message: `Plan revised after review for ${fullName}#${issue.number}`, url: gh.issueUrl(fullName, issue.number) });
+    }
+    if (respMatch) {
+      const scrubbedResp = claude.scrubWorktreePaths(stripLearningsDeclaration(respMatch[1].trim()), wtPath);
+      await gh.commentOnIssue(fullName, issue.number, `### Review Response\n${scrubbedResp}`);
+    }
+    if (!actionable && !respMatch) {
+      // Blocking clarifying questions with no response section: post them so the human sees them.
+      await gh.commentOnIssue(fullName, issue.number, claude.scrubWorktreePaths(stripLearningsDeclaration(planOutput), wtPath));
+    }
+
+    await gh.removeLabel(fullName, issue.number, LABELS.needsRefinement);
+    if (actionable) {
+      await gh.addLabel(fullName, issue.number, LABELS.needsPlanReview);
+    }
+    // Not actionable: no label — issue waits for human answers.
+
     db.recordTaskComplete(taskId);
   } catch (err) {
     db.recordTaskFailed(taskId, String(err));
@@ -392,13 +481,36 @@ export async function run(repos: Repo[]): Promise<void> {
             ),
           );
         } else if (issue.labels.some((l) => l.name === LABELS.needsRefinement)) {
-          // Plan exists but Needs Refinement label was re-added — produce a fresh plan
+          const planComment = comments[lastPlanIdx];
+          const commentsAfterPlan = comments.slice(lastPlanIdx + 1);
+          const unreactedComments = await findUnreactedHumanComments(repo.fullName, commentsAfterPlan, selfLogin);
+          const review = findReviewOfPlanVersion(comments, planComment.id, planComment.updatedAt);
+
           gh.populateQueueCache("needs-refinement", repo.fullName, { number: issue.number, title: issue.title, type: "issue", updatedAt: issue.updatedAt, priority: gh.hasPriorityLabel(issue.labels) });
-          tasks.push(
-            processIssue(repo, issue).catch((err) =>
-              reportError("issue-refiner:process-issue", `${repo.fullName}#${issue.number}`, err),
-            ),
-          );
+
+          if (unreactedComments.length > 0) {
+            // Human feedback outranks the loop; absorb a pending review into the same revision.
+            const feedback = review ? [review, ...unreactedComments] : unreactedComments;
+            tasks.push(
+              processRefinement(repo, issue, feedback).catch((err) =>
+                reportError("issue-refiner:process-refinement", `${repo.fullName}#${issue.number}`, err),
+              ),
+            );
+          } else if (review) {
+            // Reviewer kicked the plan back: targeted revision, not a replan.
+            tasks.push(
+              processReviewRevision(repo, issue, planComment, review).catch((err) =>
+                reportError("issue-refiner:process-review-revision", `${repo.fullName}#${issue.number}`, err),
+              ),
+            );
+          } else {
+            // Human re-added the label with no new input — deliberate "start over".
+            tasks.push(
+              processIssue(repo, issue).catch((err) =>
+                reportError("issue-refiner:process-issue", `${repo.fullName}#${issue.number}`, err),
+              ),
+            );
+          }
         } else {
           // Plan exists — check for unreacted human comments after the plan
           const commentsAfterPlan = comments.slice(lastPlanIdx + 1);
