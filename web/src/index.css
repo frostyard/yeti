@@ -1,0 +1,208 @@
+@import "tailwindcss";
+
+@import "@fontsource-variable/inter";
+@import "@fontsource/jetbrains-mono/400.css";
+@import "@fontsource/jetbrains-mono/500.css";
+@import "@fontsource/jetbrains-mono/700.css";
+
+/* ─────────────────────────────────────────────────────────────
+   frostyard — "snow, cold blues" (glacier). Dark is primary.
+   Semantic CSS vars switch by theme; @theme inline exposes them
+   as Tailwind utilities (bg-surface, text-muted, border-border…).
+   ───────────────────────────────────────────────────────────── */
+:root {
+  --bg: #070b12;
+  --bg-layer: #0b1220;
+  --surface: #0f1826;
+  --surface-raised: #16223a;
+  --border: #1c2b42;
+  --border-strong: #2b4064;
+  --text: #e6f0fb;
+  --text-secondary: #9fb3cc;
+  --text-muted: #5f7590;
+  --accent: #4aa8ff;
+  --accent-bright: #6fbfff;
+  --accent-dim: #2f6fb0;
+  --accent-soft: #123052;
+  --ice: #67e8f9;
+  --success: #34d3a6;
+  --warning: #e0b34a;
+  --danger: #fb5a76;
+  --info: #4aa8ff;
+  --log-debug: #5f7590;
+  --log-info: #9fb3cc;
+  --log-warn: #e0b34a;
+  --log-error: #fb5a76;
+  --ring: 74 168 255;
+  --shadow-card: 0 2px 8px rgba(2, 8, 20, 0.5);
+  --shadow-pop: 0 8px 28px rgba(2, 8, 20, 0.6);
+  --glow-accent: 0 0 20px rgba(74, 168, 255, 0.18);
+  color-scheme: dark;
+}
+
+/* Snow (light) — system preference unless forced dark */
+@media (prefers-color-scheme: light) {
+  :root:not(.dark):not([data-theme="dark"]) {
+    --bg: #f4f8fc;
+    --bg-layer: #eaf1f8;
+    --surface: #ffffff;
+    --surface-raised: #ffffff;
+    --border: #d3e0ee;
+    --border-strong: #b8ccdf;
+    --text: #0d2036;
+    --text-secondary: #45607d;
+    --text-muted: #7c93ab;
+    --accent: #0f74d4;
+    --accent-bright: #1b7fd6;
+    --accent-dim: #0a5aa8;
+    --accent-soft: #cfe4f7;
+    --ice: #0891b2;
+    --success: #0f9e7a;
+    --warning: #b5820f;
+    --danger: #d32f45;
+    --info: #0f74d4;
+    --log-debug: #8b949e;
+    --log-info: #45607d;
+    --log-warn: #b5820f;
+    --log-error: #d32f45;
+    color-scheme: light;
+  }
+}
+
+:root.light,
+:root[data-theme="light"] {
+  --bg: #f4f8fc;
+  --bg-layer: #eaf1f8;
+  --surface: #ffffff;
+  --surface-raised: #ffffff;
+  --border: #d3e0ee;
+  --border-strong: #b8ccdf;
+  --text: #0d2036;
+  --text-secondary: #45607d;
+  --text-muted: #7c93ab;
+  --accent: #0f74d4;
+  --accent-bright: #1b7fd6;
+  --accent-dim: #0a5aa8;
+  --accent-soft: #cfe4f7;
+  --ice: #0891b2;
+  --success: #0f9e7a;
+  --warning: #b5820f;
+  --danger: #d32f45;
+  --info: #0f74d4;
+  --log-debug: #8b949e;
+  --log-info: #45607d;
+  --log-warn: #b5820f;
+  --log-error: #d32f45;
+  color-scheme: light;
+}
+
+@theme inline {
+  --color-bg: var(--bg);
+  --color-layer: var(--bg-layer);
+  --color-surface: var(--surface);
+  --color-raised: var(--surface-raised);
+  --color-border: var(--border);
+  --color-border-strong: var(--border-strong);
+  --color-text: var(--text);
+  --color-secondary: var(--text-secondary);
+  --color-muted: var(--text-muted);
+  --color-accent: var(--accent);
+  --color-accent-bright: var(--accent-bright);
+  --color-accent-dim: var(--accent-dim);
+  --color-accent-soft: var(--accent-soft);
+  --color-ice: var(--ice);
+  --color-success: var(--success);
+  --color-warning: var(--warning);
+  --color-danger: var(--danger);
+  --color-info: var(--info);
+  --color-log-debug: var(--log-debug);
+  --color-log-info: var(--log-info);
+  --color-log-warn: var(--log-warn);
+  --color-log-error: var(--log-error);
+
+  --font-sans: "Inter Variable", ui-sans-serif, system-ui, -apple-system, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, monospace;
+
+  --radius-card: 10px;
+  --radius-lg: 14px;
+
+  --shadow-card: var(--shadow-card);
+  --shadow-pop: var(--shadow-pop);
+  --shadow-glow: var(--glow-accent);
+}
+
+@layer base {
+  * {
+    border-color: var(--border);
+  }
+  html {
+    background: var(--bg);
+    color-scheme: dark;
+  }
+  body {
+    margin: 0;
+    background:
+      radial-gradient(1200px 600px at 78% -10%, rgba(74, 168, 255, 0.06), transparent 60%),
+      radial-gradient(900px 500px at 10% 0%, rgba(103, 232, 249, 0.04), transparent 55%),
+      var(--bg);
+    color: var(--text);
+    font-family: var(--font-sans);
+    font-size: 14px;
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+    min-height: 100vh;
+    min-height: 100dvh;
+    font-variant-numeric: tabular-nums;
+  }
+  a {
+    color: var(--accent);
+    text-decoration: none;
+  }
+  a:hover {
+    color: var(--accent-bright);
+  }
+  ::selection {
+    background: rgba(74, 168, 255, 0.28);
+  }
+  :focus-visible {
+    outline: none;
+    box-shadow: 0 0 0 3px rgb(var(--ring) / 0.45);
+    border-radius: 4px;
+  }
+  /* Cold, thin scrollbars */
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: var(--border-strong) transparent;
+  }
+  *::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+  *::-webkit-scrollbar-thumb {
+    background: var(--border-strong);
+    border-radius: 999px;
+    border: 2px solid transparent;
+    background-clip: content-box;
+  }
+}
+
+@layer components {
+  /* Signature small-caps section label (Bluefin-style) */
+  .section-label {
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    color: var(--text-secondary);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+  }
+}
