@@ -94,7 +94,8 @@ Tests are co-located (`*.test.ts` next to source). Heavy mocking of external bou
 - Auto-updates via `yeti-updater.timer` checking GitHub releases every 60s
 - Version tags: `v<YYYY-MM-DD>.<N>` — release workflow on push to `main`
 - Release tarball: `dist/` + `deploy/` + `node_modules/`
-- Health check: `GET /health` on port 9384
+- Health check: `GET /health` on port 9384 — returns `{status, version, activeTasks, updatePending}`; `activeTasks` is the deploy drain signal.
+- **Graceful updates (quiesce)**: when `deploy.sh` sees a newer release it writes a `~/.yeti/quiesce` sentinel (via `src/quiesce.ts`), then polls `/health` until `activeTasks === 0` (bounded by `UPDATE_MAX_WAIT`, default 1800s) before stopping the service — so an update never kills a long in-flight AI run mid-commit. While the sentinel exists the scheduler defers new job runs and `triggerJob` returns `"update-pending"`; the daemon clears it on startup, and the dashboard shows an "update pending" banner. After the cap, deploy proceeds anyway (the service-stop drain, `TimeoutStopSec=330`, bounds the rest).
 
 ## Cross-Cutting Concerns
 

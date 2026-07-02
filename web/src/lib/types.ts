@@ -53,6 +53,8 @@ export interface Overview {
   jobAi: Record<string, { backend?: AiBackend; model?: string }>;
   discord: DiscordStatus;
   counts: { running: number; queuePending: number; recentDone: number; recentFailed: number };
+  updatePending: boolean;
+  pendingUpdateTag: string | null;
 }
 
 export interface JobRunSummary {

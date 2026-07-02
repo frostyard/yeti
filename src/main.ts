@@ -8,6 +8,7 @@ import * as gh from "./github.js";
 import { startJobs, type Job } from "./scheduler.js";
 import { createServer, closeSSEConnections } from "./server.js";
 import { initDb, setRunIdProvider, getOrphanedTasks, recordTaskFailed, pruneOldLogs, closeDb, pruneOldNotifications } from "./db.js";
+import { clearQuiesce } from "./quiesce.js";
 import { runContext } from "./log.js";
 import * as issueWorker from "./jobs/issue-worker.js";
 import * as issueRefiner from "./jobs/issue-refiner.js";
@@ -42,6 +43,10 @@ watchPolicies();
 
 initDb();
 setRunIdProvider(() => runContext.getStore()?.runId);
+
+// Clear any stale update sentinel — a fresh start means the previous deploy
+// either completed or was aborted; either way we should resume normal scheduling.
+clearQuiesce();
 
 const orphaned = getOrphanedTasks();
 if (orphaned.length > 0) {

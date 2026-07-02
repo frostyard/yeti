@@ -15,6 +15,7 @@ import { discordStatus } from "./discord.js";
 import { VERSION } from "./version.js";
 import { isOAuthConfigured } from "./oauth.js";
 import { JOB_DESCRIPTIONS, type JobInfo } from "./job-meta.js";
+import { isUpdatePending, pendingUpdateTag } from "./quiesce.js";
 import { readBody, parseCookies, safeCompare, isAuthEnabled, getSession, requireApiAuth, sendJson, tokenCookie } from "./http-util.js";
 
 /** Maps don't survive JSON.stringify — flatten to a plain object for the wire. */
@@ -101,7 +102,7 @@ function buildOverviewPayload(scheduler: Scheduler, startedAt: string): Record<s
     recentDone,
     recentFailed,
   };
-  return { ...status, version: VERSION, counts };
+  return { ...status, version: VERSION, counts, updatePending: isUpdatePending(), pendingUpdateTag: pendingUpdateTag() };
 }
 
 function buildJobsPayload(scheduler: Scheduler, allJobs: JobInfo[]): unknown[] {
@@ -281,7 +282,7 @@ export async function handleApi(
       const action = jobMatch[2];
       if (action === "trigger") {
         const result = scheduler.triggerJob(jobName);
-        const status = result === "started" ? 200 : result === "already-running" ? 409 : 404;
+        const status = result === "started" ? 200 : result === "unknown" ? 404 : 409;
         sendJson(res, status, { result });
         return;
       }

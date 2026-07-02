@@ -64,6 +64,15 @@ fi
 
 log "Updating from $CURRENT_TAG to $LATEST_TAG"
 
+# 2.5 Quiesce: tell the running daemon to stop starting new jobs so in-flight work
+#     can drain before we restart. The daemon clears this sentinel on startup; the
+#     EXIT trap removes it if we abort before restarting.
+QUIESCE_FILE="$YETI_HOME/.yeti/quiesce"
+cleanup_quiesce() { rm -f "$QUIESCE_FILE" 2>/dev/null || true; }
+trap cleanup_quiesce EXIT
+sudo -u "$YETI_USER" bash -c "echo '$LATEST_TAG' > '$QUIESCE_FILE'" || log "Warning: could not write quiesce sentinel"
+log "Quiesce signalled — new jobs deferred while draining"
+
 # 3. Download and extract
 TMPFILE=$(sudo -u "$YETI_USER" mktemp /tmp/yeti-XXXXXX.tar.gz)
 sudo -u "$YETI_USER" gh release download "$LATEST_TAG" -R "$REPO" -p "yeti.tar.gz" -O "$TMPFILE" --clobber
@@ -77,6 +86,32 @@ rm -rf "$INSTALL_DIR/dist.prev"
 if [[ -d "$INSTALL_DIR/dist" ]]; then
   cp -r "$INSTALL_DIR/dist" "$INSTALL_DIR/dist.prev"
 fi
+
+# 4.5 Wait for in-flight jobs to drain (bounded by UPDATE_MAX_WAIT). A hung/very
+#      long job can't block updates forever — after the cap we proceed and the
+#      service stop's own drain bounds the rest.
+UPDATE_MAX_WAIT="${UPDATE_MAX_WAIT:-1800}"   # seconds
+QUIESCE_POLL="${QUIESCE_POLL:-15}"           # seconds between polls
+waited=0
+while true; do
+  health=$(curl -fsS --max-time 5 "$HEALTH_URL" 2>/dev/null || echo "")
+  if [[ -z "$health" ]]; then
+    log "Health endpoint unreachable — nothing to drain, proceeding"
+    break
+  fi
+  active=$(echo "$health" | node -e "let s='';process.stdin.on('data',d=>s+=d).on('end',()=>{try{console.log(JSON.parse(s).activeTasks??0)}catch{console.log(0)}})" 2>/dev/null || echo 0)
+  if [[ "$active" == "0" ]]; then
+    log "Daemon idle — proceeding with deploy"
+    break
+  fi
+  if [[ "$waited" -ge "$UPDATE_MAX_WAIT" ]]; then
+    log "Quiesce cap reached (${UPDATE_MAX_WAIT}s) with $active active job(s) — proceeding; service-stop drain will bound the rest"
+    break
+  fi
+  log "Draining — $active active job(s) (${waited}s/${UPDATE_MAX_WAIT}s)"
+  sleep "$QUIESCE_POLL"
+  waited=$((waited + QUIESCE_POLL))
+done
 
 # 5. Stop service before swapping files
 log "Stopping yeti service..."

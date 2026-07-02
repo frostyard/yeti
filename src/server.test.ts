@@ -84,6 +84,12 @@ vi.mock("./notify.js", () => ({
   notificationEmitter: new EventEmitter(),
 }));
 
+vi.mock("./quiesce.js", () => ({
+  isUpdatePending: vi.fn().mockReturnValue(false),
+  pendingUpdateTag: vi.fn().mockReturnValue(null),
+  clearQuiesce: vi.fn(),
+}));
+
 vi.mock("./github.js", () => ({
   getQueueSnapshot: vi.fn().mockReturnValue({ items: [], oldestFetchAt: null }),
   enrichQueueItemsWithPRStatus: vi.fn().mockResolvedValue(undefined),
@@ -289,6 +295,8 @@ describe("JSON API (auth disabled)", () => {
     expect(body.counts.recentDone).toBe(1);
     expect(body.counts.recentFailed).toBe(1);
     expect(body.counts.running).toBe(1);
+    expect(body.updatePending).toBe(false);
+    expect(body.pendingUpdateTag).toBeNull();
   });
 
   it("GET /api/jobs returns one entry per job", async () => {
@@ -386,6 +394,20 @@ describe("JSON API (auth disabled)", () => {
     const res = await request(server, "POST", "/api/jobs/issue-worker/trigger");
     expect(res.status).toBe(200);
     expect(JSON.parse(res.body).result).toBe("started");
+  });
+
+  it("POST /api/jobs/:name/trigger returns 409 when an update is pending", async () => {
+    const sched = mockScheduler();
+    sched.triggerJob = vi.fn().mockReturnValue("update-pending");
+    const s = createServer(sched, API_JOBS);
+    await new Promise<void>((resolve) => { if (s.listening) resolve(); else s.on("listening", resolve); });
+    try {
+      const res = await request(s, "POST", "/api/jobs/issue-worker/trigger");
+      expect(res.status).toBe(409);
+      expect(JSON.parse(res.body).result).toBe("update-pending");
+    } finally {
+      await new Promise<void>((resolve, reject) => s.close((err) => (err ? reject(err) : resolve())));
+    }
   });
 
   it("POST /api/jobs/:name/pause toggles pause then resume", async () => {
@@ -522,10 +544,10 @@ describe("core HTTP endpoints", () => {
     await new Promise<void>((resolve, reject) => server.close((err) => (err ? reject(err) : resolve())));
   });
 
-  it("GET /health returns ok + version", async () => {
+  it("GET /health returns ok + version + drain signals", async () => {
     const res = await request(server, "GET", "/health");
     expect(res.status).toBe(200);
-    expect(JSON.parse(res.body)).toEqual({ status: "ok", version: "1.2.3-test" });
+    expect(JSON.parse(res.body)).toEqual({ status: "ok", version: "1.2.3-test", activeTasks: 1, updatePending: false });
   });
 
   it("legacy HTML routes are gone (fall through to 404 without built assets)", async () => {

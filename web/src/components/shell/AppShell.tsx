@@ -1,6 +1,6 @@
 import { NavLink, Outlet, useNavigate } from "react-router-dom";
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
-import { Snowflake, Bell, Sun, Moon, Monitor, LogOut, Menu } from "lucide-react";
+import { Snowflake, Bell, Sun, Moon, Monitor, LogOut, Menu, RefreshCw } from "lucide-react";
 import { useTheme, type Theme } from "../../theme/useTheme";
 import { useOverview, useSession } from "../../lib/queries";
 import { useRealtime } from "../../lib/realtime";
@@ -140,6 +140,21 @@ function MobileNav() {
   );
 }
 
+function UpdateBanner() {
+  const { data } = useOverview();
+  if (!data?.updatePending) return null;
+  return (
+    <div className="border-b border-warning/30 bg-warning/10" role="status" aria-live="polite">
+      <div className="mx-auto flex max-w-[1400px] items-center gap-2 px-4 py-2 text-[13px] text-warning">
+        <RefreshCw size={14} className="animate-spin" />
+        <span>
+          Update pending{data.pendingUpdateTag ? ` (${data.pendingUpdateTag})` : ""} — draining running jobs before deploy. New jobs are paused.
+        </span>
+      </div>
+    </div>
+  );
+}
+
 export function AppShell() {
   return (
     <div className="min-h-dvh">
@@ -162,6 +177,7 @@ export function AppShell() {
           </div>
         </div>
       </header>
+      <UpdateBanner />
       <main className="mx-auto max-w-[1400px] px-4 py-6">
         <Outlet />
       </main>
