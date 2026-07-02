@@ -405,6 +405,22 @@ export function hasPreviousCiFixerTasks(repo: string, prNumber: number): boolean
   return row !== undefined;
 }
 
+export function getRecentTasksForItem(
+  jobName: string,
+  repo: string,
+  itemNumber: number,
+  limit = 20,
+): Task[] {
+  return getDb()
+    .prepare(
+      `SELECT * FROM tasks
+       WHERE job_name = ? AND repo = ? AND item_number = ?
+       ORDER BY id DESC
+       LIMIT ?`,
+    )
+    .all(jobName, repo, itemNumber, limit) as Task[];
+}
+
 export function pruneOldLogs(retentionDays: number, keepPerJob = 20): number {
   const d = getDb();
   const cutoff = new Date(Date.now() - retentionDays * 86_400_000).toISOString();

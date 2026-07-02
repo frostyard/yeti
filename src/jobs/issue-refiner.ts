@@ -13,8 +13,25 @@ import { renderPolicy, type Autonomy } from "../policy.js";
 import { stripLearningsDeclaration } from "../learnings.js";
 import { findReviewOfPlanVersion } from "../review-contract.js";
 
+const EMPTY_REVISION_ERROR = "Empty revision output";
+const MAX_EMPTY_REVISION_RETRIES = 3;
+
 function isCiUnrelatedIssue(issue: gh.Issue): boolean {
   return issue.title.startsWith("[ci-unrelated]");
+}
+
+function consecutiveEmptyRevisions(fullName: string, issueNumber: number): number {
+  const tasks = db.getRecentTasksForItem("issue-refiner", fullName, issueNumber);
+  let count = 0;
+  for (const task of tasks) {
+    if (task.status === "running") continue;
+    if (task.status === "failed" && task.error === EMPTY_REVISION_ERROR) {
+      count++;
+      continue;
+    }
+    break;
+  }
+  return count;
 }
 
 export function buildRefinementPrompt(
@@ -293,8 +310,28 @@ async function processReviewRevision(
     );
 
     if (!planOutput.trim()) {
+      const attempts = consecutiveEmptyRevisions(fullName, issue.number) + 1;
+      if (attempts >= MAX_EMPTY_REVISION_RETRIES) {
+        log.warn(`[issue-refiner] Empty revision output for ${fullName}#${issue.number} - escalating after ${attempts} attempts`);
+        await gh.removeLabel(fullName, issue.number, LABELS.needsRefinement);
+        await gh.addLabel(fullName, issue.number, LABELS.ready);
+        await gh.commentOnIssue(
+          fullName,
+          issue.number,
+          `Warning: the plan revision produced no output ${attempts} times in a row after plan review. ` +
+            `Automatic revision has been paused and this issue has been routed to **${LABELS.ready}** for human review. ` +
+            `Please address the review feedback manually, or re-add **${LABELS.needsRefinement}** to retry.`,
+        );
+        await reportError(
+          "issue-refiner:empty-revision",
+          `${fullName}#${issue.number}`,
+          new Error(`processReviewRevision produced empty output ${attempts} consecutive times`),
+        );
+        db.recordTaskFailed(taskId, `Empty revision output - escalated after ${attempts} attempts`);
+        return;
+      }
       log.warn(`[issue-refiner] Empty revision output for ${fullName}#${issue.number}`);
-      db.recordTaskFailed(taskId, "Empty revision output");
+      db.recordTaskFailed(taskId, EMPTY_REVISION_ERROR);
       return;
     }
 

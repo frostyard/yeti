@@ -70,6 +70,7 @@ const { mockGh, mockClaude, mockDb } = vi.hoisted(() => ({
     updateTaskWorktree: vi.fn(),
     recordTaskComplete: vi.fn(),
     recordTaskFailed: vi.fn(),
+    getRecentTasksForItem: vi.fn().mockReturnValue([]),
   },
 }));
 
@@ -113,6 +114,7 @@ describe("issue-refiner", () => {
     mockGh.editIssueComment.mockResolvedValue(undefined);
     mockGh.getIssueComments.mockResolvedValue([]);
     mockGh.populateQueueCache.mockReturnValue(undefined);
+    mockDb.getRecentTasksForItem.mockReturnValue([]);
     vi.mocked(extractFingerprint).mockReturnValue(null);
   });
 
@@ -752,6 +754,72 @@ describe("issue-refiner", () => {
         issue.number,
         expect.stringContaining("Which behavior do you want?"),
       );
+    });
+
+    it("keeps retrying empty review revisions below the cap", async () => {
+      const issue = setupKickedBackIssue([planComment, reviewComment]);
+      mockClaude.runAI.mockResolvedValue("");
+      mockDb.getRecentTasksForItem.mockReturnValue([
+        { status: "running", error: null },
+        { status: "failed", error: "Empty revision output" },
+      ]);
+
+      await run([repo]);
+
+      expect(mockDb.recordTaskFailed).toHaveBeenCalledWith(1, "Empty revision output");
+      expect(reportError).not.toHaveBeenCalled();
+      expect(mockGh.commentOnIssue).not.toHaveBeenCalled();
+      expect(mockGh.removeLabel).not.toHaveBeenCalledWith(repo.fullName, issue.number, "Needs Refinement");
+      expect(mockGh.addLabel).not.toHaveBeenCalledWith(repo.fullName, issue.number, "Ready");
+    });
+
+    it("escalates empty review revisions at the cap", async () => {
+      const issue = setupKickedBackIssue([planComment, reviewComment]);
+      mockClaude.runAI.mockResolvedValue("");
+      mockDb.getRecentTasksForItem.mockReturnValue([
+        { status: "running", error: null },
+        { status: "failed", error: "Empty revision output" },
+        { status: "failed", error: "Empty revision output" },
+      ]);
+
+      await run([repo]);
+
+      expect(reportError).toHaveBeenCalledWith(
+        "issue-refiner:empty-revision",
+        `${repo.fullName}#${issue.number}`,
+        expect.any(Error),
+      );
+      expect(mockGh.removeLabel).toHaveBeenCalledWith(repo.fullName, issue.number, "Needs Refinement");
+      expect(mockGh.addLabel).toHaveBeenCalledWith(repo.fullName, issue.number, "Ready");
+      expect(mockGh.commentOnIssue).toHaveBeenCalledWith(
+        repo.fullName,
+        issue.number,
+        expect.stringContaining("human review"),
+      );
+      expect(mockGh.commentOnIssue).toHaveBeenCalledWith(
+        repo.fullName,
+        issue.number,
+        expect.stringContaining("paused"),
+      );
+      expect(mockDb.recordTaskFailed).toHaveBeenCalledWith(1, expect.stringContaining("escalated"));
+    });
+
+    it("resets the empty review revision streak after a non-empty task", async () => {
+      const issue = setupKickedBackIssue([planComment, reviewComment]);
+      mockClaude.runAI.mockResolvedValue("");
+      mockDb.getRecentTasksForItem.mockReturnValue([
+        { status: "running", error: null },
+        { status: "completed", error: null },
+        { status: "failed", error: "Empty revision output" },
+        { status: "failed", error: "Empty revision output" },
+      ]);
+
+      await run([repo]);
+
+      expect(mockDb.recordTaskFailed).toHaveBeenCalledWith(1, "Empty revision output");
+      expect(reportError).not.toHaveBeenCalled();
+      expect(mockGh.removeLabel).not.toHaveBeenCalledWith(repo.fullName, issue.number, "Needs Refinement");
+      expect(mockGh.addLabel).not.toHaveBeenCalledWith(repo.fullName, issue.number, "Ready");
     });
 
     it("posts both blocking questions and the response when the AI malformedly emits both", async () => {

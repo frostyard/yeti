@@ -25,6 +25,7 @@ import {
   getWorkItemsForRuns,
   getRecentWorkItems,
   getRecentActions,
+  getRecentTasksForItem,
   searchRunsByItem,
   insertJobRun,
   completeJobRun,
@@ -101,6 +102,25 @@ describe("db", () => {
 
     const orphaned = getOrphanedTasks();
     expect(orphaned).toHaveLength(0);
+  });
+
+  it("getRecentTasksForItem returns matching tasks newest first and respects limit", () => {
+    const oldOtherItem = recordTaskStart("issue-refiner", "org/repo", 41, null);
+    recordTaskComplete(oldOtherItem);
+    const oldOtherJob = recordTaskStart("issue-worker", "org/repo", 42, null);
+    recordTaskComplete(oldOtherJob);
+    const first = recordTaskStart("issue-refiner", "org/repo", 42, null);
+    recordTaskFailed(first, "Empty revision output");
+    const second = recordTaskStart("issue-refiner", "org/repo", 42, null);
+    recordTaskComplete(second);
+    const third = recordTaskStart("issue-refiner", "org/repo", 42, null);
+    recordTaskFailed(third, "Other failure");
+
+    const tasks = getRecentTasksForItem("issue-refiner", "org/repo", 42);
+
+    expect(tasks.map((task) => task.id)).toEqual([third, second, first]);
+    expect(getRecentTasksForItem("issue-refiner", "org/repo", 42, 2).map((task) => task.id))
+      .toEqual([third, second]);
   });
 
   it("getOrphanedTasks returns only running tasks", () => {
