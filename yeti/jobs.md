@@ -630,11 +630,19 @@ calls `db.dismissLearning(id, reason)`.
 
 - Dismissed learnings (from the parsed `DISMISSED:` lines) → `status =
   'dismissed'`, `reason` set.
-- Remaining pending learnings that survived to a successful push → `status =
-  'consolidated'`, `pr_number` set, via `db.markLearningsConsolidated(ids,
-  prNumber)`.
-- A learning that was neither dismissed nor consolidated (AI produced no
-  usable diff for it) stays `pending` and is picked up again on the next run.
+- When a PR is created, **every** non-dismissed learning in the batch —
+  `consolidated = pending.filter(l => !dismissedIds.has(l.id))` — is marked
+  `status = 'consolidated'` with `pr_number` set, via
+  `db.markLearningsConsolidated(ids, prNumber)`. This is not verified per
+  learning: the AI may have silently ignored one without dismissing it, and
+  it still gets marked `consolidated` alongside the ones actually folded in.
+  The "consolidated" list in the PR body is the AI's claim; a human reviewing
+  the PR should cross-check it against the actual diff before merging.
+- A learning stays `pending` only when the run as a whole produces no PR —
+  i.e. the tree-diff guard above trips (no new commits or no tree diff) while
+  `consolidated.length > 0`. In that case none of the batch's non-dismissed
+  learnings are touched and all of them remain `pending`, picked up again on
+  the next run.
 - On success: opens a PR titled `chore(learnings): consolidate <N>
   environment learning(s)` against `SELF_REPO`'s default branch, branch name
   `yeti/learnings-<datestamp>-<hex4>`. The PR body (`buildPRBody()`) lists

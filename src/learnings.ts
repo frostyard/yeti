@@ -67,7 +67,7 @@ export interface GateContext {
 const RETRY_PROMPT = [
   `Your previous response was missing the required Learnings declaration.`,
   ``,
-  `Review the work you just completed in this directory (check \`git log\` and \`git diff\` if needed). If you discovered a workaround, non-obvious pattern, or trial-and-error discovery worth recording for future agents, write it to \`yeti/learnings/<slug>.md\` and commit it now. If you hit friction with this managed environment or its tooling, prepare a one-line summary.`,
+  `Review the work you just completed in this directory (check \`git log\` and \`git diff\` if needed). Do NOT write any new files or create any new commits — this is a reporting step only. If your session already committed a learning file under \`yeti/learnings/\`, reference it; if you hit friction with this managed environment or its tooling, summarize it in one line.`,
   ``,
   `Then reply with ONLY these two lines (use \`none\` where there is nothing to report):`,
   ``,
