@@ -2,7 +2,7 @@ import http from "node:http";
 import { queueStatus, copilotQueueStatus, codexQueueStatus, cancelCurrentTask } from "./claude.js";
 import * as config from "./config.js";
 import { getConfigForDisplay, getEnvOverrides, writeConfig, LOG_LEVELS, type ConfigFile } from "./config.js";
-import { getQueueSnapshot, enrichQueueItemsWithPRStatus, mergePR, removeQueueItem, listAllOrgRepos, listRepos, type QueueCategory } from "./github.js";
+import { getQueueSnapshot, enrichQueueItemsWithPRStatus, mergePR, removeQueueItem, listAllOrgRepos, listRepos, type QueueCategory, type QueueItem } from "./github.js";
 import {
   getRecentJobRuns, getRecentWorkItems, getDistinctJobNames, getJobRun, getJobRunLogs,
   getJobRunLogsSince, getLatestRunIdsByJob, getRunningTasks, getTasksByRunId, getWorkItemsForRuns,
@@ -20,6 +20,7 @@ import { isUpdatePending, pendingUpdateTag } from "./quiesce.js";
 import { getSystemStats } from "./sysstats.js";
 import { readBody, parseCookies, safeCompare, isAuthEnabled, getSession, requireApiAuth, sendJson, tokenCookie } from "./http-util.js";
 import type { Autonomy } from "./policy.js";
+import { ACTION_MIN_TIER, fullNameAutonomy, tierSatisfies, type Action } from "./capability.js";
 
 /** Maps don't survive JSON.stringify — flatten to a plain object for the wire. */
 function mapToObject<V>(m: Map<string, V>): Record<string, V> {
@@ -29,6 +30,26 @@ function mapToObject<V>(m: Map<string, V>): Record<string, V> {
 const ALL_CATEGORIES: QueueCategory[] = ["ready", "needs-refinement", "refined", "needs-review-addressing", "auto-mergeable", "needs-triage", "needs-plan-review"];
 const MY_ATTENTION_CATEGORIES: QueueCategory[] = ["ready"];
 const YETI_ATTENTION_CATEGORIES: QueueCategory[] = ["needs-refinement", "refined", "needs-review-addressing", "auto-mergeable", "needs-triage", "needs-plan-review"];
+const CATEGORY_ACTION: Partial<Record<QueueCategory, Action>> = {
+  refined: "createPR",
+  "needs-review-addressing": "push",
+  "auto-mergeable": "merge",
+};
+
+export function computeTierBlock(category: QueueCategory, tier: Autonomy): { blockedByTier: Autonomy; requiredTier: Autonomy } | null {
+  const action = CATEGORY_ACTION[category];
+  if (!action || tierSatisfies(tier, action)) return null;
+  return { blockedByTier: tier, requiredTier: ACTION_MIN_TIER[action] };
+}
+
+export function annotateTierBlocking(items: QueueItem[]): void {
+  for (const item of items) {
+    const block = computeTierBlock(item.category, fullNameAutonomy(item.repo));
+    if (!block) continue;
+    item.blockedByTier = block.blockedByTier;
+    item.requiredTier = block.requiredTier;
+  }
+}
 
 // ── Shared payload builders (also used by legacy routes during migration) ──
 
@@ -99,9 +120,12 @@ function buildOverviewPayload(scheduler: Scheduler, startedAt: string): Record<s
     if (r.status === "completed") recentDone++;
     else if (r.status === "failed") recentFailed++;
   }
+  const queueItems = getQueueSnapshot(ALL_CATEGORIES).items;
+  annotateTierBlocking(queueItems);
   const counts = {
     running: (status.runningTasks as unknown[]).length,
-    queuePending: getQueueSnapshot(ALL_CATEGORIES).items.length,
+    queuePending: queueItems.length,
+    queueBlockedByTier: queueItems.filter((item) => item.blockedByTier).length,
     recentDone,
     recentFailed,
     pendingLearnings: countPendingLearnings(),
@@ -440,6 +464,8 @@ export async function handleApi(
     if (p === "/api/queue") {
       const myAttention = getQueueSnapshot(MY_ATTENTION_CATEGORIES);
       const yetiAttention = getQueueSnapshot(YETI_ATTENTION_CATEGORIES);
+      annotateTierBlocking(myAttention.items);
+      annotateTierBlocking(yetiAttention.items);
       await enrichQueueItemsWithPRStatus(myAttention.items);
       sendJson(res, 200, {
         myAttention: myAttention.items,

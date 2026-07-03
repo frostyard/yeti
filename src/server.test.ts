@@ -34,6 +34,9 @@ vi.mock("./config.js", () => ({
   }),
   getEnvOverrides: vi.fn().mockReturnValue({}),
   writeConfig: vi.fn(),
+  repoAutonomy: () => "advisory",
+  AUTONOMY_MAP: {},
+  DEFAULT_AUTONOMY: "advisory",
   SKIPPED_ITEMS: [],
   PRIORITIZED_ITEMS: [],
   ENABLED_JOBS: ["issue-worker", "ci-fixer"],
@@ -308,6 +311,7 @@ describe("JSON API (auth disabled)", () => {
     expect(body.counts.recentDone).toBe(1);
     expect(body.counts.recentFailed).toBe(1);
     expect(body.counts.running).toBe(1);
+    expect(body.counts.queueBlockedByTier).toBe(0);
     expect(body.counts.pendingLearnings).toBe(1);
     expect(body.updatePending).toBe(false);
     expect(body.pendingUpdateTag).toBeNull();

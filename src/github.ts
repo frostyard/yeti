@@ -4,6 +4,7 @@ import * as log from "./log.js";
 import { notify } from "./notify.js";
 import { reportError } from "./error-reporter.js";
 import { assertCapability } from "./capability.js";
+import type { Autonomy } from "./policy.js";
 
 const RATE_LIMIT_RE = /rate limit/i;
 const TRANSIENT_RE = /\b(400|500|502|503|504|ETIMEDOUT|ECONNRESET|ECONNREFUSED|connection reset)\b|Could not resolve to a|TLS handshake timeout|Something went wrong|stream error|unexpected EOF/i;
@@ -173,6 +174,8 @@ export interface QueueItem {
   checkStatus?: "passing" | "failing" | "pending";
   prNumber?: number;
   prioritized?: boolean;
+  blockedByTier?: Autonomy;
+  requiredTier?: Autonomy;
 }
 
 const queueCache = new Map<string, { item: QueueItem; fetchedAt: number }>();
