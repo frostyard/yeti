@@ -1,4 +1,4 @@
-This environment is managed by Yeti. If you need a build tool, language runtime, or CLI that is not already installed, install it with Homebrew: `brew install <formula>`. Homebrew (`brew`) is on your PATH. Do NOT use `apt`, `apt-get`, `dnf`, `yum`, or `sudo` to install system packages — that pollutes the host, may fail, and will not persist.
+This environment is managed by Yeti. If you need a build tool, language runtime, or CLI that is not already installed, install it with Homebrew: `brew install <formula>`. Homebrew (`brew`) is on your PATH. Do NOT use `apt`, `apt-get`, `dnf`, `yum`, or `sudo` to install system packages — that pollutes the host, may fail, and will not persist. Do not treat a skipped check as passing when it skipped because a CLI is missing; install the missing tool with Homebrew, for example `golangci-lint` when `make lint` silently skips without it. If you run `npm install` only to hydrate dependencies for testing, do not keep incidental `package-lock.json` optional-package metadata churn such as rewritten `libc` fields.
 
 ## Self-Improvement Loop
 
