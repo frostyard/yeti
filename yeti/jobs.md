@@ -765,23 +765,28 @@ hallucinating an ID that wasn't in the pending list is silently ignored
 rather than crashing or dismissing an unrelated row. Each valid dismissal
 calls `db.dismissLearning(id, reason)`.
 
+**FOLDED line protocol**: for each learning it folds into a file, the AI prints
+one line in the exact form `FOLDED: <id>`. `parseFolded(output)` extracts these
+via `/^FOLDED:\s*(\d+)\s*$/gim`, and the job filters the parsed IDs against
+`pendingIds` before acting. Hallucinated folded IDs are ignored, and malformed
+lines such as `FOLDED: <id>: <reason>` do not count.
+
 **Outputs / status transitions**:
 
 - Dismissed learnings (from the parsed `DISMISSED:` lines) → `status =
   'dismissed'`, `reason` set.
-- When a PR is created, **every** non-dismissed learning in the batch —
-  `consolidated = pending.filter(l => !dismissedIds.has(l.id))` — is marked
+- When a PR is created, only learnings explicitly declared folded and not
+  dismissed — `consolidated = folded ∩ pending - dismissed` — are marked
   `status = 'consolidated'` with `pr_number` set, via
-  `db.markLearningsConsolidated(ids, prNumber)`. This is not verified per
-  learning: the AI may have silently ignored one without dismissing it, and
-  it still gets marked `consolidated` alongside the ones actually folded in.
-  The "consolidated" list in the PR body is the AI's claim; a human reviewing
-  the PR should cross-check it against the actual diff before merging.
-- A learning stays `pending` only when the run as a whole produces no PR —
-  i.e. the tree-diff guard above trips (no new commits or no tree diff) while
-  `consolidated.length > 0`. In that case none of the batch's non-dismissed
-  learnings are touched and all of them remain `pending`, picked up again on
-  the next run.
+  `db.markLearningsConsolidated(ids, prNumber)`. If the AI lists an ID in both
+  `FOLDED:` and `DISMISSED:`, dismissal wins.
+- A learning stays `pending` when it is neither folded nor dismissed, or when
+  the tree-diff guard above trips (no new commits or no tree diff) while
+  `consolidated.length > 0`. It is picked up again on the next run.
+- If the AI actually folded a learning but forgot its `FOLDED:` line, that
+  learning remains `pending` and may be presented again. The policy's
+  "already covered" branch bounds duplicate guidance: the next run should
+  dismiss such stragglers when existing policy or docs already cover them.
 - On success: opens a PR titled `chore(learnings): consolidate <N>
   environment learning(s)` against `SELF_REPO`'s default branch, branch name
   `yeti/learnings-<datestamp>-<hex4>`. The PR body (`buildPRBody()`) lists
