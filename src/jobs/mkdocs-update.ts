@@ -10,8 +10,11 @@ import * as db from "../db.js";
 import { reportError } from "../error-reporter.js";
 import { notify } from "../notify.js";
 
+const JOB_NAME = "mkdocs-update";
+const COMMIT_MARKER = "[mkdocs-update]";
+
 export function buildMkdocsPrompt(autonomy: Autonomy, fullName: string): string {
-  return renderPolicy("mkdocs-update", autonomy, {
+  return renderPolicy(JOB_NAME, autonomy, {
     REPO: fullName,
   });
 }
@@ -32,9 +35,18 @@ async function processRepo(repo: Repo): Promise<void> {
     return;
   }
 
-  // Step 2: Create worktree and check for mkdocs config
+  // Step 2: Skip before worktree/AI if this repo head was already processed.
+  const { sha: headSha, message: headMessage } = await gh.getRemoteHead(fullName, repo.defaultBranch);
+  const lastSha = db.getLastJobSha(JOB_NAME, fullName);
+  if (lastSha === headSha || headMessage.includes(COMMIT_MARKER)) {
+    log.info(`[mkdocs-update] Skipping ${fullName} — no changes since last mkdocs update`);
+    db.recordJobSha(JOB_NAME, fullName, headSha);
+    return;
+  }
+
+  // Step 3: Create worktree and check for mkdocs config
   const branchName = `yeti/mkdocs-update-${claude.datestamp()}-${claude.randomSuffix()}`;
-  const taskId = db.recordTaskStart("mkdocs-update", fullName, 0, null);
+  const taskId = db.recordTaskStart(JOB_NAME, fullName, 0, null);
   let wtPath: string | undefined;
 
   try {
@@ -46,17 +58,18 @@ async function processRepo(repo: Repo): Promise<void> {
     const hasMkdocsYaml = fs.existsSync(path.join(wtPath, "mkdocs.yaml"));
     if (!hasMkdocsYml && !hasMkdocsYaml) {
       log.info(`[mkdocs-update] Skipping ${fullName} — no mkdocs.yml or mkdocs.yaml`);
+      db.recordJobSha(JOB_NAME, fullName, headSha);
       db.recordTaskComplete(taskId);
       return;
     }
 
-    // Step 3: Run AI to update docs
+    // Step 4: Run AI to update docs
     log.info(`[mkdocs-update] Updating mkdocs content for ${fullName}`);
     const prompt = buildMkdocsPrompt(repoAutonomy(repo), fullName);
-    const aiOptions = JOB_AI["mkdocs-update"];
+    const aiOptions = JOB_AI[JOB_NAME];
     await claude.resolveEnqueue(aiOptions)(() => claude.runAI(prompt, wtPath!, aiOptions));
 
-    // Step 4: Push and create PR
+    // Step 5: Push and create PR
     if (await claude.hasNewCommits(wtPath, repo.defaultBranch) && await claude.hasTreeDiff(wtPath, repo.defaultBranch)) {
       const description = await claude.generateDocsPRDescription(wtPath, repo.defaultBranch, aiOptions);
       await claude.pushBranch(wtPath, branchName, fullName);
@@ -72,6 +85,7 @@ async function processRepo(repo: Repo): Promise<void> {
       log.warn(`[mkdocs-update] No commits produced for ${fullName}`);
     }
 
+    db.recordJobSha(JOB_NAME, fullName, headSha);
     db.recordTaskComplete(taskId);
   } catch (err) {
     db.recordTaskFailed(taskId, String(err));
