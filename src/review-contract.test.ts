@@ -124,18 +124,24 @@ describe("countBlockingFindings", () => {
 
 describe("renderVerdict", () => {
   it("replaces the verdict line with a bold human-readable form including blocking count", () => {
-    const out = renderVerdict("### Blocking\n- [R1-B1] bad\n\nVERDICT: NEEDS REVISION");
+    const out = renderVerdict("### Blocking\n- [R1-B1] bad\n\nVERDICT: NEEDS REVISION", "needs-revision");
     expect(out).toContain("**Verdict: NEEDS REVISION** (1 blocking)");
     expect(out).not.toMatch(/^VERDICT:/m);
   });
 
   it("renders APPROVED without a count", () => {
-    const out = renderVerdict("Looks solid.\nVERDICT: APPROVED");
+    const out = renderVerdict("Looks solid.\nVERDICT: APPROVED", "approved");
     expect(out).toContain("**Verdict: APPROVED**");
   });
 
-  it("leaves output without a verdict line unchanged", () => {
-    expect(renderVerdict("no verdict here")).toBe("no verdict here");
+  it("uses the computed verdict over the declared verdict", () => {
+    const out = renderVerdict("### Blocking\n- [R1-B1] bad\n\nVERDICT: APPROVED", "needs-revision");
+    expect(out).toContain("**Verdict: NEEDS REVISION** (1 blocking)");
+    expect(out).not.toContain("**Verdict: APPROVED**");
+  });
+
+  it("appends the computed verdict when the raw verdict line is missing", () => {
+    expect(renderVerdict("no verdict here", "approved")).toBe("no verdict here\n\n**Verdict: APPROVED**");
   });
 });
 

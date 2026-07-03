@@ -15,6 +15,7 @@ import {
   findReviewOfPlanVersion,
   parseVerdict,
   renderVerdict,
+  countBlockingFindings,
   countPlanRounds,
   countSegments,
 } from "../review-contract.js";
@@ -99,7 +100,20 @@ async function processIssue(repo: Repo, issue: gh.Issue, planComment: gh.IssueCo
       return;
     }
 
-    const rendered = renderVerdict(stripLearningsDeclaration(reviewOutput));
+    const cleaned = stripLearningsDeclaration(reviewOutput);
+    const verdict = countBlockingFindings(cleaned) === 0 ? "approved" : "needs-revision";
+    const declared = parseVerdict(cleaned);
+    if (declared === "missing") {
+      log.warn(
+        `[plan-reviewer] No VERDICT line in review for ${fullName}#${issue.number} — routing on computed verdict (${verdict})`,
+      );
+    } else if (declared !== verdict) {
+      log.warn(
+        `[plan-reviewer] Declared verdict (${declared}) disagrees with computed verdict (${verdict}) for ${fullName}#${issue.number} — routing on computed verdict`,
+      );
+    }
+
+    const rendered = renderVerdict(cleaned, verdict);
     const scrubbed = claude.scrubWorktreePaths(rendered, wtPath);
     const marker = reviewMarker(planComment.id, planComment.updatedAt);
     await gh.commentOnIssue(fullName, issue.number, `${REVIEW_HEADER}\n\n${scrubbed}\n\n${marker}`);
@@ -107,11 +121,6 @@ async function processIssue(repo: Repo, issue: gh.Issue, planComment: gh.IssueCo
     notify({ jobName: "plan-reviewer", message: `Review posted for ${fullName}#${issue.number}`, url: gh.issueUrl(fullName, issue.number) });
 
     if (REVIEW_LOOP) {
-      const parsed = parseVerdict(reviewOutput);
-      if (parsed === "missing") {
-        log.warn(`[plan-reviewer] No verdict line in review for ${fullName}#${issue.number} — treating as needs-revision`);
-      }
-      const verdict = parsed === "approved" ? "approved" : "needs-revision";
       if (verdict === "approved") {
         await gh.removeLabel(fullName, issue.number, LABELS.needsPlanReview);
         await gh.addLabel(fullName, issue.number, LABELS.ready);

@@ -25,7 +25,7 @@ export function findReviewOfPlanVersion(
   return comments.findLast((c) => isYetiComment(c.body) && c.body.includes(marker));
 }
 
-/** Last VERDICT: line wins; "missing" lets the caller log before falling back to needs-revision. */
+/** Last VERDICT: line wins; "missing" lets the caller log cross-check failures. */
 export function parseVerdict(output: string): "approved" | "needs-revision" | "missing" {
   const lines = output.trim().split("\n");
   for (let i = lines.length - 1; i >= 0; i--) {
@@ -57,20 +57,20 @@ export function countBlockingFindings(output: string): number {
   return count;
 }
 
-/** Replace the raw VERDICT: line with the bold human-readable form for the posted comment. */
-export function renderVerdict(output: string): string {
+/** Replace the raw VERDICT: line with the computed bold human-readable form for the posted comment. */
+export function renderVerdict(output: string, verdict: "approved" | "needs-revision"): string {
+  const block =
+    verdict === "approved"
+      ? "**Verdict: APPROVED**"
+      : `**Verdict: NEEDS REVISION** (${countBlockingFindings(output)} blocking)`;
   const lines = output.split("\n");
   for (let i = lines.length - 1; i >= 0; i--) {
-    const m = lines[i].trim().match(VERDICT_RE);
-    if (m) {
-      const approved = m[1].toUpperCase() === "APPROVED";
-      lines[i] = approved
-        ? "**Verdict: APPROVED**"
-        : `**Verdict: NEEDS REVISION** (${countBlockingFindings(output)} blocking)`;
-      break;
+    if (lines[i].trim().match(VERDICT_RE)) {
+      lines[i] = block;
+      return lines.join("\n").trim();
     }
   }
-  return lines.join("\n").trim();
+  return `${output.trim()}\n\n${block}`.trim();
 }
 
 /**

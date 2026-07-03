@@ -81,6 +81,7 @@ vi.mock("../db.js", () => mockDb);
 
 import { run, buildReviewPrompt, buildThreadSection, buildRoundInfo } from "./plan-reviewer.js";
 import { reportError } from "../error-reporter.js";
+import * as log from "../log.js";
 
 describe("plan-reviewer", () => {
   const repo = mockRepo();
@@ -429,7 +430,7 @@ describe("plan-reviewer", () => {
         { id: 603, body: "human weighs in", login: "bsherman", updatedAt: "" },
         planComment,
       ]);
-      mockClaude.runAI.mockResolvedValue("Still broken.\nVERDICT: NEEDS REVISION");
+      mockClaude.runAI.mockResolvedValue("### Blocking\n- [R1-B1] still broken (src/x.ts:1)\n\nVERDICT: NEEDS REVISION");
 
       await run([repo]);
 
@@ -443,7 +444,7 @@ describe("plan-reviewer", () => {
     });
 
     it("needs revision under max rounds: adds Needs Refinement", async () => {
-      const issue = setupIssueWithReview("Issues found.\nVERDICT: NEEDS REVISION", 0);
+      const issue = setupIssueWithReview("### Blocking\n- [R1-B1] issue found (src/x.ts:1)\n\nVERDICT: NEEDS REVISION", 0);
 
       await run([repo]);
 
@@ -455,7 +456,7 @@ describe("plan-reviewer", () => {
     it("needs revision at max rounds: posts warning and adds Ready", async () => {
       mockConfig.MAX_PLAN_ROUNDS = 3;
       // 2 existing reviews + current = 3 = MAX_PLAN_ROUNDS
-      const issue = setupIssueWithReview("Still has issues.\nVERDICT: NEEDS REVISION", 2);
+      const issue = setupIssueWithReview("### Blocking\n- [R3-B1] still has issues (src/x.ts:1)\n\nVERDICT: NEEDS REVISION", 2);
 
       await run([repo]);
 
@@ -470,24 +471,67 @@ describe("plan-reviewer", () => {
       expect(mockGh.addLabel).not.toHaveBeenCalledWith(repo.fullName, issue.number, "Needs Refinement");
     });
 
-    it("defaults to needs-revision when no verdict line in output", async () => {
+    it("approves with a warning when no verdict line and no blocking findings", async () => {
       const issue = setupIssueWithReview("The plan has some issues but no explicit verdict.");
 
       await run([repo]);
 
-      expect(mockGh.addLabel).toHaveBeenCalledWith(repo.fullName, issue.number, "Needs Refinement");
-      expect(mockGh.addLabel).not.toHaveBeenCalledWith(repo.fullName, issue.number, "Ready");
+      expect(mockGh.addLabel).toHaveBeenCalledWith(repo.fullName, issue.number, "Ready");
+      expect(mockGh.addLabel).not.toHaveBeenCalledWith(repo.fullName, issue.number, "Needs Refinement");
+      expect(log.warn).toHaveBeenCalledWith(expect.stringContaining("No VERDICT line"));
     });
 
-    it("verdict parsing is case-insensitive and uses last verdict line", async () => {
-      // Earlier mention of APPROVED, but last verdict is NEEDS REVISION
+    it("last declared verdict does not override zero current blocking findings", async () => {
       const issue = setupIssueWithReview(
         "I mentioned VERDICT: APPROVED above but changed my mind.\nverdict: needs revision",
       );
 
       await run([repo]);
 
+      expect(mockGh.addLabel).toHaveBeenCalledWith(repo.fullName, issue.number, "Ready");
+      expect(mockGh.addLabel).not.toHaveBeenCalledWith(repo.fullName, issue.number, "Needs Refinement");
+      expect(log.warn).toHaveBeenCalledWith(expect.stringContaining("disagrees with computed verdict (approved)"));
+    });
+
+    it("routes to needs-revision when blocking findings disagree with declared APPROVED", async () => {
+      const issue = setupIssueWithReview("### Blocking\n- [R1-B1] bad thing (src/x.ts:1)\n\nVERDICT: APPROVED");
+
+      await run([repo]);
+
       expect(mockGh.addLabel).toHaveBeenCalledWith(repo.fullName, issue.number, "Needs Refinement");
+      expect(mockGh.addLabel).not.toHaveBeenCalledWith(repo.fullName, issue.number, "Ready");
+      expect(log.warn).toHaveBeenCalledWith(expect.stringContaining("disagrees with computed verdict (needs-revision)"));
+      expect(mockGh.commentOnIssue).toHaveBeenCalledWith(
+        repo.fullName,
+        issue.number,
+        expect.stringContaining("**Verdict: NEEDS REVISION** (1 blocking)"),
+      );
+    });
+
+    it("routes to approved when no blocking findings disagree with declared NEEDS REVISION", async () => {
+      const issue = setupIssueWithReview("All resolved.\nVERDICT: NEEDS REVISION");
+
+      await run([repo]);
+
+      expect(mockGh.addLabel).toHaveBeenCalledWith(repo.fullName, issue.number, "Ready");
+      expect(mockGh.addLabel).not.toHaveBeenCalledWith(repo.fullName, issue.number, "Needs Refinement");
+      expect(log.warn).toHaveBeenCalledWith(expect.stringContaining("disagrees with computed verdict (approved)"));
+      expect(mockGh.commentOnIssue).toHaveBeenCalledWith(
+        repo.fullName,
+        issue.number,
+        expect.stringContaining("**Verdict: APPROVED**"),
+      );
+    });
+
+    it("ignores prior-finding blocking IDs when computing the routing verdict", async () => {
+      const issue = setupIssueWithReview(
+        "### Prior findings\n- [R1-B1] resolved by the updated plan\n\n### Blocking\n(none)\n\nVERDICT: APPROVED",
+      );
+
+      await run([repo]);
+
+      expect(mockGh.addLabel).toHaveBeenCalledWith(repo.fullName, issue.number, "Ready");
+      expect(mockGh.addLabel).not.toHaveBeenCalledWith(repo.fullName, issue.number, "Needs Refinement");
     });
   });
 });
