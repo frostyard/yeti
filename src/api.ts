@@ -417,6 +417,7 @@ export async function handleApi(
         if (raw) {
           try { reason = String((JSON.parse(raw) as { reason?: unknown }).reason ?? "") || undefined; } catch { /* invalid json — dismiss without reason */ }
         }
+        // Dismiss is idempotent: unknown ids no-op and still return 200.
         dismissLearning(id, reason);
         sendJson(res, 200, { result: "dismissed" });
       } catch (err) {

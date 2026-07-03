@@ -45,7 +45,7 @@ vi.mock("../github.js", () => mockGh);
 vi.mock("../claude.js", () => mockClaude);
 vi.mock("../db.js", () => mockDb);
 
-import { run, parseDismissals, formatLearnings } from "./learning-consolidator.js";
+import { run, parseDismissals, buildPRBody, formatLearnings } from "./learning-consolidator.js";
 
 const learning = (id: number, summary: string) => ({
   id, job_name: "issue-worker", repo: "test-org/app", kind: "yeti",
@@ -141,6 +141,14 @@ describe("parseDismissals", () => {
   it("returns empty for output with no dismissals", () => {
     expect(parseDismissals("all folded in")).toEqual([]);
   });
+
+  it("parses case-insensitive DISMISSED prefix", () => {
+    expect(parseDismissals("dismissed: 3: lower\nDismissed: 5: mixed\nDISMISSED: 7: upper")).toEqual([
+      { id: 3, reason: "lower" },
+      { id: 5, reason: "mixed" },
+      { id: 7, reason: "upper" },
+    ]);
+  });
 });
 
 describe("formatLearnings", () => {
@@ -148,5 +156,23 @@ describe("formatLearnings", () => {
     const text = formatLearnings([learning(7, "use brew")]);
     expect(text).toContain("[7]");
     expect(text).toContain("use brew");
+  });
+});
+
+describe("buildPRBody", () => {
+  it("renders folded-in learnings", () => {
+    const text = buildPRBody([learning(1, "use brew"), learning(2, "gh needs --head")], []);
+
+    expect(text).toContain("## Learnings folded in");
+    expect(text).toContain("- use brew _(via issue-worker on test-org/app)_");
+    expect(text).toContain("- gh needs --head _(via issue-worker on test-org/app)_");
+    expect(text).not.toContain("## Dismissed");
+  });
+
+  it("includes a Dismissed section when dismissals are present", () => {
+    const text = buildPRBody([learning(1, "use brew")], [{ id: 2, reason: "already covered" }]);
+
+    expect(text).toContain("## Dismissed");
+    expect(text).toContain("- [2] already covered");
   });
 });

@@ -489,6 +489,33 @@ describe("JSON API (auth disabled)", () => {
       .toHaveBeenCalledWith(1, "not applicable");
   });
 
+  it("POST /api/learnings/:id/dismiss with no body dismisses without a reason", async () => {
+    const dbMod = await import("./db.js");
+    const dismissLearning = (dbMod as unknown as { dismissLearning: ReturnType<typeof vi.fn> }).dismissLearning;
+    dismissLearning.mockClear();
+
+    const res = await request(server, "POST", "/api/learnings/1/dismiss");
+
+    expect(res.status).toBe(200);
+    expect(JSON.parse(res.body)).toEqual({ result: "dismissed" });
+    expect(dismissLearning).toHaveBeenCalledWith(1, undefined);
+  });
+
+  it("POST /api/learnings/:id/dismiss with malformed JSON dismisses without a reason", async () => {
+    const dbMod = await import("./db.js");
+    const dismissLearning = (dbMod as unknown as { dismissLearning: ReturnType<typeof vi.fn> }).dismissLearning;
+    dismissLearning.mockClear();
+
+    const res = await request(server, "POST", "/api/learnings/1/dismiss", {
+      headers: { "content-type": "application/json" },
+      body: "{not json",
+    });
+
+    expect(res.status).toBe(200);
+    expect(JSON.parse(res.body)).toEqual({ result: "dismissed" });
+    expect(dismissLearning).toHaveBeenCalledWith(1, undefined);
+  });
+
   it("unknown /api route returns JSON 404", async () => {
     const res = await request(server, "GET", "/api/nope");
     expect(res.status).toBe(404);
