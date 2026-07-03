@@ -77,7 +77,7 @@ export function initDb(): void {
       id         INTEGER PRIMARY KEY AUTOINCREMENT,
       job_name   TEXT NOT NULL,
       repo       TEXT NOT NULL,
-      kind       TEXT NOT NULL,
+      kind       TEXT NOT NULL CHECK (kind IN ('repo','yeti')),
       summary    TEXT NOT NULL,
       status     TEXT NOT NULL DEFAULT 'pending',
       reason     TEXT,
@@ -85,6 +85,8 @@ export function initDb(): void {
       created_at TEXT NOT NULL
     )
   `);
+
+  migrateLearningsKindCheck(db);
   db.exec(`CREATE INDEX IF NOT EXISTS idx_learnings_status ON learnings(status)`);
 
   log.info("Database initialized");
@@ -108,6 +110,35 @@ export interface Task {
 function getDb(): Database.Database {
   if (!db) throw new Error("Database not initialized — call initDb() first");
   return db;
+}
+
+/** @internal — SQLite rebuild migration for adding the learnings.kind CHECK. */
+export function migrateLearningsKindCheck(d: Database.Database): void {
+  const learningsDdl = d
+    .prepare(`SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'learnings'`)
+    .get() as { sql: string } | undefined;
+  if (!learningsDdl) return;
+  if (learningsDdl?.sql.includes("CHECK (kind IN ('repo','yeti'))")) return;
+
+  d.exec(`
+    BEGIN;
+    CREATE TABLE learnings_new (
+      id         INTEGER PRIMARY KEY AUTOINCREMENT,
+      job_name   TEXT NOT NULL,
+      repo       TEXT NOT NULL,
+      kind       TEXT NOT NULL CHECK (kind IN ('repo','yeti')),
+      summary    TEXT NOT NULL,
+      status     TEXT NOT NULL DEFAULT 'pending',
+      reason     TEXT,
+      pr_number  INTEGER,
+      created_at TEXT NOT NULL
+    );
+    INSERT INTO learnings_new (id, job_name, repo, kind, summary, status, reason, pr_number, created_at)
+    SELECT id, job_name, repo, kind, summary, status, reason, pr_number, created_at FROM learnings;
+    DROP TABLE learnings;
+    ALTER TABLE learnings_new RENAME TO learnings;
+    COMMIT;
+  `);
 }
 
 let runIdProvider: (() => string | undefined) | null = null;
@@ -485,6 +516,7 @@ export function pruneOldNotifications(days = 7): number {
 // ── Learnings ──
 
 export type LearningKind = "repo" | "yeti";
+const LEARNING_SUMMARY_MAX = 500;
 
 export interface LearningRow {
   id: number;
@@ -502,8 +534,9 @@ export function insertLearning(
   jobName: string,
   repo: string,
   kind: LearningKind,
-  summary: string,
+  rawSummary: string,
 ): number {
+  const summary = rawSummary.slice(0, LEARNING_SUMMARY_MAX);
   const d = getDb();
   const dup = d
     .prepare(`SELECT id FROM learnings WHERE kind = ? AND summary = ? AND status = 'pending' LIMIT 1`)

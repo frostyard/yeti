@@ -47,6 +47,7 @@ import {
   countPendingLearnings,
   markLearningsConsolidated,
   dismissLearning,
+  migrateLearningsKindCheck,
   type Task,
 } from "./db.js";
 
@@ -841,6 +842,62 @@ describe("learnings", () => {
     const b = insertLearning("ci-fixer", "org/other", "yeti", "use brew");
     expect(b).toBe(a);
     expect(getLearnings()).toHaveLength(1);
+  });
+
+  it("caps learning summaries before storing", () => {
+    const longSummary = "x".repeat(550);
+    insertLearning("issue-worker", "org/repo", "yeti", longSummary);
+    const rows = getLearnings();
+    expect(rows[0].summary).toHaveLength(500);
+    expect(rows[0].summary).toBe("x".repeat(500));
+  });
+
+  it("dedups learning summaries after applying the cap", () => {
+    const prefix = "x".repeat(500);
+    const a = insertLearning("issue-worker", "org/repo", "yeti", `${prefix}a`);
+    const b = insertLearning("ci-fixer", "org/other", "yeti", `${prefix}b`);
+    expect(b).toBe(a);
+    expect(getLearnings()).toHaveLength(1);
+  });
+
+  it("rejects invalid learning kinds at the database constraint", () => {
+    expect(() => {
+      insertLearning("issue-worker", "org/repo", "bogus" as "yeti", "bad kind");
+    }).toThrow();
+  });
+
+  it("migrates existing learnings tables to add the kind CHECK", () => {
+    const db = _rawDb();
+    db.exec(`
+      DROP TABLE learnings;
+      CREATE TABLE learnings (
+        id         INTEGER PRIMARY KEY AUTOINCREMENT,
+        job_name   TEXT NOT NULL,
+        repo       TEXT NOT NULL,
+        kind       TEXT NOT NULL,
+        summary    TEXT NOT NULL,
+        status     TEXT NOT NULL DEFAULT 'pending',
+        reason     TEXT,
+        pr_number  INTEGER,
+        created_at TEXT NOT NULL
+      );
+      INSERT INTO learnings (job_name, repo, kind, summary, status, created_at)
+      VALUES ('issue-worker', 'org/repo', 'yeti', 'kept', 'pending', datetime('now'));
+    `);
+
+    migrateLearningsKindCheck(db);
+
+    const ddl = db
+      .prepare(`SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'learnings'`)
+      .get() as { sql: string };
+    expect(ddl.sql).toContain("CHECK (kind IN ('repo','yeti'))");
+    expect(getLearnings()[0].summary).toBe("kept");
+    expect(() => {
+      db.prepare(`
+        INSERT INTO learnings (job_name, repo, kind, summary, status, created_at)
+        VALUES ('issue-worker', 'org/repo', 'bogus', 'bad', 'pending', datetime('now'))
+      `).run();
+    }).toThrow();
   });
 
   it("does not dedup against consolidated learnings", () => {

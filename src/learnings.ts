@@ -4,6 +4,8 @@ import * as db from "./db.js";
 import * as log from "./log.js";
 import { LEARNINGS_PENDING_THRESHOLD } from "./config.js";
 
+const YETI_LEARNINGS_PER_RUN_MAX = 5;
+
 export interface RepoLearning {
   path: string;
   summary: string;
@@ -118,13 +120,22 @@ export async function enforceLearnings(output: string, ctx: GateContext): Promis
       }
     }
 
-    for (const summary of parsed.yeti) {
+    const yetiLearnings = parsed.yeti.slice(0, YETI_LEARNINGS_PER_RUN_MAX);
+    const pendingBefore = yetiLearnings.length > 0 ? db.countPendingLearnings("yeti") : 0;
+
+    for (const summary of yetiLearnings) {
       db.insertLearning(ctx.jobName, ctx.repo, "yeti", summary);
       log.info(`[learnings] ${ctx.jobName}: recorded environment learning: ${summary}`);
     }
 
-    if (parsed.yeti.length > 0 && db.countPendingLearnings("yeti") >= LEARNINGS_PENDING_THRESHOLD) {
-      consolidatorTrigger?.();
+    if (yetiLearnings.length > 0) {
+      const pendingAfter = db.countPendingLearnings("yeti");
+      if (
+        pendingBefore < LEARNINGS_PENDING_THRESHOLD &&
+        pendingAfter >= LEARNINGS_PENDING_THRESHOLD
+      ) {
+        consolidatorTrigger?.();
+      }
     }
   } catch (err) {
     log.warn(`[learnings] gate failed for ${ctx.jobName}: ${err}`);
