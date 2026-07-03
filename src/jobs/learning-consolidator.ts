@@ -68,6 +68,7 @@ export async function run(repos: Repo[]): Promise<void> {
   const branchName = `yeti/learnings-${claude.datestamp()}-${claude.randomSuffix()}`;
   const taskId = db.recordTaskStart("learning-consolidator", SELF_REPO, 0, null);
   let wtPath: string | undefined;
+  let orphanBranch = false;
 
   try {
     wtPath = await claude.createWorktree(selfRepo, branchName, "learning-consolidator");
@@ -95,12 +96,14 @@ export async function run(repos: Repo[]): Promise<void> {
       (await claude.hasTreeDiff(wtPath, selfRepo.defaultBranch))
     ) {
       await claude.pushBranch(wtPath, branchName, SELF_REPO);
+      orphanBranch = true;
       const prNumber = await gh.createPR(
         SELF_REPO,
         branchName,
         `chore(learnings): consolidate ${consolidated.length} environment learning(s)`,
         buildPRBody(consolidated, dismissals),
       );
+      orphanBranch = false;
       db.markLearningsConsolidated(consolidated.map((l) => l.id), prNumber);
       log.info(`[learning-consolidator] Created PR #${prNumber} consolidating ${consolidated.length} learning(s)`);
       notify({
@@ -114,6 +117,14 @@ export async function run(repos: Repo[]): Promise<void> {
 
     db.recordTaskComplete(taskId);
   } catch (err) {
+    if (orphanBranch && wtPath) {
+      try {
+        await claude.deleteRemoteBranch(wtPath, branchName, SELF_REPO);
+        log.info(`[learning-consolidator] Deleted orphaned remote branch ${branchName} after PR creation failed`);
+      } catch (delErr) {
+        log.warn(`[learning-consolidator] Failed to delete orphaned remote branch ${branchName}: ${String(delErr)}`);
+      }
+    }
     db.recordTaskFailed(taskId, String(err));
     reportError("learning-consolidator:run", SELF_REPO, err);
   } finally {
