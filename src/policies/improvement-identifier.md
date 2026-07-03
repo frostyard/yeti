@@ -20,11 +20,7 @@ Guidelines:
 - Group related improvements into a single suggestion when they should be addressed together.
 - Each suggestion should be specific and actionable, referencing exact files and line numbers.
 
-The following issues are already open in this repository — do NOT re-suggest these:
-${ISSUE_LIST}
-
-The following PRs are already open in this repository — do NOT re-suggest these:
-${PR_LIST}
+Existing improvement work is deduplicated automatically at filing time; focus on novel findings.
 
 Respond with ONLY a JSON block in this exact format, no other text:
 

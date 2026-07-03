@@ -572,7 +572,6 @@ Two-phase approach per repo:
 
 ### Phase 1: Analysis
 
-- Fetches all open issue and PR titles for deduplication context
 - Creates a worktree on branch `yeti/improve-<hex4>`
 - Instructs Claude to read `yeti/OVERVIEW.md` (if it exists) and analyze
   the codebase for actionable improvements (duplicate logic, dead code,

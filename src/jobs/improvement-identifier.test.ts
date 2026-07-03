@@ -102,7 +102,6 @@ describe("improvement-identifier", () => {
     vi.clearAllMocks();
     for (const k in __tier) delete __tier[k];
     mockFs.existsSync.mockReturnValue(true);
-    mockGh.listOpenIssues.mockResolvedValue([]);
     mockGh.listPRs.mockResolvedValue([]);
     mockGh.searchIssues.mockResolvedValue([]);
     mockGh.searchPRs.mockResolvedValue([]);
@@ -132,7 +131,7 @@ describe("improvement-identifier", () => {
 
     await run([repo]);
 
-    expect(mockGh.listOpenIssues).toHaveBeenCalled();
+    expect(mockGh.listPRs).toHaveBeenCalled();
     expect(mockClaude.createWorktree).toHaveBeenCalled();
   });
 
@@ -313,16 +312,18 @@ describe("improvement-identifier", () => {
     );
   });
 
-  it("fetches both issue and PR titles for prompt context", async () => {
+  it("does not include open issue or PR titles in the analysis prompt", async () => {
     mockGh.listOpenIssues.mockResolvedValue([{ number: 1, title: "Fix bug" }]);
     mockGh.listPRs.mockResolvedValue([{ number: 2, title: "refactor: Improve X", headRefName: "yeti/some-other-branch" }]);
 
     await run([repo]);
 
-    // The analysis runClaude call should include both issue and PR titles
     const analysisPrompt = mockClaude.runAI.mock.calls[0][0] as string;
-    expect(analysisPrompt).toContain("Fix bug");
-    expect(analysisPrompt).toContain("refactor: Improve X");
+    expect(mockGh.listOpenIssues).not.toHaveBeenCalled();
+    expect(analysisPrompt).not.toContain("Fix bug");
+    expect(analysisPrompt).not.toContain("refactor: Improve X");
+    expect(analysisPrompt).not.toContain("do NOT re-suggest these");
+    expect(analysisPrompt).toContain("Existing improvement work is deduplicated automatically");
   });
 
   it("handles Claude output parse failure gracefully", async () => {
@@ -430,19 +431,7 @@ describe("parseImprovements", () => {
 });
 
 describe("buildAnalysisPrompt (policy template)", () => {
-  // Reconstructs the pre-migration inline prompt independently, proving the
-  // policy-template render is behavior-preserving.
-  function expected(fullName: string, openIssueTitles: string[], openPRTitles: string[]): string {
-    const issueList =
-      openIssueTitles.length > 0
-        ? openIssueTitles.map((t) => `  - ${t}`).join("\n")
-        : "  (none)";
-
-    const prList =
-      openPRTitles.length > 0
-        ? openPRTitles.map((t) => `  - ${t}`).join("\n")
-        : "  (none)";
-
+  function expected(fullName: string): string {
     return [
       `You are analyzing the repository ${fullName} for opportunities to improve the codebase.`,
       ``,
@@ -466,11 +455,7 @@ describe("buildAnalysisPrompt (policy template)", () => {
       `- Group related improvements into a single suggestion when they should be addressed together.`,
       `- Each suggestion should be specific and actionable, referencing exact files and line numbers.`,
       ``,
-      `The following issues are already open in this repository — do NOT re-suggest these:`,
-      issueList,
-      ``,
-      `The following PRs are already open in this repository — do NOT re-suggest these:`,
-      prList,
+      `Existing improvement work is deduplicated automatically at filing time; focus on novel findings.`,
       ``,
       `Respond with ONLY a JSON block in this exact format, no other text:`,
       ``,
@@ -492,16 +477,13 @@ describe("buildAnalysisPrompt (policy template)", () => {
     ].join("\n");
   }
 
-  it("matches the pre-migration inline builder with no open issues/PRs", () => {
-    const out = buildAnalysisPrompt("pr", "acme/widget", [], []);
-    expect(stripPreamble(out).trimEnd()).toBe(expected("acme/widget", [], []).trimEnd());
-  });
-
-  it("matches the pre-migration inline builder with open issues and PRs", () => {
-    const issues = ["Fix bug in parser", "Handle empty input"];
-    const prs = ["refactor: Improve X", "feat: Add Y"];
-    const out = buildAnalysisPrompt("pr", "acme/widget", issues, prs);
-    expect(stripPreamble(out).trimEnd()).toBe(expected("acme/widget", issues, prs).trimEnd());
+  it("renders without open issue or PR title list placeholders", () => {
+    const out = buildAnalysisPrompt("pr", "acme/widget");
+    const stripped = stripPreamble(out).trimEnd();
+    expect(stripped).toBe(expected("acme/widget").trimEnd());
+    expect(stripped).not.toContain("${ISSUE_LIST}");
+    expect(stripped).not.toContain("${PR_LIST}");
+    expect(stripped).not.toContain("do NOT re-suggest these");
   });
 });
 
