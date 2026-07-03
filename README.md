@@ -94,7 +94,7 @@ Starting from the release that introduces `enabledJobs`, you must explicitly lis
 
 The example above enables all jobs (matching previous default behavior). Remove any jobs you don't want to run.
 
-**If you upgrade without updating config**, yeti will start but log a warning: *"No jobs enabled — yeti is running but idle."* You can then add `enabledJobs` to your config and yeti will pick it up via live reload — no restart needed.
+**If you upgrade without updating config**, yeti will start but log a warning: *"No jobs enabled — yeti is running but idle."* You can then add `enabledJobs` to `~/.yeti/config.json` directly or through the dashboard, and yeti will pick it up via live reload — no restart needed.
 
 ## Configuration
 

@@ -1,7 +1,7 @@
 import { execFile } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
-import { INTERVALS, SCHEDULES, LOG_RETENTION_DAYS, LOG_RETENTION_PER_JOB, WORK_DIR, ENABLED_JOBS, onConfigChange } from "./config.js";
+import { INTERVALS, SCHEDULES, LOG_RETENTION_DAYS, LOG_RETENTION_PER_JOB, WORK_DIR, ENABLED_JOBS, onConfigChange, watchConfig } from "./config.js";
 import * as config from "./config.js";
 import * as log from "./log.js";
 import * as gh from "./github.js";
@@ -40,6 +40,10 @@ log.info(`yeti ${VERSION} starting up`);
 // ── Policy templates: watch for hot-reload (edit ~/.yeti/policies without restart) ──
 
 watchPolicies();
+
+// ── Config file: watch for external edits (hand-edit / config push without restart) ──
+
+watchConfig();
 
 // ── Database init & recovery ──
 

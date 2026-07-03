@@ -393,6 +393,27 @@ export function reloadConfig(): void {
   notifyListeners();
 }
 
+export function watchConfig(): fs.FSWatcher | undefined {
+  const dir = path.dirname(CONFIG_PATH);
+  const base = path.basename(CONFIG_PATH);
+  let timer: NodeJS.Timeout | undefined;
+  const reload = () => {
+    clearTimeout(timer);
+    timer = setTimeout(() => reloadConfig(), 500);
+  };
+
+  try {
+    fs.mkdirSync(dir, { recursive: true });
+    return fs.watch(dir, { persistent: false }, (_event, filename) => {
+      if (filename && filename !== base) return;
+      reload();
+    });
+  } catch (err) {
+    console.warn(`Failed to watch config file ${CONFIG_PATH}: ${(err as Error).message}`);
+    return undefined;
+  }
+}
+
 const SENSITIVE_KEYS = new Set(["authToken", "discordBotToken", "githubAppClientSecret", "webhookSecret"]);
 
 function maskValue(value: string): string {
