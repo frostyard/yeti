@@ -556,9 +556,16 @@ export function runAI(prompt: string, cwd: string, options?: AiOptions): Promise
       args.push(prompt);
     }
 
+    // Copilot resolves auth from GH_TOKEN before its stored login, but the GitHub App
+    // installation token that github-app.ts puts there has no Copilot entitlement —
+    // strip it so the CLI falls back to its own credentials. Other backends keep the
+    // inherited env: agents inside their sessions use GH_TOKEN for gh calls.
+    const { GH_TOKEN: _ghToken, ...envWithoutGhToken } = process.env;
+
     const child = spawn(config.binary, args, {
       cwd,
       stdio: ["pipe", "pipe", "pipe"],
+      ...(backend === "copilot" ? { env: envWithoutGhToken } : {}),
     });
     activeChildren.add(child);
     const startTime = Date.now();

@@ -118,7 +118,12 @@ gives Yeti a separate bot identity so humans can approve its PRs under branch
 protection. Signs JWTs (RS256 via Node.js `crypto.createSign`, numeric `iss` claim),
 exchanges them for installation tokens via direct GitHub API calls using
 `Bearer` auth headers, and sets `process.env.GH_TOKEN` so all `gh` and `git`
-subprocess calls inherit the App identity automatically.
+subprocess calls inherit the App identity automatically. One exception:
+`runAI` in `claude.ts` strips `GH_TOKEN` from Copilot CLI child processes —
+Copilot prefers env tokens over its stored `/login` credentials, and an App
+installation token has no Copilot entitlement, so inheriting it breaks
+copilot-backed jobs with "Authentication failed". Claude/Codex children keep
+the inherited token so `gh` calls inside their sessions use the App identity.
 Token refresh is lazy with a 5-minute pre-expiry buffer and in-flight dedup.
 `initGitHubApp()` is called once at startup; `ensureGitHubAppToken()` is called
 before each job tick. `configureWebhook()` auto-sets the App's webhook URL and

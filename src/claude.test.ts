@@ -1285,6 +1285,46 @@ describe("runAI", () => {
     );
   });
 
+  it("strips GH_TOKEN from the copilot child environment", async () => {
+    process.env["GH_TOKEN"] = "ghs_installation_token";
+    try {
+      const child = createMockChild();
+      mockSpawn.mockReturnValueOnce(child as unknown as ChildProcess);
+
+      const promise = runAI("test prompt", "/tmp/test", { backend: "copilot" });
+      child.stdout!.emit("data", Buffer.from("ok"));
+      child.emit("close", 0, null);
+      await promise;
+
+      const options = mockSpawn.mock.calls.at(-1)![2] as { env?: Record<string, string | undefined> };
+      expect(options.env).toBeDefined();
+      expect(options.env).not.toHaveProperty("GH_TOKEN");
+      expect(options.env!["PATH"]).toBe(process.env["PATH"]);
+    } finally {
+      delete process.env["GH_TOKEN"];
+    }
+  });
+
+  it("keeps the inherited environment for claude and codex backends", async () => {
+    process.env["GH_TOKEN"] = "ghs_installation_token";
+    try {
+      for (const backend of [undefined, "codex"] as const) {
+        const child = createMockChild();
+        mockSpawn.mockReturnValueOnce(child as unknown as ChildProcess);
+
+        const promise = runAI("test prompt", "/tmp/test", backend ? { backend } : undefined);
+        child.stdout!.emit("data", Buffer.from("ok"));
+        child.emit("close", 0, null);
+        await promise;
+
+        const options = mockSpawn.mock.calls.at(-1)![2] as { env?: Record<string, string | undefined> };
+        expect(options.env).toBeUndefined();
+      }
+    } finally {
+      delete process.env["GH_TOKEN"];
+    }
+  });
+
   it("appends --model flag when model option is provided", async () => {
     const child = createMockChild();
     mockSpawn.mockReturnValueOnce(child as unknown as ChildProcess);
