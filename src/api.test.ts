@@ -15,8 +15,8 @@ vi.mock("./config.js", () => ({
   getEnvOverrides: vi.fn(),
   writeConfig: vi.fn(),
   repoAutonomy: () => "advisory",
-  AUTONOMY_MAP: {},
-  DEFAULT_AUTONOMY: "advisory",
+  AUTONOMY_MAP: { "acme/mapped": "automerge" },
+  DEFAULT_AUTONOMY: "issues",
 }));
 
 vi.mock("./github.js", () => ({
@@ -26,6 +26,10 @@ vi.mock("./github.js", () => ({
   removeQueueItem: vi.fn(),
   listAllOrgRepos: vi.fn(),
   listRepos: vi.fn(),
+}));
+
+vi.mock("./policy.js", () => ({
+  listLoadedPolicies: vi.fn(),
 }));
 
 vi.mock("./db.js", () => ({
@@ -88,6 +92,8 @@ vi.mock("./update-check.js", () => ({
 }));
 
 import { buildConfigUpdate, computeTierBlock, handleApi } from "./api.js";
+import { listRepos } from "./github.js";
+import { listLoadedPolicies } from "./policy.js";
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -181,6 +187,61 @@ describe("POST /api/update/check", () => {
     expect(result.status).toBe(200);
     expect(JSON.parse(result.body)).toEqual({ result: "requested" });
     expect(updateCheckMocks.requestUpdateCheck).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("GET /api/policies", () => {
+  it("returns loaded policies, effective repo tiers, skipped jobs, and gate metadata", async () => {
+    vi.mocked(listRepos).mockResolvedValue([
+      { owner: "acme", name: "mapped", fullName: "acme/mapped", defaultBranch: "main" },
+      { owner: "acme", name: "defaulted", fullName: "acme/defaulted", defaultBranch: "main" },
+    ]);
+    vi.mocked(listLoadedPolicies).mockReturnValue([
+      { name: "_preamble", path: "/home/yeti/policies/_preamble.md", source: "override" },
+      { name: "issue-worker", path: "/opt/yeti/dist/policies/issue-worker.md", source: "bundled" },
+    ]);
+    const { req, res, result } = apiHarness("GET", "/api/policies", {
+      authorization: "Bearer test-token",
+    });
+
+    await handleApi(req, res, {} as never, [], "2026-01-01T00:00:00.000Z");
+
+    expect(result.status).toBe(200);
+    expect(JSON.parse(result.body)).toMatchObject({
+      policies: [
+        { name: "_preamble", path: "/home/yeti/policies/_preamble.md", source: "override" },
+        { name: "issue-worker", path: "/opt/yeti/dist/policies/issue-worker.md", source: "bundled" },
+      ],
+      defaultAutonomy: "issues",
+      repos: [
+        { fullName: "acme/mapped", tier: "automerge", tierSource: "map", skippedJobs: [] },
+        {
+          fullName: "acme/defaulted",
+          tier: "issues",
+          tierSource: "default",
+          skippedJobs: [
+            "issue-worker",
+            "improvement-identifier",
+            "doc-maintainer",
+            "mkdocs-update",
+            "learning-consolidator",
+            "ci-fixer",
+            "review-addresser",
+            "auto-merger",
+          ],
+        },
+      ],
+      jobGates: [
+        { job: "issue-worker", action: "createPR", requiredTier: "pr" },
+        { job: "improvement-identifier", action: "createPR", requiredTier: "pr" },
+        { job: "doc-maintainer", action: "createPR", requiredTier: "pr" },
+        { job: "mkdocs-update", action: "createPR", requiredTier: "pr" },
+        { job: "learning-consolidator", action: "createPR", requiredTier: "pr" },
+        { job: "ci-fixer", action: "push", requiredTier: "pr" },
+        { job: "review-addresser", action: "push", requiredTier: "pr" },
+        { job: "auto-merger", action: "merge", requiredTier: "automerge" },
+      ],
+    });
   });
 });
 

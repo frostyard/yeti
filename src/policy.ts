@@ -48,6 +48,34 @@ export function countPolicyFiles(dirs: string[]): number {
   return names.size;
 }
 
+export interface LoadedPolicy {
+  name: string;
+  path: string;
+  source: "override" | "bundled";
+}
+
+/** Distinct loaded .md policy files across dirs, with earlier dirs shadowing later. */
+export function listLoadedPolicies(dirs: string[] = defaultPolicyDirs()): LoadedPolicy[] {
+  const policies = new Map<string, LoadedPolicy>();
+  for (const [index, dir] of dirs.entries()) {
+    let entries: string[];
+    try {
+      entries = fs.readdirSync(dir);
+    } catch {
+      continue;
+    }
+    for (const entry of entries) {
+      if (!entry.endsWith(".md") || policies.has(entry)) continue;
+      policies.set(entry, {
+        name: entry.slice(0, -".md".length),
+        path: path.resolve(dir, entry),
+        source: index === 0 ? "override" : "bundled",
+      });
+    }
+  }
+  return [...policies.values()].sort((a, b) => a.name.localeCompare(b.name));
+}
+
 /** In-memory cache: resolved absolute path -> file contents. Cleared on reload. */
 const cache = new Map<string, string>();
 

@@ -6,7 +6,7 @@ import os from "node:os";
 vi.mock("./log.js", () => ({ info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() }));
 
 import * as log from "./log.js";
-import { substitute, resolvePolicyPath, renderPolicy, findMissingVars, countPolicyFiles, readPreamble } from "./policy.js";
+import { substitute, resolvePolicyPath, renderPolicy, findMissingVars, countPolicyFiles, readPreamble, listLoadedPolicies } from "./policy.js";
 
 describe("substitute", () => {
   it("replaces ${VAR} placeholders with their values", () => {
@@ -192,5 +192,42 @@ describe("countPolicyFiles", () => {
 
   it("returns 0 for dirs that do not exist", () => {
     expect(countPolicyFiles(["/no/such/dir-xyz"])).toBe(0);
+  });
+});
+
+describe("listLoadedPolicies", () => {
+  let overrideDir: string;
+  let bundledDir: string;
+
+  beforeEach(() => {
+    overrideDir = fs.mkdtempSync(path.join(os.tmpdir(), "yeti-loaded-override-"));
+    bundledDir = fs.mkdtempSync(path.join(os.tmpdir(), "yeti-loaded-bundled-"));
+  });
+
+  afterEach(() => {
+    fs.rmSync(overrideDir, { recursive: true, force: true });
+    fs.rmSync(bundledDir, { recursive: true, force: true });
+  });
+
+  it("lists distinct policies with override shadowing bundled files", () => {
+    fs.writeFileSync(path.join(overrideDir, "issue-worker.md"), "");
+    fs.writeFileSync(path.join(overrideDir, "_preamble.md"), "");
+    fs.writeFileSync(path.join(overrideDir, "notes.txt"), "");
+    fs.writeFileSync(path.join(bundledDir, "issue-worker.md"), "");
+    fs.writeFileSync(path.join(bundledDir, "ci-fixer.md"), "");
+
+    expect(listLoadedPolicies([overrideDir, bundledDir])).toEqual([
+      { name: "_preamble", path: path.join(overrideDir, "_preamble.md"), source: "override" },
+      { name: "ci-fixer", path: path.join(bundledDir, "ci-fixer.md"), source: "bundled" },
+      { name: "issue-worker", path: path.join(overrideDir, "issue-worker.md"), source: "override" },
+    ]);
+  });
+
+  it("skips missing dirs without throwing", () => {
+    fs.writeFileSync(path.join(bundledDir, "ci-fixer.md"), "");
+
+    expect(listLoadedPolicies(["/no/such/loaded-policy-dir", bundledDir])).toEqual([
+      { name: "ci-fixer", path: path.join(bundledDir, "ci-fixer.md"), source: "bundled" },
+    ]);
   });
 });
