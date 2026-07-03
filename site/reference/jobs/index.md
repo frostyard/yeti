@@ -29,6 +29,7 @@ These jobs run once daily at a configured hour (local timezone). They also run o
 | [improvement-identifier](improvement-identifier.md) | 3 AM | Yes | Find codebase improvements and implement them as PRs |
 | [mkdocs-update](mkdocs-update.md) | 4 AM | Yes | Update MkDocs documentation sites |
 | [issue-auditor](issue-auditor.md) | 5 AM | No | Audit and fix issue label state |
+| [learning-consolidator](learning-consolidator.md) | 6 AM | Yes | Fold agent-reported environment learnings into policies via PR |
 | [prompt-evaluator](prompt-evaluator.md) | Midnight | Yes | A/B test prompts and file issues for improvements |
 
 ---
@@ -61,7 +62,7 @@ Add more jobs as you grow comfortable with the workflow:
 - **`repo-standards`** -- Keeps labels in sync
 - **`review-addresser`** -- Handles PR review comments
 
-The full set including nightly jobs (`doc-maintainer`, `improvement-identifier`, `issue-auditor`, `mkdocs-update`, `prompt-evaluator`) rounds out a fully autonomous setup.
+The full set including nightly jobs (`doc-maintainer`, `improvement-identifier`, `issue-auditor`, `mkdocs-update`, `learning-consolidator`, `prompt-evaluator`) rounds out a fully autonomous setup.
 
 ---
 
@@ -82,6 +83,10 @@ Any job can be manually triggered via the dashboard or API (`POST /trigger/:job`
 ### AI Backend
 
 Jobs marked "AI: Yes" use Claude CLI by default. Individual jobs can be routed to a different backend (e.g., Copilot or Codex) or model via the [`jobAi` config](../configuration.md#example-per-job-ai-overrides).
+
+### Autonomy
+
+Each repository has an [autonomy tier](../configuration.md#autonomy) that caps the actions Yeti may take there (comment → create issues → open PRs → merge). Jobs skip actions their repo's tier does not permit, and blocked items are surfaced on the dashboard queue rather than silently dropped.
 
 ### Rate Limiting
 
