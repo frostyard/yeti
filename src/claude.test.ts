@@ -45,7 +45,7 @@ vi.mock("node:fs", () => ({
   },
 }));
 
-import { enqueue, queueStatus, randomSuffix, datestamp, hasNewCommits, hasTreeDiff, generatePRDescription, generateDocsPRDescription, regeneratePRDescription, cancelCurrentTask, cancelQueuedTasks, createWorktree, createWorktreeFromBranch, pushBranch, ensureClone, ClaudeTimeoutError, runAI, copilotQueueStatus, enqueueCopilot, codexQueueStatus, enqueueCodex, AiTimeoutError, resolveEnqueue, scrubWorktreePaths } from "./claude.js";
+import { enqueue, queueStatus, randomSuffix, datestamp, hasNewCommits, hasTreeDiff, generatePRDescription, generateDocsPRDescription, regeneratePRDescription, cancelCurrentTask, cancelQueuedTasks, createWorktree, createWorktreeFromBranch, pushBranch, deleteRemoteBranch, ensureClone, ClaudeTimeoutError, runAI, copilotQueueStatus, enqueueCopilot, codexQueueStatus, enqueueCodex, AiTimeoutError, resolveEnqueue, scrubWorktreePaths } from "./claude.js";
 import { ShutdownError } from "./shutdown.js";
 import * as shutdown from "./shutdown.js";
 import * as capability from "./capability.js";
@@ -959,6 +959,45 @@ describe("pushBranch", () => {
     });
 
     await expect(pushBranch("/wt", "branch", "acme/r")).rejects.toBeInstanceOf(capability.AutonomyError);
+    spy.mockRestore();
+  });
+});
+
+describe("deleteRemoteBranch", () => {
+  it("deletes the named remote branch using a delete refspec", async () => {
+    const gitCalls: string[][] = [];
+
+    mockExecFile.mockImplementation((_cmd, args: any, _opts: any, cb: any) => {
+      gitCalls.push([...args]);
+      cb(null, "", "");
+      return undefined as any;
+    });
+
+    await deleteRemoteBranch("/some/worktree", "yeti/learnings-20260702-ab12", "acme/r");
+
+    expect(gitCalls).toEqual([["push", "origin", ":refs/heads/yeti/learnings-20260702-ab12"]]);
+  });
+
+  it("asserts push capability before deleting", async () => {
+    mockExecFile.mockImplementation((_cmd, _args: any, _opts: any, cb: any) => {
+      cb(null, "", "");
+      return undefined as any;
+    });
+    const spy = vi.spyOn(capability, "assertCapability").mockImplementation(() => {});
+
+    await deleteRemoteBranch("/wt", "branch", "acme/r");
+    expect(spy).toHaveBeenCalledWith("acme/r", "push");
+    spy.mockRestore();
+  });
+
+  it("propagates AutonomyError from the firewall (no delete performed)", async () => {
+    const spy = vi.spyOn(capability, "assertCapability").mockImplementation(() => {
+      throw new capability.AutonomyError("acme/r", "push", "advisory");
+    });
+    mockExecFile.mockClear();
+
+    await expect(deleteRemoteBranch("/wt", "branch", "acme/r")).rejects.toBeInstanceOf(capability.AutonomyError);
+    expect(mockExecFile).not.toHaveBeenCalled();
     spy.mockRestore();
   });
 });
