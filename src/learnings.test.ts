@@ -141,11 +141,80 @@ describe("enforceLearnings", () => {
     expect(log.warn).toHaveBeenCalled();
   });
 
-  it("repo learning claimed but no yeti/ tree diff → warns, does not throw", async () => {
+  it("repo learning claimed but declared path has no tree diff → warns, does not throw", async () => {
     mockClaude.hasTreeDiff.mockResolvedValue(false);
     await enforceLearnings("LEARNINGS-REPO: yeti/learnings/x.md: claimed\nLEARNINGS-YETI: none", ctx);
-    expect(mockClaude.hasTreeDiff).toHaveBeenCalledWith("/tmp/wt", "main", "yeti/");
+    expect(mockClaude.hasTreeDiff).toHaveBeenCalledWith("/tmp/wt", "main", "yeti/learnings/x.md");
     expect(log.warn).toHaveBeenCalled();
+  });
+
+  it("repo learning claimed with exact declared path diff → logs verification", async () => {
+    mockClaude.hasTreeDiff.mockResolvedValue(true);
+    await enforceLearnings("LEARNINGS-REPO: yeti/learnings/x.md: claimed\nLEARNINGS-YETI: none", ctx);
+    expect(mockClaude.hasTreeDiff).toHaveBeenCalledTimes(1);
+    expect(mockClaude.hasTreeDiff).toHaveBeenCalledWith("/tmp/wt", "main", "yeti/learnings/x.md");
+    expect(log.info).toHaveBeenCalledWith(expect.stringContaining("yeti/learnings/x.md"));
+  });
+
+  it("repo learning path outside yeti/learnings is rejected without diffing", async () => {
+    await enforceLearnings("LEARNINGS-REPO: yeti/docs/x.md: claimed\nLEARNINGS-YETI: none", ctx);
+    expect(mockClaude.hasTreeDiff).not.toHaveBeenCalled();
+    expect(log.warn).toHaveBeenCalledWith(expect.stringContaining("not under yeti/learnings/"));
+  });
+
+  it("repo learning path containing traversal is rejected without diffing", async () => {
+    await enforceLearnings("LEARNINGS-REPO: yeti/learnings/../../etc/x.md: claimed\nLEARNINGS-YETI: none", ctx);
+    expect(mockClaude.hasTreeDiff).not.toHaveBeenCalled();
+    expect(log.warn).toHaveBeenCalledWith(expect.stringContaining("contains '..'"));
+  });
+
+  it.each([
+    "yeti/learnings/*.md",
+    "yeti/learnings/foo?.md",
+    "yeti/learnings/[a-z].md",
+    ":(top)yeti/learnings/x.md",
+  ])("repo learning path with Git pathspec metacharacters is rejected: %s", async (path) => {
+    await enforceLearnings(`LEARNINGS-REPO: ${path}: claimed\nLEARNINGS-YETI: none`, ctx);
+    expect(mockClaude.hasTreeDiff).not.toHaveBeenCalled();
+    expect(log.warn).toHaveBeenCalled();
+  });
+
+  it("mergeBase set and both per-path diffs true → verifies claim", async () => {
+    mockClaude.hasTreeDiff.mockResolvedValue(true);
+    await enforceLearnings(
+      "LEARNINGS-REPO: yeti/learnings/x.md: claimed\nLEARNINGS-YETI: none",
+      { ...ctx, baseBranch: "feature", mergeBase: "main" },
+    );
+    expect(mockClaude.hasTreeDiff).toHaveBeenNthCalledWith(1, "/tmp/wt", "feature", "yeti/learnings/x.md");
+    expect(mockClaude.hasTreeDiff).toHaveBeenNthCalledWith(2, "/tmp/wt", "main", "yeti/learnings/x.md");
+    expect(log.info).toHaveBeenCalledWith(expect.stringContaining("yeti/learnings/x.md"));
+  });
+
+  it("mergeBase set and merged-in base copy has no diff → ignores claim", async () => {
+    mockClaude.hasTreeDiff.mockResolvedValueOnce(true).mockResolvedValueOnce(false);
+    await enforceLearnings(
+      "LEARNINGS-REPO: yeti/learnings/x.md: claimed\nLEARNINGS-YETI: none",
+      { ...ctx, baseBranch: "feature", mergeBase: "main" },
+    );
+    expect(mockClaude.hasTreeDiff).toHaveBeenNthCalledWith(1, "/tmp/wt", "feature", "yeti/learnings/x.md");
+    expect(mockClaude.hasTreeDiff).toHaveBeenNthCalledWith(2, "/tmp/wt", "main", "yeti/learnings/x.md");
+    expect(log.warn).toHaveBeenCalled();
+  });
+
+  it("multiple repo learning claims are verified independently", async () => {
+    mockClaude.hasTreeDiff.mockResolvedValueOnce(true).mockResolvedValueOnce(false);
+    await enforceLearnings(
+      [
+        "LEARNINGS-REPO: yeti/learnings/a.md: first",
+        "LEARNINGS-REPO: yeti/learnings/b.md: second",
+        "LEARNINGS-YETI: none",
+      ].join("\n"),
+      ctx,
+    );
+    expect(mockClaude.hasTreeDiff).toHaveBeenNthCalledWith(1, "/tmp/wt", "main", "yeti/learnings/a.md");
+    expect(mockClaude.hasTreeDiff).toHaveBeenNthCalledWith(2, "/tmp/wt", "main", "yeti/learnings/b.md");
+    expect(log.info).toHaveBeenCalledWith(expect.stringContaining("yeti/learnings/a.md"));
+    expect(log.warn).toHaveBeenCalledWith(expect.stringContaining("yeti/learnings/b.md"));
   });
 
   it("threshold reached → fires the consolidator trigger", async () => {
