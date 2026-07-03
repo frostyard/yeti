@@ -161,11 +161,12 @@ If you're hitting rate limits frequently:
 
 ```bash
 systemctl status yeti-updater.timer
+systemctl status yeti-updater-trigger.path
 systemctl status yeti-updater.service
 journalctl -u yeti-updater -n 20 --no-pager
 ```
 
-- The timer checks every 60 seconds.
+- The timer checks hourly. The dashboard **Check for updates** button writes `~/.yeti/update-check-requested`, which `yeti-updater-trigger.path` watches to start an immediate check.
 - Updates require `gh` CLI to be authenticated as the service user.
 - If a health check fails after update, the updater rolls back automatically.
 

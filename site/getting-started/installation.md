@@ -42,13 +42,14 @@ tar -xzf /tmp/yeti.tar.gz -C /opt/yeti
 
 1. **Creates `/opt/yeti`** owned by your user (no dedicated service account needed)
 2. **Downloads the latest release tarball** via `gh release download` and extracts it
-3. **Installs three systemd units:**
+3. **Installs four systemd units:**
     - `yeti.service` --- the main daemon
     - `yeti-updater.service` --- the update script
     - `yeti-updater.timer` --- triggers the updater on a schedule
+    - `yeti-updater-trigger.path` --- triggers the updater from the dashboard sentinel
 4. **Bootstraps `~/.yeti/config.json`** with sensible defaults if the file does not already exist
 5. **Creates `~/.yeti/env`** for environment variable overrides
-6. **Enables and starts** both the service and the auto-updater timer
+6. **Enables and starts** the service, the auto-updater timer, and the manual update-check path unit
 
 !!! note
     The install script patches the systemd unit to run as your current user with your current `$PATH`. This ensures `gh`, `claude`, and `node` are all available to the service.
@@ -72,7 +73,7 @@ journalctl -u yeti -f
 
 ## Auto-updates
 
-Yeti keeps itself current. The `yeti-updater.timer` fires every 60 seconds and runs the deploy script, which:
+Yeti keeps itself current. The `yeti-updater.timer` fires hourly and runs the deploy script, which:
 
 1. Checks for a new release tag on GitHub
 2. Downloads and extracts the new tarball to a staging directory
@@ -83,11 +84,14 @@ Yeti keeps itself current. The `yeti-updater.timer` fires every 60 seconds and r
 
 Your configuration in `~/.yeti/` is never touched by updates. Only `dist/`, `deploy/`, and `node_modules/` are replaced.
 
+To check immediately, use the dashboard **Check for updates** button. It writes `~/.yeti/update-check-requested`; the root-owned `yeti-updater-trigger.path` unit watches that file and starts `yeti-updater.service`.
+
 You can check the current version and updater status at any time:
 
 ```bash
 cat /opt/yeti/.current-version
 systemctl status yeti-updater.timer
+systemctl status yeti-updater-trigger.path
 ```
 
 ## Next steps

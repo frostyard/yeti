@@ -17,6 +17,7 @@ import { VERSION } from "./version.js";
 import { isOAuthConfigured } from "./oauth.js";
 import { JOB_DESCRIPTIONS, type JobInfo } from "./job-meta.js";
 import { isUpdatePending, pendingUpdateTag } from "./quiesce.js";
+import { requestUpdateCheck } from "./update-check.js";
 import { getSystemStats } from "./sysstats.js";
 import { readBody, parseCookies, safeCompare, isAuthEnabled, getSession, requireApiAuth, sendJson, tokenCookie } from "./http-util.js";
 import type { Autonomy } from "./policy.js";
@@ -352,6 +353,12 @@ export async function handleApi(
     if (p === "/api/tasks/cancel") {
       const cancelled = cancelCurrentTask();
       sendJson(res, 200, { result: cancelled ? "cancelled" : "no-active-task" });
+      return;
+    }
+
+    if (p === "/api/update/check") {
+      requestUpdateCheck();
+      sendJson(res, 200, { result: "requested" });
       return;
     }
 

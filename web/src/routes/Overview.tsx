@@ -1,8 +1,9 @@
+import { useEffect } from "react";
 import { Link } from "react-router-dom";
-import { Activity, ListChecks, CheckCircle2, XCircle, Cpu, Gauge, MemoryStick, HardDrive, Lightbulb, ShieldAlert } from "lucide-react";
-import { useOverview, useRuns } from "../lib/queries";
+import { Activity, ListChecks, CheckCircle2, XCircle, Cpu, Gauge, MemoryStick, HardDrive, Lightbulb, ShieldAlert, RefreshCw } from "lucide-react";
+import { useCheckForUpdates, useOverview, useRuns } from "../lib/queries";
 import { StatCard, StatusPill } from "../components/ui/status";
-import { Card, SectionHeader, EmptyState, Skeleton } from "../components/ui/base";
+import { Button, Card, SectionHeader, EmptyState, Skeleton } from "../components/ui/base";
 import { RelativeTime } from "../components/ui/time";
 import { DataTable, type Column } from "../components/ui/DataTable";
 import { discordTone } from "../lib/discord";
@@ -39,6 +40,13 @@ function SystemSection({ sys }: { sys: SystemStats }) {
 export function Overview() {
   const { data, isLoading } = useOverview();
   const { data: runsData } = useRuns({});
+  const checkUpdates = useCheckForUpdates();
+
+  useEffect(() => {
+    if (!checkUpdates.isSuccess && !checkUpdates.isError) return;
+    const t = window.setTimeout(() => checkUpdates.reset(), 2500);
+    return () => window.clearTimeout(t);
+  }, [checkUpdates.isError, checkUpdates.isSuccess, checkUpdates.reset]);
 
   if (isLoading || !data) {
     return (
@@ -49,6 +57,13 @@ export function Overview() {
   }
 
   const d = data;
+  const updateButtonLabel = checkUpdates.isPending
+    ? "Checking..."
+    : checkUpdates.isSuccess
+      ? "Check requested"
+      : checkUpdates.isError
+        ? "Failed"
+        : "Check for updates";
   const runCols: Column<JobRunRow>[] = [
     { key: "job", header: "Job", cell: (r) => <span className="font-medium text-text">{r.job_name}</span> },
     { key: "status", header: "Status", cell: (r) => <StatusPill kind={r.status} /> },
@@ -57,9 +72,20 @@ export function Overview() {
 
   return (
     <div className="space-y-6">
-      <header>
-        <h1 className="text-[20px] font-semibold text-text">Overview</h1>
-        <p className="text-[13px] text-muted">yeti automation daemon · uptime {fmtUptime(d.uptime)}</p>
+      <header className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h1 className="text-[20px] font-semibold text-text">Overview</h1>
+          <p className="text-[13px] text-muted">yeti automation daemon · {d.version} · uptime {fmtUptime(d.uptime)}</p>
+        </div>
+        <Button
+          type="button"
+          onClick={() => checkUpdates.mutate()}
+          disabled={checkUpdates.isPending}
+          className="shrink-0"
+        >
+          <RefreshCw size={14} className={checkUpdates.isPending ? "animate-spin" : undefined} />
+          {updateButtonLabel}
+        </Button>
       </header>
 
       <section>

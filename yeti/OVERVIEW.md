@@ -65,7 +65,8 @@ scripts/
 deploy/
 ├── yeti.service           systemd service unit
 ├── yeti-updater.service   systemd updater service
-├── yeti-updater.timer     systemd timer (every 60s)
+├── yeti-updater.timer     systemd timer (hourly)
+├── yeti-updater-trigger.path  systemd path unit for manual update checks
 ├── install.sh              One-shot bootstrap installer (repo-aware)
 ├── deploy.sh               Auto-update with health check + rollback (repo-aware)
 └── uninstall.sh            Service removal
@@ -556,7 +557,7 @@ research into GSD, CCPM, Symphony, PAUL, and GAAI harness patterns.
 - **CI**: GitHub Actions on self-hosted runner — build + test on every push
 - **History cleanup**: Workflow-dispatch action for branch cleanup and `git-filter-repo` to audit/scrub git secrets
 - **Releases**: Date-based version tags (`v<YYYY-MM-DD>.<N>`), self-describing tarball attached to GitHub Release (includes `.repo` file identifying the source repository)
-- **Auto-updates**: systemd timer checks for new releases every 60s, downloads + swaps + health checks with automatic rollback
+- **Auto-updates**: systemd timer checks for new releases hourly, plus an on-demand dashboard trigger via `yeti-updater-trigger.path`; downloads + swaps + health checks with automatic rollback
 - **Multi-instance deploy**: Release tarballs embed a `.repo` file so multiple instances (from different forks) can run independently on the same host
 
 ## Deployment & Multi-Instance Support
@@ -590,6 +591,7 @@ run as any user without modifying deploy scripts.
 ├── env                  Environment overrides (loaded by systemd)
 ├── yeti.db             SQLite database
 ├── last-version         Tracks last announced version (deployment announcements)
+├── update-check-requested  Manual update-check sentinel watched by systemd
 ├── repos/
 │   └── <owner>/<repo>/  Main clone per repository
 └── worktrees/

@@ -24,6 +24,19 @@ if [[ -f "$ENV_FILE" ]]; then
   source "$ENV_FILE"
   set +a
 fi
+UPDATE_CHECK_FILE="$YETI_HOME/.yeti/update-check-requested"
+rm -f "$UPDATE_CHECK_FILE" 2>/dev/null || true
+
+# Keep the manual update-check path unit installed and active even on no-op
+# checks, so older installs self-heal after the release that introduces it.
+TRIGGER_PATH_UNIT="$INSTALL_DIR/deploy/yeti-updater-trigger.path"
+if [[ -f "$TRIGGER_PATH_UNIT" ]]; then
+  sed "s|/home/yeti/|$YETI_HOME/|" "$TRIGGER_PATH_UNIT" | \
+    tee /etc/systemd/system/yeti-updater-trigger.path >/dev/null
+  systemctl daemon-reload
+  systemctl enable --now yeti-updater-trigger.path || \
+    log "Warning: could not enable yeti-updater-trigger.path"
+fi
 
 # Resolve repo: .repo file (from release tarball) → config selfRepo → default
 if [[ -f "$INSTALL_DIR/.repo" ]]; then

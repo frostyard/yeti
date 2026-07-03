@@ -1,6 +1,7 @@
 import type {
   Session, Overview, Job, QueueResponse, RunsResponse, RunDetail, TailResponse,
   IssueLogsResponse, NotificationRow, ReposResponse, ConfigResponse, LearningRow,
+  UpdateCheckResponse,
 } from "./types";
 
 export class ApiError extends Error {
@@ -69,6 +70,7 @@ export const api = {
   triggerJob: (name: string) => post<{ result: string }>(`/api/jobs/${encodeURIComponent(name)}/trigger`),
   pauseJob: (name: string) => post<{ result: string }>(`/api/jobs/${encodeURIComponent(name)}/pause`),
   cancelTask: () => post<{ result: string }>("/api/tasks/cancel"),
+  checkForUpdates: () => post<UpdateCheckResponse>("/api/update/check"),
 
   mergePR: (repo: string, prNumber: number) => post<{ result: string }>("/api/queue/merge", { repo, prNumber }),
   queueAction: (action: "skip" | "unskip" | "prioritize" | "deprioritize", repo: string, number: number) =>

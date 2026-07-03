@@ -1,0 +1,9 @@
+[Unit]
+Description=Yeti manual update-check trigger
+
+[Path]
+PathExists=/home/yeti/.yeti/update-check-requested
+Unit=yeti-updater.service
+
+[Install]
+WantedBy=paths.target
