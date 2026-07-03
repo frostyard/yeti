@@ -5,6 +5,7 @@ import { AppShell } from "./components/shell/AppShell";
 import { Overview } from "./routes/Overview";
 import { Queue } from "./routes/Queue";
 import { Jobs } from "./routes/Jobs";
+import { Policies } from "./routes/Policies";
 import { Logs } from "./routes/Logs";
 import { LogDetail } from "./routes/LogDetail";
 import { IssueLogs } from "./routes/IssueLogs";
@@ -51,6 +52,7 @@ export function AppRoutes() {
           <Route path="/" element={<Overview />} />
           <Route path="/queue" element={<Queue />} />
           <Route path="/jobs" element={<Jobs />} />
+          <Route path="/policies" element={<Policies />} />
           <Route path="/logs" element={<Logs />} />
           <Route path="/logs/issue" element={<IssueLogs />} />
           <Route path="/logs/:runId" element={<LogDetail />} />

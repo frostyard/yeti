@@ -1,7 +1,7 @@
 import type {
   Session, Overview, Job, QueueResponse, RunsResponse, RunDetail, TailResponse,
   IssueLogsResponse, NotificationRow, ReposResponse, ConfigResponse, LearningRow,
-  UpdateCheckResponse,
+  UpdateCheckResponse, PoliciesResponse,
 } from "./types";
 
 export class ApiError extends Error {
@@ -43,6 +43,7 @@ export const api = {
 
   overview: () => req<Overview>("/api/overview"),
   jobs: () => req<Job[]>("/api/jobs"),
+  policies: () => req<PoliciesResponse>("/api/policies"),
   queue: () => req<QueueResponse>("/api/queue"),
   config: () => req<ConfigResponse>("/api/config"),
   repos: () => req<ReposResponse>("/api/repos"),
