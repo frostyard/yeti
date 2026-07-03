@@ -348,6 +348,7 @@ interface GateContext {
   repo: string;           // target repo fullName, recorded with the learning
   wtPath: string;         // worktree to retry/verify in
   baseBranch: string;     // defaultBranch or PR head — the tree-diff base
+  mergeBase?: string;     // optional second diff base after a branch merge
   aiOptions?: AiOptions;  // forwarded to the retry call so it uses the same backend/model
 }
 ```
@@ -359,13 +360,20 @@ Steps:
    fixed `RETRY_PROMPT` asking for exactly the two declaration lines (with
    `none` as the explicit "nothing to report" value). Re-parses the retry
    output. If still not declared, logs a warning and returns — no second retry.
-3. If `repo.length > 0`: verifies the claim against reality rather than
-   trusting the agent's word — calls the extended `hasTreeDiff(wtPath,
-   baseBranch, "yeti/")` (a `git diff --quiet -- <pathspec>` check scoped to
-   the `yeti/` pathspec) to confirm the worktree actually has committed
-   changes under `yeti/`. A claim with no matching diff is logged as ignored,
-   not persisted or retried further — repo learnings live entirely in the
-   target repo's git history, not in Yeti's DB.
+3. If `repo.length > 0`: verifies each claim against reality rather than
+   trusting the agent's word. Each declared path must be under
+   `yeti/learnings/`, must not contain `..`, and must match the strict
+   learning-file allowlist (`[A-Za-z0-9._/-]` plus `.md`), so Git pathspec
+   glob/magic characters such as `*`, `?`, `[]`, `:(...)`, and whitespace are
+   rejected before any `git diff` call. Valid claims call the extended
+   `hasTreeDiff(wtPath, baseBranch, declaredPath)` (a `git diff --quiet --
+   <pathspec>` check scoped to that exact file). A claim whose declared file
+   has no matching diff is logged as ignored, not persisted or retried further
+   — repo learnings live entirely in the target repo's git history, not in
+   Yeti's DB. When `ctx.mergeBase` is set, the same declared file must differ
+   from both `baseBranch` and `mergeBase`; the ci-fixer conflict path sets this
+   after merging the PR base branch so a learning file inherited from the base
+   branch cannot verify the agent's claim.
 4. Each `yeti` summary is persisted via `db.insertLearning(jobName, repo,
    "yeti", summary)` (dedups identical pending summaries — see Database
    Schema).

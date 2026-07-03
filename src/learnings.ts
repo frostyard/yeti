@@ -5,6 +5,8 @@ import * as log from "./log.js";
 import { LEARNINGS_PENDING_THRESHOLD } from "./config.js";
 
 const YETI_LEARNINGS_PER_RUN_MAX = 5;
+const REPO_LEARNING_PREFIX = "yeti/learnings/";
+const REPO_LEARNING_PATH = /^yeti\/learnings\/[A-Za-z0-9][A-Za-z0-9._-]*(?:\/[A-Za-z0-9][A-Za-z0-9._-]*)*\.md$/;
 
 export interface RepoLearning {
   path: string;
@@ -69,6 +71,11 @@ export interface GateContext {
   wtPath: string;
   /** Branch the worktree's tree-diff is checked against (defaultBranch or PR head). */
   baseBranch: string;
+  /**
+   * Optional second branch to diff against when the worktree includes a prior
+   * merge. The same declared learning file must differ from both branches.
+   */
+  mergeBase?: string;
   aiOptions?: AiOptions;
 }
 
@@ -87,10 +94,23 @@ const RETRY_PROMPT = [
   `LEARNINGS-YETI: <one-line environment/tooling learning>`,
 ].join("\n");
 
+function repoLearningPathRejectionReason(path: string): string | null {
+  if (!path.startsWith(REPO_LEARNING_PREFIX)) {
+    return `not under ${REPO_LEARNING_PREFIX}`;
+  }
+  if (path.includes("..")) {
+    return "contains '..'";
+  }
+  if (!REPO_LEARNING_PATH.test(path)) {
+    return "contains unsafe characters or is not a learning .md path";
+  }
+  return null;
+}
+
 /**
  * Mechanical gate of the self-improvement loop. Applied after the main runAI
  * call in work jobs. Missing declaration → one retry in the same worktree.
- * Claimed repo learnings are verified against the actual yeti/ tree diff.
+ * Claimed repo learnings are verified against their declared file paths.
  * Environment learnings are persisted; hitting the pending threshold triggers
  * the consolidator. NEVER throws — learnings are best-effort.
  */
@@ -111,12 +131,25 @@ export async function enforceLearnings(output: string, ctx: GateContext): Promis
       return;
     }
 
-    if (parsed.repo.length > 0) {
-      const hasYetiDiff = await claude.hasTreeDiff(ctx.wtPath, ctx.baseBranch, "yeti/");
-      if (hasYetiDiff) {
-        log.info(`[learnings] ${ctx.jobName}: ${parsed.repo.length} repo learning(s) committed under yeti/`);
+    for (const entry of parsed.repo) {
+      const rejectionReason = repoLearningPathRejectionReason(entry.path);
+      if (rejectionReason) {
+        log.warn(`[learnings] ${ctx.jobName}: declared repo learning path ${entry.path} rejected (${rejectionReason}) — ignoring claim`);
+        continue;
+      }
+
+      const differsFromBase = await claude.hasTreeDiff(ctx.wtPath, ctx.baseBranch, entry.path);
+      const differsFromMergeBase = ctx.mergeBase
+        ? await claude.hasTreeDiff(ctx.wtPath, ctx.mergeBase, entry.path)
+        : true;
+
+      if (differsFromBase && differsFromMergeBase) {
+        log.info(`[learnings] ${ctx.jobName}: repo learning committed: ${entry.path}`);
       } else {
-        log.warn(`[learnings] ${ctx.jobName}: declared repo learning(s) but no yeti/ changes in worktree — ignoring claim`);
+        const branchHint = ctx.mergeBase && differsFromBase
+          ? ` and no changes from ${ctx.mergeBase}`
+          : "";
+        log.warn(`[learnings] ${ctx.jobName}: declared repo learning ${entry.path} but no changes from ${ctx.baseBranch}${branchHint} — ignoring claim`);
       }
     }
 

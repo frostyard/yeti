@@ -59,7 +59,7 @@ async function resolveConflicts(repo: Repo, pr: gh.PR): Promise<boolean> {
 
     const aiOptions = JOB_AI["ci-fixer"];
     const output = await claude.resolveEnqueue(aiOptions)(() => claude.runAI(prompt, wtPath!, aiOptions), gh.hasPriorityLabel(pr.labels));
-    await enforceLearnings(output, { jobName: "ci-fixer", repo: fullName, wtPath, baseBranch: pr.headRefName, aiOptions });
+    await enforceLearnings(output, { jobName: "ci-fixer", repo: fullName, wtPath, baseBranch: pr.headRefName, mergeBase: pr.baseRefName, aiOptions });
 
     if (await claude.hasNewCommits(wtPath, pr.headRefName) && await claude.hasTreeDiff(wtPath, pr.headRefName)) {
       await claude.pushBranch(wtPath, pr.headRefName, fullName);

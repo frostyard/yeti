@@ -629,6 +629,13 @@ describe("ci-fixer", () => {
     expect(mockClaude.pushBranch).toHaveBeenCalled();
     expect(mockClaude.regeneratePRDescription).toHaveBeenCalledWith("/tmp/worktree", pr.baseRefName, pr, undefined);
     expect(mockGh.updatePRBody).toHaveBeenCalledWith(repo.fullName, pr.number, "## Summary\nUpdated");
+    expect(mockEnforceLearnings).toHaveBeenCalledWith(expect.any(String), expect.objectContaining({
+      jobName: "ci-fixer",
+      repo: repo.fullName,
+      wtPath: "/tmp/worktree",
+      baseBranch: pr.headRefName,
+      mergeBase: pr.baseRefName,
+    }));
   });
 
   it("clean merge conflict — does NOT update PR description", async () => {
