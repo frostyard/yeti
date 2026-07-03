@@ -1,12 +1,14 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { mockRepo, mockPR } from "../test-helpers.js";
 
+const { __tier } = vi.hoisted(() => ({ __tier: {} as Record<string, string> }));
 vi.mock("../config.js", () => ({
   LABELS: {
     refined: "Refined",
     ready: "Ready",
     inReview: "In Review",
   },
+  repoAutonomy: (r: { fullName: string } | undefined) => __tier[r?.fullName ?? ""] ?? "pr",
 }));
 
 vi.mock("../log.js", () => ({
@@ -54,6 +56,10 @@ describe("auto-merger", () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    for (const k in __tier) delete __tier[k];
+    // The shared `repo` fixture drives the ~24 merge-asserting tests below;
+    // keep it at automerge tier by default so those tests exercise the merge path.
+    __tier[repo.fullName] = "automerge";
     mockGh.listPRs.mockResolvedValue([]);
     mockGh.getPRCheckStatus.mockResolvedValue("pending");
     mockGh.hasValidLGTM.mockResolvedValue(false);
@@ -167,6 +173,7 @@ describe("auto-merger", () => {
 
   it("reports errors without crashing the loop", async () => {
     const repo2 = mockRepo({ name: "test-repo-2", fullName: "test-org/test-repo-2" });
+    __tier[repo2.fullName] = "automerge";
     const pr = mockPR({ author: { login: "dependabot[bot]" } });
 
     mockGh.listPRs
@@ -378,6 +385,34 @@ describe("auto-merger", () => {
     await run([repo]);
 
     expect(mockGh.getPRMergeableState).toHaveBeenCalledWith(repo.fullName, pr.number);
+    expect(mockGh.mergePR).toHaveBeenCalledWith(repo.fullName, pr.number);
+  });
+
+  it("skips repo below automerge tier without merging", async () => {
+    const prRepo = mockRepo();
+    // Overrides the beforeEach default (automerge) for this shared fullName so
+    // this test exercises the below-tier skip path.
+    __tier[prRepo.fullName] = "pr";
+    const pr = mockPR({ author: { login: "dependabot[bot]" } });
+    mockGh.listPRs.mockResolvedValue([pr]);
+    mockGh.getPRCheckStatus.mockResolvedValue("passing");
+
+    await run([prRepo]);
+
+    expect(mockGh.listPRs).not.toHaveBeenCalled();
+    expect(mockGh.mergePR).not.toHaveBeenCalled();
+    expect(log.info).toHaveBeenCalledWith(
+      `[auto-merger] skip ${prRepo.fullName} — tier below 'merge' requirement`,
+    );
+  });
+
+  it("merges an eligible PR when repo is at automerge tier", async () => {
+    const pr = mockPR({ author: { login: "dependabot[bot]" } });
+    mockGh.listPRs.mockResolvedValue([pr]);
+    mockGh.getPRCheckStatus.mockResolvedValue("passing");
+
+    await run([repo]);
+
     expect(mockGh.mergePR).toHaveBeenCalledWith(repo.fullName, pr.number);
   });
 });

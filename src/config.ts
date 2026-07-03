@@ -1,6 +1,24 @@
 import path from "node:path";
 import os from "node:os";
 import fs from "node:fs";
+import type { Autonomy } from "./policy.js";
+
+const AUTONOMY_TIERS = ["advisory", "issues", "pr", "automerge"] as const satisfies readonly Autonomy[];
+// Compile-time guard: if a tier is added to the Autonomy union but not to
+// AUTONOMY_TIERS above, this assignment fails to type-check.
+type _TierListComplete = Autonomy extends (typeof AUTONOMY_TIERS)[number] ? true : ["AUTONOMY_TIERS missing a tier in the Autonomy union"];
+const _tierListComplete: _TierListComplete = true;
+void _tierListComplete;
+
+function coerceAutonomy(value: unknown, context: string): Autonomy {
+  if (typeof value === "string" && (AUTONOMY_TIERS as readonly string[]).includes(value)) {
+    return value as Autonomy;
+  }
+  if (value !== undefined) {
+    console.warn(`[WARN] invalid autonomy "${String(value)}" for ${context} — using "pr"`);
+  }
+  return "pr";
+}
 
 export const WORK_DIR = path.join(os.homedir(), ".yeti");
 
@@ -46,6 +64,13 @@ export interface Repo {
   defaultBranch: string;
 }
 
+/** Resolve the autonomy tier for a repo: per-repo map > instance default. Must stay
+ *  identical to fullNameAutonomy in capability.ts — both resolvers exist only because
+ *  one call site has a Repo object and the other only a fullName. */
+export function repoAutonomy(repo: Repo): Autonomy {
+  return AUTONOMY_MAP[repo.fullName] ?? DEFAULT_AUTONOMY;
+}
+
 export interface ConfigFile {
   githubOwners?: string[];
   selfRepo?: string;
@@ -77,6 +102,7 @@ export interface ConfigFile {
     issueAuditorHour?: number;
     mkdocsUpdateHour?: number;
     promptEvaluatorHour?: number;
+    learningConsolidatorHour?: number;
   };
   logLevel?: LogLevel;
   logRetentionDays?: number;
@@ -89,6 +115,7 @@ export interface ConfigFile {
   enabledJobs?: string[];
   reviewLoop?: boolean;
   maxPlanRounds?: number;
+  learningsPendingThreshold?: number;
   queueScanIntervalMs?: number;
   githubAppId?: string;
   githubAppInstallationId?: string;
@@ -97,6 +124,8 @@ export interface ConfigFile {
   githubAppClientSecret?: string;
   externalUrl?: string;
   webhookSecret?: string;
+  defaultAutonomy?: Autonomy;
+  autonomy?: Record<string, Autonomy>;
 }
 
 function loadConfig() {
@@ -137,6 +166,7 @@ function loadConfig() {
     issueAuditorHour: file.schedules?.issueAuditorHour ?? 5, // 5 AM local time
     mkdocsUpdateHour: file.schedules?.mkdocsUpdateHour ?? 4, // 4 AM local time
     promptEvaluatorHour: file.schedules?.promptEvaluatorHour ?? 0, // midnight local time
+    learningConsolidatorHour: file.schedules?.learningConsolidatorHour ?? 6, // 6 AM local time
   };
 
   const discordBotToken =
@@ -227,8 +257,18 @@ function loadConfig() {
   const maxPlanRounds = Number.isFinite(parsedMaxPlanRounds) && parsedMaxPlanRounds >= 1
     ? Math.floor(parsedMaxPlanRounds)
     : 3;
+  const parsedLearningsThreshold = file.learningsPendingThreshold ?? 5;
+  const learningsPendingThreshold = Number.isFinite(parsedLearningsThreshold) && parsedLearningsThreshold >= 1
+    ? Math.floor(parsedLearningsThreshold)
+    : 5;
   const jobAi = file.jobAi ?? {};
   const queueScanIntervalMs = file.queueScanIntervalMs ?? 5 * 60 * 1000;
+
+  const defaultAutonomy = coerceAutonomy(file.defaultAutonomy ?? "pr", "defaultAutonomy");
+  const autonomy: Record<string, Autonomy> = {};
+  for (const [repo, tier] of Object.entries(file.autonomy ?? {})) {
+    autonomy[repo] = coerceAutonomy(tier, `autonomy["${repo}"]`);
+  }
 
   const githubAppId = process.env["YETI_GITHUB_APP_ID"] ?? file.githubAppId ?? "";
   const githubAppInstallationId = process.env["YETI_GITHUB_APP_INSTALLATION_ID"] ?? file.githubAppInstallationId ?? "";
@@ -246,7 +286,7 @@ function loadConfig() {
 
   const webhookSecret = process.env["YETI_WEBHOOK_SECRET"] ?? file.webhookSecret ?? "";
 
-  return { githubOwners, selfRepo, port, intervals, schedules, logLevel, logRetentionDays, logRetentionPerJob, discordBotToken, discordChannelId, discordAllowedUsers, authToken, maxClaudeWorkers, claudeTimeoutMs, maxCopilotWorkers, copilotTimeoutMs, maxCodexWorkers, codexTimeoutMs, pausedJobs, skippedItems, prioritizedItems, allowedRepos, includeForks, enabledJobs, reviewLoop, maxPlanRounds, jobAi, queueScanIntervalMs, githubAppId, githubAppInstallationId, githubAppPrivateKeyPath, githubAppClientId, githubAppClientSecret, externalUrl, webhookSecret };
+  return { githubOwners, selfRepo, port, intervals, schedules, logLevel, logRetentionDays, logRetentionPerJob, discordBotToken, discordChannelId, discordAllowedUsers, authToken, maxClaudeWorkers, claudeTimeoutMs, maxCopilotWorkers, copilotTimeoutMs, maxCodexWorkers, codexTimeoutMs, pausedJobs, skippedItems, prioritizedItems, allowedRepos, includeForks, enabledJobs, reviewLoop, maxPlanRounds, learningsPendingThreshold, jobAi, queueScanIntervalMs, githubAppId, githubAppInstallationId, githubAppPrivateKeyPath, githubAppClientId, githubAppClientSecret, externalUrl, webhookSecret, defaultAutonomy, autonomy };
 }
 
 const config = loadConfig();
@@ -270,11 +310,14 @@ export let INCLUDE_FORKS = config.includeForks;
 export let ENABLED_JOBS: readonly string[] = config.enabledJobs;
 export let REVIEW_LOOP = config.reviewLoop;
 export let MAX_PLAN_ROUNDS = config.maxPlanRounds;
+export let LEARNINGS_PENDING_THRESHOLD = config.learningsPendingThreshold;
 export let MAX_COPILOT_WORKERS = config.maxCopilotWorkers;
 export let COPILOT_TIMEOUT_MS = config.copilotTimeoutMs;
 export let MAX_CODEX_WORKERS = config.maxCodexWorkers;
 export let CODEX_TIMEOUT_MS = config.codexTimeoutMs;
 export let JOB_AI: Readonly<Record<string, { backend?: "claude" | "copilot" | "codex"; model?: string }>> = config.jobAi;
+export let DEFAULT_AUTONOMY: Autonomy = config.defaultAutonomy;
+export let AUTONOMY_MAP: Readonly<Record<string, Autonomy>> = config.autonomy;
 export let QUEUE_SCAN_INTERVAL_MS = config.queueScanIntervalMs;
 // Immutable — requires restart (bot connection)
 export const DISCORD_BOT_TOKEN = config.discordBotToken;
@@ -337,12 +380,15 @@ export function reloadConfig(): void {
   ENABLED_JOBS = fresh.enabledJobs;
   REVIEW_LOOP = fresh.reviewLoop;
   MAX_PLAN_ROUNDS = fresh.maxPlanRounds;
+  LEARNINGS_PENDING_THRESHOLD = fresh.learningsPendingThreshold;
   MAX_COPILOT_WORKERS = fresh.maxCopilotWorkers;
   COPILOT_TIMEOUT_MS = fresh.copilotTimeoutMs;
   MAX_CODEX_WORKERS = fresh.maxCodexWorkers;
   CODEX_TIMEOUT_MS = fresh.codexTimeoutMs;
   JOB_AI = fresh.jobAi;
   QUEUE_SCAN_INTERVAL_MS = fresh.queueScanIntervalMs;
+  DEFAULT_AUTONOMY = fresh.defaultAutonomy;
+  AUTONOMY_MAP = fresh.autonomy;
   DISCORD_ALLOWED_USERS = fresh.discordAllowedUsers;
   notifyListeners();
 }
@@ -368,6 +414,43 @@ export function getConfigForDisplay(): Record<string, unknown> {
   }
 
   return display;
+}
+
+// Maps a config field to the env var that overrides it. When the env var is set,
+// it wins over ~/.yeti/config.json, so the dashboard must show that field as locked.
+export const ENV_OVERRIDE_MAP: Readonly<Record<string, string>> = {
+  githubOwners: "YETI_GITHUB_OWNERS",
+  selfRepo: "YETI_SELF_REPO",
+  port: "PORT",
+  discordBotToken: "YETI_DISCORD_BOT_TOKEN",
+  discordChannelId: "YETI_DISCORD_CHANNEL_ID",
+  discordAllowedUsers: "YETI_DISCORD_ALLOWED_USERS",
+  authToken: "YETI_AUTH_TOKEN",
+  maxClaudeWorkers: "YETI_MAX_CLAUDE_WORKERS",
+  claudeTimeoutMs: "YETI_CLAUDE_TIMEOUT_MS",
+  maxCopilotWorkers: "YETI_MAX_COPILOT_WORKERS",
+  copilotTimeoutMs: "YETI_COPILOT_TIMEOUT_MS",
+  maxCodexWorkers: "YETI_MAX_CODEX_WORKERS",
+  codexTimeoutMs: "YETI_CODEX_TIMEOUT_MS",
+  logLevel: "YETI_LOG_LEVEL",
+  allowedRepos: "YETI_ALLOWED_REPOS",
+  includeForks: "YETI_INCLUDE_FORKS",
+  githubAppId: "YETI_GITHUB_APP_ID",
+  githubAppInstallationId: "YETI_GITHUB_APP_INSTALLATION_ID",
+  githubAppPrivateKeyPath: "YETI_GITHUB_APP_PRIVATE_KEY_PATH",
+  githubAppClientId: "YETI_GITHUB_APP_CLIENT_ID",
+  githubAppClientSecret: "YETI_GITHUB_APP_CLIENT_SECRET",
+  externalUrl: "YETI_EXTERNAL_URL",
+  webhookSecret: "YETI_WEBHOOK_SECRET",
+};
+
+/** Returns { configField: ENV_VAR } for env vars currently set (i.e. locking that field). */
+export function getEnvOverrides(): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const [field, envVar] of Object.entries(ENV_OVERRIDE_MAP)) {
+    if (process.env[envVar] !== undefined) out[field] = envVar;
+  }
+  return out;
 }
 
 export function writeConfig(updates: Partial<ConfigFile>): void {

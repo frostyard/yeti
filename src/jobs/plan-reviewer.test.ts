@@ -1,3 +1,4 @@
+import { stripPreamble } from "../test-preamble.js";
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { mockRepo, mockIssue } from "../test-helpers.js";
 
@@ -13,6 +14,8 @@ const mockConfig = vi.hoisted(() => ({
   ENABLED_JOBS: ["plan-reviewer"],
   REVIEW_LOOP: false,
   MAX_PLAN_ROUNDS: 3,
+  WORK_DIR: "/tmp/yeti-pr-test",
+  repoAutonomy: () => "pr",
 }));
 
 vi.mock("../config.js", () => mockConfig);
@@ -21,6 +24,11 @@ vi.mock("../log.js", () => ({
   info: vi.fn(),
   warn: vi.fn(),
   error: vi.fn(),
+}));
+
+vi.mock("../learnings.js", () => ({
+  enforceLearnings: vi.fn().mockResolvedValue(undefined),
+  stripLearningsDeclaration: (s: string) => s,
 }));
 
 vi.mock("../error-reporter.js", () => ({
@@ -35,14 +43,13 @@ vi.mock("../notify.js", () => ({
 const { mockGh, mockClaude, mockDb } = vi.hoisted(() => ({
   mockGh: {
     listOpenIssues: vi.fn(),
-    getSelfLogin: vi.fn(),
-    getCommentReactions: vi.fn(),
     addReaction: vi.fn(),
     getIssueComments: vi.fn(),
     addLabel: vi.fn(),
     removeLabel: vi.fn(),
     commentOnIssue: vi.fn(),
     isYetiComment: (body: string) => body.includes("<!-- yeti-automated -->"),
+    stripYetiMarker: (body: string) => body.replace("<!-- yeti-automated -->", "").trim(),
     isRateLimited: vi.fn().mockReturnValue(false),
     isItemSkipped: vi.fn().mockReturnValue(false),
     hasPriorityLabel: vi.fn().mockReturnValue(false),
@@ -58,6 +65,7 @@ const { mockGh, mockClaude, mockDb } = vi.hoisted(() => ({
     runAI: vi.fn(),
     resolveEnqueue: vi.fn(),
     randomSuffix: vi.fn().mockReturnValue("ab12"),
+    scrubWorktreePaths: (text: string) => text,
   },
   mockDb: {
     recordTaskStart: vi.fn().mockReturnValue(1),
@@ -71,12 +79,13 @@ vi.mock("../github.js", () => mockGh);
 vi.mock("../claude.js", () => mockClaude);
 vi.mock("../db.js", () => mockDb);
 
-import { run } from "./plan-reviewer.js";
+import { run, buildReviewPrompt, buildThreadSection, buildRoundInfo } from "./plan-reviewer.js";
 import { reportError } from "../error-reporter.js";
 
 describe("plan-reviewer", () => {
   const repo = mockRepo();
   const planCommentBody = "<!-- yeti-automated -->## Implementation Plan\n\nDo the thing step by step";
+  const planComment = { id: 501, body: planCommentBody, login: "yeti-bot", updatedAt: "2026-07-01T10:00:00Z" };
 
   beforeEach(() => {
     vi.clearAllMocks();
@@ -90,8 +99,6 @@ describe("plan-reviewer", () => {
     mockClaude.runAI.mockResolvedValue("The plan looks solid but misses error handling for edge case X.");
     mockClaude.removeWorktree.mockResolvedValue(undefined);
     mockGh.listOpenIssues.mockResolvedValue([]);
-    mockGh.getSelfLogin.mockResolvedValue("yeti-bot[bot]");
-    mockGh.getCommentReactions.mockResolvedValue([]);
     mockGh.addReaction.mockResolvedValue(undefined);
     mockGh.addLabel.mockResolvedValue(undefined);
     mockGh.removeLabel.mockResolvedValue(undefined);
@@ -106,10 +113,7 @@ describe("plan-reviewer", () => {
       labels: [{ name: "Needs Plan Review" }],
     });
     mockGh.listOpenIssues.mockResolvedValueOnce([issue]);
-    mockGh.getIssueComments.mockResolvedValue([
-      { id: 501, body: planCommentBody, login: "yeti-bot" },
-    ]);
-    mockGh.getCommentReactions.mockResolvedValue([]);
+    mockGh.getIssueComments.mockResolvedValue([planComment]);
 
     await run([repo]);
 
@@ -130,8 +134,13 @@ describe("plan-reviewer", () => {
       expect.stringContaining("## Plan Review"),
     );
 
-    // Reacts thumbsup to the plan comment
-    expect(mockGh.addReaction).toHaveBeenCalledWith(repo.fullName, 501, "+1");
+    // Marks the reviewed plan version via a marker in the posted comment, not a reaction
+    expect(mockGh.commentOnIssue).toHaveBeenCalledWith(
+      repo.fullName,
+      issue.number,
+      expect.stringContaining("<!-- yeti-review-of:501:2026-07-01T10:00:00Z -->"),
+    );
+    expect(mockGh.addReaction).not.toHaveBeenCalled();
 
     // Removes Needs Plan Review label
     expect(mockGh.removeLabel).toHaveBeenCalledWith(repo.fullName, issue.number, "Needs Plan Review");
@@ -163,24 +172,57 @@ describe("plan-reviewer", () => {
     expect(mockGh.commentOnIssue).not.toHaveBeenCalled();
   });
 
-  it("skips already-reviewed plans (thumbsup reaction exists)", async () => {
-    const issue = mockIssue({
-      body: "Test issue body",
-      labels: [{ name: "Needs Plan Review" }],
-    });
+  it("skips a plan version that already has a review marker", async () => {
+    const issue = mockIssue({ labels: [{ name: "Needs Plan Review" }] });
     mockGh.listOpenIssues.mockResolvedValueOnce([issue]);
     mockGh.getIssueComments.mockResolvedValue([
-      { id: 501, body: planCommentBody, login: "yeti-bot" },
-    ]);
-    // Plan comment already has a thumbsup from self
-    mockGh.getCommentReactions.mockResolvedValue([
-      { user: { login: "yeti-bot[bot]" }, content: "+1" },
+      planComment,
+      {
+        id: 601,
+        body: `<!-- yeti-automated -->## Plan Review\n\nold\n\n<!-- yeti-review-of:501:2026-07-01T10:00:00Z -->`,
+        login: "someone-else[bot]", // identity-independent: not the current selfLogin
+        updatedAt: "",
+      },
     ]);
 
     await run([repo]);
 
-    expect(mockClaude.createWorktree).not.toHaveBeenCalled();
-    expect(mockGh.commentOnIssue).not.toHaveBeenCalled();
+    expect(mockClaude.runAI).not.toHaveBeenCalled();
+  });
+
+  it("re-reviews when the plan was edited after the last review (marker mismatch)", async () => {
+    const issue = mockIssue({ labels: [{ name: "Needs Plan Review" }] });
+    mockGh.listOpenIssues.mockResolvedValueOnce([issue]);
+    mockGh.getIssueComments.mockResolvedValue([
+      { ...planComment, updatedAt: "2026-07-02T09:00:00Z" },
+      {
+        id: 601,
+        body: `<!-- yeti-automated -->## Plan Review\n\nold\n\n<!-- yeti-review-of:501:2026-07-01T10:00:00Z -->`,
+        login: "yeti-bot",
+        updatedAt: "",
+      },
+    ]);
+    mockClaude.runAI.mockResolvedValue("Fresh look.\nVERDICT: APPROVED");
+
+    await run([repo]);
+
+    expect(mockClaude.runAI).toHaveBeenCalled();
+  });
+
+  it("posts the review with a marker for the reviewed plan version", async () => {
+    const issue = mockIssue({ labels: [{ name: "Needs Plan Review" }] });
+    mockGh.listOpenIssues.mockResolvedValueOnce([issue]);
+    mockGh.getIssueComments.mockResolvedValue([planComment]);
+    mockClaude.runAI.mockResolvedValue("Fine.\nVERDICT: APPROVED");
+
+    await run([repo]);
+
+    expect(mockGh.commentOnIssue).toHaveBeenCalledWith(
+      repo.fullName,
+      issue.number,
+      expect.stringContaining("<!-- yeti-review-of:501:2026-07-01T10:00:00Z -->"),
+    );
+    expect(mockGh.addReaction).not.toHaveBeenCalled();
   });
 
   it("skips issues with Refined label", async () => {
@@ -202,10 +244,7 @@ describe("plan-reviewer", () => {
       labels: [{ name: "Needs Plan Review" }],
     });
     mockGh.listOpenIssues.mockResolvedValueOnce([issue]);
-    mockGh.getIssueComments.mockResolvedValue([
-      { id: 501, body: planCommentBody, login: "yeti-bot" },
-    ]);
-    mockGh.getCommentReactions.mockResolvedValue([]);
+    mockGh.getIssueComments.mockResolvedValue([planComment]);
 
     await run([repo]);
 
@@ -233,10 +272,7 @@ describe("plan-reviewer", () => {
       labels: [{ name: "Needs Plan Review" }],
     });
     mockGh.listOpenIssues.mockResolvedValueOnce([issue]);
-    mockGh.getIssueComments.mockResolvedValue([
-      { id: 501, body: planCommentBody, login: "yeti-bot" },
-    ]);
-    mockGh.getCommentReactions.mockResolvedValue([]);
+    mockGh.getIssueComments.mockResolvedValue([planComment]);
 
     await run([repo]);
 
@@ -255,10 +291,7 @@ describe("plan-reviewer", () => {
       labels: [{ name: "Needs Plan Review" }],
     });
     mockGh.listOpenIssues.mockResolvedValueOnce([issue]);
-    mockGh.getIssueComments.mockResolvedValue([
-      { id: 501, body: planCommentBody, login: "yeti-bot" },
-    ]);
-    mockGh.getCommentReactions.mockResolvedValue([]);
+    mockGh.getIssueComments.mockResolvedValue([planComment]);
     mockClaude.runAI.mockResolvedValue("");
 
     await run([repo]);
@@ -278,10 +311,7 @@ describe("plan-reviewer", () => {
       labels: [{ name: "Needs Plan Review" }],
     });
     mockGh.listOpenIssues.mockResolvedValueOnce([issue]);
-    mockGh.getIssueComments.mockResolvedValue([
-      { id: 501, body: planCommentBody, login: "yeti-bot" },
-    ]);
-    mockGh.getCommentReactions.mockResolvedValue([]);
+    mockGh.getIssueComments.mockResolvedValue([planComment]);
     mockClaude.runAI.mockRejectedValueOnce(
       new Error("Codex exited with code 2: error: unexpected argument '--approval-mode' found"),
     );
@@ -313,8 +343,8 @@ describe("plan-reviewer", () => {
       });
       mockGh.listOpenIssues.mockResolvedValueOnce([issue]);
 
-      const comments: Array<{ id: number; body: string; login: string }> = [
-        { id: 501, body: planCommentBody, login: "yeti-bot" },
+      const comments: Array<{ id: number; body: string; login: string; updatedAt: string }> = [
+        planComment,
       ];
       // Add existing review comments to simulate prior rounds
       for (let i = 0; i < existingReviewComments; i++) {
@@ -322,10 +352,10 @@ describe("plan-reviewer", () => {
           id: 600 + i,
           body: "<!-- yeti-automated -->## Plan Review\n\nPrior review",
           login: "yeti-bot",
+          updatedAt: "",
         });
       }
       mockGh.getIssueComments.mockResolvedValue(comments);
-      mockGh.getCommentReactions.mockResolvedValue([]);
       mockClaude.runAI.mockResolvedValue(reviewOutput);
 
       return issue;
@@ -343,25 +373,22 @@ describe("plan-reviewer", () => {
       );
     });
 
-    it("does not add verdict instruction when review loop is disabled", async () => {
+    it("includes the verdict instruction even when review loop is disabled", async () => {
       mockConfig.REVIEW_LOOP = false;
-      const issue = mockIssue({
-        body: "Add feature X",
-        labels: [{ name: "Needs Plan Review" }],
-      });
+      const issue = mockIssue({ labels: [{ name: "Needs Plan Review" }] });
       mockGh.listOpenIssues.mockResolvedValueOnce([issue]);
-      mockGh.getIssueComments.mockResolvedValue([
-        { id: 501, body: planCommentBody, login: "yeti-bot" },
-      ]);
-      mockGh.getCommentReactions.mockResolvedValue([]);
+      mockGh.getIssueComments.mockResolvedValue([planComment]);
+      mockClaude.runAI.mockResolvedValue("Fine.\nVERDICT: APPROVED");
 
       await run([repo]);
 
       expect(mockClaude.runAI).toHaveBeenCalledWith(
-        expect.not.stringContaining("VERDICT"),
+        expect.stringContaining("VERDICT:"),
         "/tmp/worktree",
         { backend: "copilot" },
       );
+      // Loop off: labels still go straight to Ready
+      expect(mockGh.addLabel).toHaveBeenCalledWith(repo.fullName, issue.number, "Ready");
     });
 
     it("approves: adds Ready label when verdict is APPROVED", async () => {
@@ -374,20 +401,44 @@ describe("plan-reviewer", () => {
       expect(mockGh.addLabel).not.toHaveBeenCalledWith(repo.fullName, issue.number, "Needs Refinement");
     });
 
-    it("strips verdict line from posted comment", async () => {
-      setupIssueWithReview("Plan is solid.\nVERDICT: APPROVED");
+    it("renders the verdict human-readably in the posted comment", async () => {
+      setupIssueWithReview("### Blocking\n- [R1-B1] bad thing (src/x.ts:1)\n\nVERDICT: NEEDS REVISION");
 
       await run([repo]);
 
       expect(mockGh.commentOnIssue).toHaveBeenCalledWith(
         repo.fullName,
         1,
-        expect.not.stringContaining("VERDICT"),
+        expect.stringContaining("**Verdict: NEEDS REVISION** (1 blocking)"),
       );
       expect(mockGh.commentOnIssue).toHaveBeenCalledWith(
         repo.fullName,
         1,
-        expect.stringContaining("Plan is solid."),
+        expect.not.stringMatching(/^VERDICT:/m),
+      );
+    });
+
+    it("round budget resets after a human comment", async () => {
+      mockConfig.MAX_PLAN_ROUNDS = 3;
+      const issue = mockIssue({ labels: [{ name: "Needs Plan Review" }] });
+      mockGh.listOpenIssues.mockResolvedValueOnce([issue]);
+      // 2 old reviews, then a human comment, then the current plan: rounds-in-loop = 0
+      mockGh.getIssueComments.mockResolvedValue([
+        { id: 601, body: "<!-- yeti-automated -->## Plan Review\n\nold 1", login: "yeti-bot", updatedAt: "" },
+        { id: 602, body: "<!-- yeti-automated -->## Plan Review\n\nold 2", login: "yeti-bot", updatedAt: "" },
+        { id: 603, body: "human weighs in", login: "bsherman", updatedAt: "" },
+        planComment,
+      ]);
+      mockClaude.runAI.mockResolvedValue("Still broken.\nVERDICT: NEEDS REVISION");
+
+      await run([repo]);
+
+      // Not at max: kicks back to refinement instead of forcing Ready
+      expect(mockGh.addLabel).toHaveBeenCalledWith(repo.fullName, issue.number, "Needs Refinement");
+      expect(mockGh.commentOnIssue).not.toHaveBeenCalledWith(
+        repo.fullName,
+        issue.number,
+        expect.stringContaining("Maximum plan review rounds"),
       );
     });
 
@@ -437,6 +488,104 @@ describe("plan-reviewer", () => {
       await run([repo]);
 
       expect(mockGh.addLabel).toHaveBeenCalledWith(repo.fullName, issue.number, "Needs Refinement");
+    });
+  });
+});
+
+describe("prompt building", () => {
+  const issue = mockIssue({ number: 42, title: "Add dark mode", body: "Some issue description" });
+  const planBody = "## Implementation Plan\n\nDo the thing";
+
+  describe("buildThreadSection", () => {
+    it("labels human comments MAINTAINER (binding) and yeti comments as automated", () => {
+      const comments = [
+        { id: 1, body: "<!-- yeti-automated -->## Plan Review\n\nold review", login: "yeti[bot]", updatedAt: "" },
+        { id: 2, body: "please keep the API stable", login: "bsherman", updatedAt: "" },
+      ];
+      const out = buildThreadSection(comments, 99);
+      expect(out).toContain("Comment by @yeti[bot] (automated by Yeti):");
+      expect(out).toContain("MAINTAINER (binding) — comment by @bsherman:");
+      expect(out).toContain("please keep the API stable");
+    });
+
+    it("labels non-yeti bot comments as bot, not maintainer", () => {
+      const comments = [{ id: 1, body: "coverage 80%", login: "codecov[bot]", updatedAt: "" }];
+      expect(buildThreadSection(comments, 99)).toContain("Comment by @codecov[bot] (bot):");
+    });
+
+    it("elides the plan comment itself", () => {
+      const comments = [
+        { id: 501, body: "<!-- yeti-automated -->## Implementation Plan\n\nthe plan", login: "yeti[bot]", updatedAt: "" },
+        { id: 502, body: "a reply", login: "bsherman", updatedAt: "" },
+      ];
+      const out = buildThreadSection(comments, 501);
+      expect(out).not.toContain("the plan");
+      expect(out).toContain("a reply");
+    });
+
+    it("says so when there are no other comments", () => {
+      expect(buildThreadSection([], 501)).toContain("No other comments");
+    });
+  });
+
+  describe("buildRoundInfo", () => {
+    it("states the round position", () => {
+      expect(buildRoundInfo(1, 3)).toBe("This is review round 1 of 3.");
+    });
+
+    it("adds the final-round instruction at max rounds", () => {
+      const out = buildRoundInfo(3, 3);
+      expect(out).toContain("round 3 of 3");
+      expect(out).toContain("final round");
+      expect(out).toContain("do not manufacture findings");
+    });
+  });
+
+  describe("buildReviewPrompt", () => {
+    it("renders issue, plan, thread, round info, and the contract", () => {
+      const out = stripPreamble(
+        buildReviewPrompt("pr", "acme/widget", issue, planBody, "THREAD-CONTENT", "This is review round 2 of 3.", 1),
+      );
+      expect(out).toContain("acme/widget#42");
+      expect(out).toContain("Add dark mode");
+      expect(out).toContain("Some issue description");
+      expect(out).toContain(planBody);
+      expect(out).toContain("THREAD-CONTENT");
+      expect(out).toContain("This is review round 2 of 3.");
+      // Contract essentials
+      expect(out).toContain("MAINTAINER comments are binding");
+      expect(out).toContain("Blocking");
+      expect(out).toContain("Advisory");
+      expect(out).toContain("VERDICT: APPROVED");
+      expect(out).toContain("VERDICT: NEEDS REVISION");
+      expect(out).toContain("repo-relative");
+    });
+
+    it("always includes the verdict instruction (no reviewLoop parameter)", () => {
+      const out = buildReviewPrompt("pr", "acme/widget", issue, planBody, "(No other comments on the issue.)", "This is review round 1 of 3.", 1);
+      expect(out).toContain("VERDICT:");
+    });
+
+    it("uses unprefixed finding IDs in the first segment", () => {
+      const out = stripPreamble(
+        buildReviewPrompt("pr", "acme/widget", issue, planBody, "THREAD-CONTENT", "This is review round 1 of 3.", 1),
+      );
+      expect(out).toContain("- [R1-B1]");
+      expect(out).toContain("- [R1-A1]");
+      expect(out).not.toContain("- [S1-R1-B1]");
+      expect(out).not.toContain("${FINDING_PREFIX}");
+      expect(out).not.toContain("${SEGMENT_NUMBER}");
+    });
+
+    it("uses segment-prefixed finding IDs after a human-comment reset", () => {
+      const out = stripPreamble(
+        buildReviewPrompt("pr", "acme/widget", issue, planBody, "THREAD-CONTENT", "This is review round 1 of 3.", 2),
+      );
+      expect(out).toContain("- [S2-R1-B1]");
+      expect(out).toContain("- [S2-R1-A1]");
+      expect(out).not.toContain("- [R1-B1]");
+      expect(out).not.toContain("${FINDING_PREFIX}");
+      expect(out).not.toContain("${SEGMENT_NUMBER}");
     });
   });
 });

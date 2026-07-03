@@ -1,4 +1,4 @@
-import { LABELS, JOB_AI, REVIEW_LOOP, MAX_PLAN_ROUNDS, type Repo } from "../config.js";
+import { LABELS, JOB_AI, REVIEW_LOOP, MAX_PLAN_ROUNDS, repoAutonomy, type Repo } from "../config.js";
 import * as gh from "../github.js";
 import { isRateLimited } from "../github.js";
 import * as claude from "../claude.js";
@@ -7,79 +7,63 @@ import * as db from "../db.js";
 import { reportError } from "../error-reporter.js";
 import { notify } from "../notify.js";
 import { PLAN_HEADER } from "../plan-parser.js";
-const REVIEW_HEADER = "## Plan Review";
+import { renderPolicy, type Autonomy } from "../policy.js";
+import { stripLearningsDeclaration } from "../learnings.js";
+import {
+  REVIEW_HEADER,
+  reviewMarker,
+  findReviewOfPlanVersion,
+  parseVerdict,
+  renderVerdict,
+  countPlanRounds,
+  countSegments,
+} from "../review-contract.js";
 
-function buildReviewPrompt(
+export function buildThreadSection(comments: gh.IssueComment[], planCommentId: number): string {
+  const rest = comments.filter((c) => c.id !== planCommentId);
+  if (rest.length === 0) return "(No other comments on the issue.)";
+  return rest
+    .map((c) => {
+      const label = gh.isYetiComment(c.body)
+        ? `Comment by @${c.login} (automated by Yeti):`
+        : c.login.endsWith("[bot]")
+          ? `Comment by @${c.login} (bot):`
+          : `MAINTAINER (binding) — comment by @${c.login}:`;
+      return ["---", label, gh.stripYetiMarker(c.body), ""].join("\n");
+    })
+    .join("\n");
+}
+
+export function buildRoundInfo(round: number, maxRounds: number): string {
+  const base = `This is review round ${round} of ${maxRounds}.`;
+  if (round >= maxRounds) {
+    return `${base} This is the final round: if nothing rises to Blocking, approve — do not manufacture findings.`;
+  }
+  return base;
+}
+
+export function buildReviewPrompt(
+  autonomy: Autonomy,
   fullName: string,
   issue: gh.Issue,
   planBody: string,
-  reviewLoop: boolean,
+  threadSection: string,
+  roundInfo: string,
+  segment: number,
 ): string {
-  const lines = [
-    `You are reviewing an implementation plan for ${fullName}#${issue.number}.`,
-    ``,
-    `**Issue: ${issue.title}**`,
-    ``,
-    issue.body || "(No description provided)",
-    ``,
-    planBody,
-    ``,
-    `Your job is to find problems with this plan:`,
-    `- Missing edge cases or error handling`,
-    `- Files that should be modified but aren't mentioned`,
-    `- Incorrect assumptions about the codebase`,
-    `- Risks that aren't acknowledged`,
-    `- Over-engineering or unnecessary complexity`,
-    `- Missing test coverage`,
-    ``,
-    `If the plan is solid, say so briefly. If it has issues, list them clearly.`,
-    `Read yeti/OVERVIEW.md if it exists for codebase context.`,
-    `Do NOT make code changes. Only produce your review as text output.`,
-  ];
-
-  if (reviewLoop) {
-    lines.push(
-      ``,
-      `End your review with exactly one of these lines on its own line:`,
-      `VERDICT: APPROVED`,
-      `VERDICT: NEEDS REVISION`,
-      ``,
-      `Do not include both. Use APPROVED only if the plan is solid enough to implement as-is.`,
-    );
-  }
-
-  return lines.join("\n");
-}
-
-function parseVerdict(output: string): "approved" | "needs-revision" {
-  const lines = output.trim().split("\n");
-  for (let i = lines.length - 1; i >= 0; i--) {
-    const line = lines[i].trim();
-    if (/^VERDICT:\s*APPROVED$/i.test(line)) return "approved";
-    if (/^VERDICT:\s*NEEDS\s+REVISION$/i.test(line)) return "needs-revision";
-  }
-  return "needs-revision";
-}
-
-function stripVerdictLine(output: string): string {
-  const lines = output.split("\n");
-  for (let i = lines.length - 1; i >= 0; i--) {
-    const line = lines[i].trim();
-    if (/^VERDICT:\s*(APPROVED|NEEDS\s+REVISION)\s*$/i.test(line)) {
-      lines.splice(i, 1);
-      while (lines.length > 0 && lines[lines.length - 1].trim() === "") {
-        lines.pop();
-      }
-      break;
-    }
-  }
-  return lines.join("\n").trim();
-}
-
-function countPlanRounds(comments: gh.IssueComment[]): number {
-  return comments.filter(
-    (c) => c.body.includes(REVIEW_HEADER) && gh.isYetiComment(c.body),
-  ).length;
+  const roundNumber = roundInfo.match(/round (\d+)/)?.[1] ?? "1";
+  const findingPrefix = segment > 1 ? `S${segment}-R${roundNumber}` : `R${roundNumber}`;
+  return renderPolicy("plan-reviewer", autonomy, {
+    FULL_NAME: fullName,
+    ISSUE_NUMBER: String(issue.number),
+    ISSUE_TITLE: issue.title,
+    ISSUE_BODY: issue.body || "(No description provided)",
+    PLAN_BODY: planBody,
+    THREAD_SECTION: threadSection,
+    ROUND_INFO: roundInfo,
+    SEGMENT_NUMBER: String(segment),
+    FINDING_PREFIX: findingPrefix,
+  });
 }
 
 async function processIssue(repo: Repo, issue: gh.Issue, planComment: gh.IssueComment, comments: gh.IssueComment[]): Promise<void> {
@@ -95,7 +79,14 @@ async function processIssue(repo: Repo, issue: gh.Issue, planComment: gh.IssueCo
     db.updateTaskWorktree(taskId, wtPath, branchName);
 
     const aiOptions = JOB_AI["plan-reviewer"];
-    const prompt = buildReviewPrompt(fullName, issue, planComment.body, REVIEW_LOOP);
+    const round = countPlanRounds(comments) + 1;
+    const segment = countSegments(comments);
+    const prompt = buildReviewPrompt(
+      repoAutonomy(repo), fullName, issue, planComment.body,
+      buildThreadSection(comments, planComment.id),
+      buildRoundInfo(round, MAX_PLAN_ROUNDS),
+      segment,
+    );
 
     const reviewOutput = await claude.resolveEnqueue(aiOptions)(
       () => claude.runAI(prompt, wtPath!, aiOptions),
@@ -108,23 +99,24 @@ async function processIssue(repo: Repo, issue: gh.Issue, planComment: gh.IssueCo
       return;
     }
 
-    const commentBody = REVIEW_LOOP ? stripVerdictLine(reviewOutput) : reviewOutput;
-    await gh.commentOnIssue(fullName, issue.number, `${REVIEW_HEADER}\n\n${commentBody}`);
+    const rendered = renderVerdict(stripLearningsDeclaration(reviewOutput));
+    const scrubbed = claude.scrubWorktreePaths(rendered, wtPath);
+    const marker = reviewMarker(planComment.id, planComment.updatedAt);
+    await gh.commentOnIssue(fullName, issue.number, `${REVIEW_HEADER}\n\n${scrubbed}\n\n${marker}`);
     log.info(`[plan-reviewer] Posted review for ${fullName}#${issue.number}`);
     notify({ jobName: "plan-reviewer", message: `Review posted for ${fullName}#${issue.number}`, url: gh.issueUrl(fullName, issue.number) });
 
-    // Mark plan comment as processed
-    await gh.addReaction(fullName, planComment.id, "+1");
-
     if (REVIEW_LOOP) {
-      const verdict = parseVerdict(reviewOutput);
+      const parsed = parseVerdict(reviewOutput);
+      if (parsed === "missing") {
+        log.warn(`[plan-reviewer] No verdict line in review for ${fullName}#${issue.number} — treating as needs-revision`);
+      }
+      const verdict = parsed === "approved" ? "approved" : "needs-revision";
       if (verdict === "approved") {
         await gh.removeLabel(fullName, issue.number, LABELS.needsPlanReview);
         await gh.addLabel(fullName, issue.number, LABELS.ready);
       } else {
-        // +1 for the review we just posted
-        const completedRounds = countPlanRounds(comments) + 1;
-        if (completedRounds >= MAX_PLAN_ROUNDS) {
+        if (round >= MAX_PLAN_ROUNDS) {
           await gh.commentOnIssue(
             fullName,
             issue.number,
@@ -161,7 +153,6 @@ export async function run(repos: Repo[]): Promise<void> {
     if (isRateLimited()) break;
     try {
       const issues = await gh.listOpenIssues(repo.fullName);
-      const selfLogin = await gh.getSelfLogin();
 
       for (const issue of issues) {
         if (isRateLimited()) break;
@@ -181,17 +172,9 @@ export async function run(repos: Repo[]): Promise<void> {
 
         if (!planComment) continue;
 
-        // Check if we already reviewed this plan (thumbsup reaction from us)
-        try {
-          const reactions = await gh.getCommentReactions(repo.fullName, planComment.id);
-          const alreadyReviewed = reactions.some(
-            (r) => r.user.login === selfLogin && r.content === "+1",
-          );
-          if (alreadyReviewed) continue;
-        } catch {
-          // If we can't check reactions, skip to be safe
-          continue;
-        }
+        // Skip if this exact plan version already has a review (identity-independent,
+        // re-arms automatically when the plan comment is edited in place).
+        if (findReviewOfPlanVersion(comments, planComment.id, planComment.updatedAt)) continue;
 
         gh.populateQueueCache("needs-plan-review", repo.fullName, {
           number: issue.number,

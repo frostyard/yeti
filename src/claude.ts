@@ -6,6 +6,7 @@ import path from "node:path";
 import { WORK_DIR, MAX_CLAUDE_WORKERS, CLAUDE_TIMEOUT_MS, MAX_COPILOT_WORKERS, COPILOT_TIMEOUT_MS, MAX_CODEX_WORKERS, CODEX_TIMEOUT_MS, type Repo } from "./config.js";
 import * as log from "./log.js";
 import { isShuttingDown, ShutdownError } from "./shutdown.js";
+import { assertCapability } from "./capability.js";
 
 /** Generate a short random suffix for branch names (4 hex chars). */
 export function randomSuffix(): string {
@@ -40,7 +41,12 @@ interface BackendConfig {
 const BACKENDS: Record<AiBackend, BackendConfig> = {
   claude: { binary: "claude", args: ["-p", "--dangerously-skip-permissions"], promptVia: "stdin", name: "Claude" },
   copilot: { binary: "copilot", args: ["--allow-all-tools", "-s", "--no-ask-user"], promptVia: "flag", name: "Copilot" },
-  codex: { binary: "codex", args: ["exec", "--full-auto"], promptVia: "positional", name: "Codex" },
+  // Yeti runs as trusted automation in an isolated environment (systemd host / container),
+  // so Codex must run without its internal sandbox — `--full-auto` (= `--sandbox workspace-write`)
+  // mounts `.git` read-only, which silently breaks committing jobs (issue-worker, ci-fixer,
+  // review-addresser): the model edits files but `git commit` fails and yeti reports "no commits".
+  // `danger-full-access` mirrors the claude backend's `--dangerously-skip-permissions` posture.
+  codex: { binary: "codex", args: ["exec", "--sandbox", "danger-full-access"], promptVia: "positional", name: "Codex" },
 };
 
 // ── Bounded concurrent queue ──
@@ -289,6 +295,22 @@ export async function removeWorktree(repo: Repo, wtPath: string): Promise<void> 
 }
 
 /**
+ * Strip worktree absolute-path prefixes from AI output before posting to
+ * GitHub, so file references are repo-relative instead of dead links.
+ * The generic pattern matches ~/.yeti/worktrees/<owner>/<repo>/<job>/<branch...>/
+ * where the branch segment is the yeti/<name> pair worktree branches use.
+ */
+export function scrubWorktreePaths(text: string, wtPath?: string): string {
+  let out = text;
+  if (wtPath) {
+    out = out.replaceAll(wtPath.endsWith("/") ? wtPath : wtPath + "/", "");
+  }
+  // Defensive: any other run's worktree path (different user/branch).
+  out = out.replace(/\/home\/[^/\s]+\/\.yeti\/worktrees\/[^/\s]+\/[^/\s]+\/[^/\s]+\/yeti\/[^/\s]+\//g, "");
+  return out;
+}
+
+/**
  * Start a merge of origin/<baseBranch> into the current branch.
  * Returns whether the merge was clean and, if not, the list of conflicted files.
  */
@@ -334,9 +356,12 @@ export async function hasNewCommits(wtPath: string, baseBranch: string): Promise
   return parseInt(count, 10) > 0;
 }
 
-/** Check if the worktree tree actually differs from the base branch (guards against no-op commits). */
-export async function hasTreeDiff(wtPath: string, baseBranch: string): Promise<boolean> {
-  const result = await gitRaw(["diff", "--quiet", `origin/${baseBranch}`, "HEAD"], wtPath);
+/** Check if the worktree tree actually differs from the base branch (guards against no-op commits).
+ *  With `pathspec`, checks only that subtree (e.g. "yeti/" for the learnings gate). */
+export async function hasTreeDiff(wtPath: string, baseBranch: string, pathspec?: string): Promise<boolean> {
+  const args = ["diff", "--quiet", `origin/${baseBranch}`, "HEAD"];
+  if (pathspec) args.push("--", pathspec);
+  const result = await gitRaw(args, wtPath);
   return result.code !== 0;
 }
 
@@ -550,7 +575,8 @@ export function runAI(prompt: string, cwd: string, options?: AiOptions): Promise
   });
 }
 
-export async function pushBranch(wtPath: string, branchName: string): Promise<void> {
+export async function pushBranch(wtPath: string, branchName: string, fullName: string): Promise<void> {
+  assertCapability(fullName, "push");
   // Use HEAD refspec to support both detached HEAD (createWorktreeFromBranch)
   // and named branch (createWorktree) worktrees.
   await git(["push", "origin", `HEAD:refs/heads/${branchName}`], wtPath);

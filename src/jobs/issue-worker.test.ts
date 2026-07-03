@@ -1,6 +1,9 @@
+import { stripPreamble } from "../test-preamble.js";
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { mockRepo, mockIssue, mockPR } from "../test-helpers.js";
+import * as planParser from "../plan-parser.js";
 
+const { __tier } = vi.hoisted(() => ({ __tier: {} as Record<string, string> }));
 vi.mock("../config.js", () => ({
   LABELS: {
     refined: "Refined",
@@ -9,12 +12,22 @@ vi.mock("../config.js", () => ({
     inReview: "In Review",
   },
   JOB_AI: {},
+  // WORK_DIR is pulled in transitively by policy.ts; point it at a dir with no
+  // policies/ so renderPolicy falls through to the bundled src/policies template.
+  WORK_DIR: "/tmp/yeti-iw-test",
+  repoAutonomy: (r: { fullName: string }) => __tier[r.fullName] ?? "pr",
 }));
 
 vi.mock("../log.js", () => ({
   info: vi.fn(),
   warn: vi.fn(),
   error: vi.fn(),
+}));
+
+const mockEnforceLearnings = vi.hoisted(() => vi.fn().mockResolvedValue(undefined));
+vi.mock("../learnings.js", () => ({
+  enforceLearnings: mockEnforceLearnings,
+  stripLearningsDeclaration: (s: string) => s,
 }));
 
 vi.mock("../error-reporter.js", () => ({
@@ -81,7 +94,8 @@ vi.mock("../plan-parser.js", async () => {
   return actual;
 });
 
-import { run } from "./issue-worker.js";
+import { run, buildPrompt } from "./issue-worker.js";
+import * as gh from "../github.js";
 import { reportError } from "../error-reporter.js";
 
 describe("issue-worker", () => {
@@ -89,6 +103,7 @@ describe("issue-worker", () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    for (const k in __tier) delete __tier[k];
     mockClaude.createWorktree.mockResolvedValue("/tmp/worktree");
     mockClaude.enqueue.mockImplementation((fn: () => Promise<string>) => fn());
     mockClaude.resolveEnqueue.mockReturnValue(mockClaude.enqueue);
@@ -184,6 +199,19 @@ describe("issue-worker", () => {
 
       expect(mockGh.removeLabel).toHaveBeenCalledWith(repo.fullName, 1, "Ready");
       expect(mockGh.removeLabel).toHaveBeenCalledWith(repo.fullName, 1, "Refined");
+    });
+
+    it("runs the learnings gate after the AI session", async () => {
+      const issue = mockIssue({ labels: [{ name: "Refined" }] });
+      mockGh.listIssuesByLabel.mockResolvedValueOnce([issue]);
+
+      await run([repo]);
+
+      expect(mockEnforceLearnings).toHaveBeenCalledWith("implemented", expect.objectContaining({
+        jobName: "issue-worker",
+        repo: repo.fullName,
+        baseBranch: repo.defaultBranch,
+      }));
     });
   });
 
@@ -476,6 +504,23 @@ describe("issue-worker", () => {
     });
   });
 
+  describe("autonomy pre-flight gate", () => {
+    it("skips before worktree/AI when repo tier is below 'createPR' (advisory)", async () => {
+      const advisoryRepo = mockRepo();
+      __tier[advisoryRepo.fullName] = "advisory";
+      // No listIssuesByLabel stub: the hoisted gate skips before listing, and a
+      // queued mockResolvedValueOnce would leak to the next test (clearAllMocks
+      // doesn't drain "once" queues).
+
+      await run([advisoryRepo]);
+
+      // Gate is hoisted to the per-repo loop: skip before even listing issues.
+      expect(mockGh.listIssuesByLabel).not.toHaveBeenCalled();
+      expect(mockClaude.createWorktree).not.toHaveBeenCalled();
+      expect(mockClaude.runAI).not.toHaveBeenCalled();
+    });
+  });
+
   it("includes image context in prompt when images are found", async () => {
     const issue = mockIssue({
       body: "Fix this: ![bug](https://example.com/bug.png)",
@@ -493,5 +538,98 @@ describe("issue-worker", () => {
     );
     const prompt = mockClaude.runAI.mock.calls[0][0] as string;
     expect(prompt).toContain("## Attached Images");
+  });
+});
+
+describe("buildPrompt single-phase (policy template)", () => {
+  // Reconstructs the pre-migration single-phase prompt independently, proving the
+  // policy-template render is behavior-preserving.
+  function expectedSinglePhase(
+    fullName: string,
+    issue: gh.Issue,
+    comments: gh.IssueComment[],
+    imageContext: string,
+  ): string {
+    return [
+      `You are working on a GitHub issue for the repository ${fullName}.`,
+      `Issue #${issue.number}: ${issue.title}`,
+      ``,
+      issue.body,
+      ``,
+      ...comments.flatMap((c) => {
+        const label = gh.isYetiComment(c.body)
+          ? `Comment by @${c.login} (automated by Yeti):`
+          : `Comment by @${c.login}:`;
+        return [`---`, label, gh.stripYetiMarker(c.body), ``];
+      }),
+      `If \`yeti/OVERVIEW.md\` exists, read it first (and any linked documents that seem relevant to the issue) for context about the codebase.`,
+      ``,
+      `Please implement the changes needed to resolve this issue.`,
+      `Make commits with clear messages as you work.`,
+      imageContext,
+    ].join("\n");
+  }
+
+  const issue = { number: 7, title: "Fix bug", body: "It crashes.", labels: [] } as unknown as gh.Issue;
+
+  it("matches the pre-migration inline builder, with comments", () => {
+    const comments = [{ login: "alice", body: "Please hurry" }] as unknown as gh.IssueComment[];
+    const out = buildPrompt("pr", "acme/widget", issue, null, 1, 1, [], comments, "");
+    expect(stripPreamble(out).trimEnd()).toBe(expectedSinglePhase("acme/widget", issue, comments, "").trimEnd());
+  });
+
+  it("matches the pre-migration inline builder, with no comments", () => {
+    const out = buildPrompt("pr", "acme/widget", issue, null, 1, 1, [], [], "");
+    expect(stripPreamble(out).trimEnd()).toBe(expectedSinglePhase("acme/widget", issue, [], "").trimEnd());
+  });
+
+  it("substitutes image context when present", () => {
+    const out = buildPrompt("pr", "acme/widget", issue, null, 1, 1, [], [], "## Attached Images\ndiagram.png");
+    expect(out).toContain("## Attached Images");
+  });
+});
+
+describe("buildPrompt multi-phase (policy template)", () => {
+  const plan = {
+    preamble: "Overall approach.",
+    totalPhases: 2,
+    phases: [
+      { phaseNumber: 1, title: "Schema", description: "Add the table." },
+      { phaseNumber: 2, title: "API", description: "Expose the endpoint." },
+    ],
+  } as unknown as planParser.ParsedPlan;
+  const issue = { number: 7, title: "Fix bug", body: "It crashes.", labels: [] } as unknown as gh.Issue;
+  const mergedPRs = [{ number: 40, title: "Schema" }] as unknown as gh.PR[];
+
+  function expectedPhased(): string {
+    const currentPhase = 2, totalPhases = 2;
+    const phase = plan.phases[currentPhase - 1];
+    return [
+      `You are working on PR ${currentPhase} of ${totalPhases} for issue #${issue.number} in acme/widget.`,
+      `Issue: ${issue.title}`,
+      ``,
+      `If \`yeti/OVERVIEW.md\` exists, read it first (and any linked documents that seem relevant to the issue) for context about the codebase.`,
+      ``,
+      `## Full Plan`,
+      plan.preamble,
+      ...plan.phases.map((p) => `### PR ${p.phaseNumber}: ${p.title}\n${p.description}`),
+      ``,
+      `## Already Completed`,
+      mergedPRs.map((pr) => `- PR #${pr.number}: ${pr.title}`).join("\n"),
+      ``,
+      `## Your Task`,
+      `Implement ONLY the changes for PR ${currentPhase}: ${phase.title}`,
+      ``,
+      phase.description,
+      ``,
+      `Do NOT implement changes from other phases.`,
+      `Make commits with clear messages as you work.`,
+      "",
+    ].join("\n");
+  }
+
+  it("renders the phased variant identically to the pre-migration inline builder", () => {
+    const out = buildPrompt("pr", "acme/widget", issue, plan, 2, 2, mergedPRs, [], "");
+    expect(stripPreamble(out).trimEnd()).toBe(expectedPhased().trimEnd());
   });
 });

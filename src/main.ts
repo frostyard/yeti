@@ -8,6 +8,7 @@ import * as gh from "./github.js";
 import { startJobs, type Job } from "./scheduler.js";
 import { createServer, closeSSEConnections } from "./server.js";
 import { initDb, setRunIdProvider, getOrphanedTasks, recordTaskFailed, pruneOldLogs, closeDb, pruneOldNotifications } from "./db.js";
+import { clearQuiesce } from "./quiesce.js";
 import { runContext } from "./log.js";
 import * as issueWorker from "./jobs/issue-worker.js";
 import * as issueRefiner from "./jobs/issue-refiner.js";
@@ -22,6 +23,8 @@ import * as issueAuditor from "./jobs/issue-auditor.js";
 import * as planReviewer from "./jobs/plan-reviewer.js";
 import * as mkdocsUpdate from "./jobs/mkdocs-update.js";
 import * as promptEvaluator from "./jobs/prompt-evaluator.js";
+import * as learningConsolidator from "./jobs/learning-consolidator.js";
+import { setConsolidatorTrigger } from "./learnings.js";
 import * as discord from "./discord.js";
 import { isDiscordConfigured } from "./discord.js";
 import { setShuttingDown } from "./shutdown.js";
@@ -30,13 +33,22 @@ import { reportError } from "./error-reporter.js";
 import { VERSION } from "./version.js";
 import { announceIfNewVersion } from "./startup-announce.js";
 import { isGitHubAppConfigured, initGitHubApp, configureWebhook } from "./github-app.js";
+import { watchPolicies } from "./policy.js";
 
 log.info(`yeti ${VERSION} starting up`);
+
+// ── Policy templates: watch for hot-reload (edit ~/.yeti/policies without restart) ──
+
+watchPolicies();
 
 // ── Database init & recovery ──
 
 initDb();
 setRunIdProvider(() => runContext.getStore()?.runId);
+
+// Clear any stale update sentinel — a fresh start means the previous deploy
+// either completed or was aborted; either way we should resume normal scheduling.
+clearQuiesce();
 
 const orphaned = getOrphanedTasks();
 if (orphaned.length > 0) {
@@ -250,6 +262,15 @@ const jobs: Job[] = [
       await promptEvaluator.run(repos);
     },
   },
+  {
+    name: "learning-consolidator",
+    intervalMs: 0,
+    scheduledHour: SCHEDULES.learningConsolidatorHour,
+    async run() {
+      const repos = await gh.listRepos();
+      await learningConsolidator.run(repos);
+    },
+  },
 ];
 
 // ── Job filtering ──
@@ -273,6 +294,11 @@ if (enabledJobs.length === 0) {
 }
 
 const scheduler = startJobs(enabledJobs, config.PAUSED_JOBS);
+
+setConsolidatorTrigger(() => {
+  const result = scheduler.triggerJob("learning-consolidator");
+  if (result !== "started") log.info(`[learnings] consolidator threshold trigger: ${result}`);
+});
 const allJobInfo = jobs.map(j => ({ name: j.name, intervalMs: j.intervalMs, ...(j.scheduledHour !== undefined ? { scheduledHour: j.scheduledHour } : {}) }));
 const server = createServer(scheduler, allJobInfo);
 

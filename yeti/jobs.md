@@ -28,7 +28,7 @@ comments and reactions — no trigger labels required.
 Issues without a body are still processed — the prompt uses "(No description
 provided)" as a fallback, allowing Claude to plan from the title alone.
 
-Three modes:
+Four modes:
 
 ### Fresh planning (no plan comment exists)
 
@@ -67,7 +67,55 @@ Three modes:
 - If `plan-reviewer` is in `enabledJobs`: adds `Needs Plan Review` label (triggers adversarial review)
 - Otherwise: adds the `Ready` label (signals "Yeti is done, your turn")
 
+### Needs Refinement label routing (plan already exists)
+
+When a plan comment already exists and the issue currently carries the
+`Needs Refinement` label — the state plan-reviewer puts an issue into on a
+NEEDS REVISION verdict, or a human can re-apply manually — `run()` picks one
+of three paths per issue, in priority order:
+
+1. **Human feedback present** (`findUnreactedHumanComments()` on comments
+   after the plan returns non-empty) → `processRefinement()`. Human feedback
+   always outranks a pending review: if `findReviewOfPlanVersion()` also
+   finds a review of the current plan version, that review comment is
+   prepended to the feedback list and addressed in the *same* revision pass,
+   rather than running two separate revisions.
+2. **No human feedback, but a review of the current plan version exists**
+   (`findReviewOfPlanVersion()` — the reviewer's `<!-- yeti-review-of:id:updatedAt -->`
+   marker matches the plan comment's current `id`/`updatedAt`) →
+   `processReviewRevision()`: a **targeted** revision, not a replan. Renders
+   `issue-refiner.revise.md` with the plan and the review body, and requires
+   Claude to disposition every finding by ID (accepted/declined for Blocking,
+   adopted/declined for Advisory) rather than silently dropping any. Claude
+   edits the plan in place (same structure, only touched sections change) and
+   ends with a separate `### Review Response` section, which is split off
+   and posted as its own comment — the plan comment itself stays clean of
+   disposition notes. If Claude instead emits `### Clarifying Questions
+   (blocking)` with no revised plan, that block is posted verbatim as a
+   comment and no label is added (waits for a human). Otherwise: removes
+   `Needs Refinement`, adds `Needs Plan Review` — sending the issue back
+   through plan-reviewer for the next round. If Claude returns empty output,
+   the task fails and the unchanged labels cause the next scan to retry, but
+   after 3 consecutive empty review-revision outputs for the same issue the
+   job reports an error, removes `Needs Refinement`, adds `Ready`, and posts a
+   warning comment so a human takes over; the streak is counted from task
+   history and resets after a non-empty task or a prior escalation.
+3. **Neither** (the label was re-added with no new comment and no pending
+   review) → `processIssue()`, the same fresh-planning path as when no plan
+   exists — a deliberate "start over" escape hatch for a human who wants a
+   from-scratch replan rather than an incremental revision.
+
+Both `processRefinement` and non-empty `processReviewRevision` runs remove
+the `Needs Refinement` label whether or not the resulting plan is actionable
+— an issue with only clarifying questions is left with no work-triggering
+label at all, waiting for a human answer.
+
 ### Refinement (unreacted human comments after plan)
+
+Runs via `processRefinement()` — reached both when a plan exists without the
+`Needs Refinement` label (comment-driven state machine) and as case 1 of the
+label-routing above (human feedback present with the label applied, which may
+also absorb a pending review comment into the same pass).
 
 - Finds human comments posted after the latest plan comment
 - Checks each comment for a 👍 reaction from Yeti (tracked items)
@@ -127,35 +175,120 @@ visual context.
 Adversarial review job that critiques implementation plans using a configurable
 AI backend (defaults to the backend specified in `jobAi["plan-reviewer"]`).
 Designed for cross-AI adversarial review — e.g. Claude produces the plan,
-Copilot (or Gemini via Copilot) critiques it.
+Copilot (or Gemini via Copilot) critiques it. Verdict mechanics and marker
+dedup live in the shared `src/review-contract.ts` module (see
+[Modules](modules.md)), used by both plan-reviewer and issue-refiner.
 
 - Scans open issues with the `Needs Plan Review` label
 - Skips issues with the `Refined` label (being implemented)
 - Finds the most recent `## Implementation Plan` comment
-- Skips if the plan comment already has a 👍 reaction from Yeti (already reviewed)
+- Skips if a review already exists for this **exact plan version** —
+  `findReviewOfPlanVersion()` checks for a posted review comment containing
+  `<!-- yeti-review-of:<planCommentId>:<planUpdatedAt> -->`. Because the
+  marker binds to the plan comment's `updatedAt`, editing the plan in place
+  (as `processRefinement`/`processReviewRevision` in issue-refiner do)
+  automatically invalidates the old marker and re-arms the reviewer — no
+  reaction bookkeeping is used for this dedup.
 - Creates a worktree for codebase context
+- Builds the review prompt (`buildReviewPrompt()`, rendering
+  `plan-reviewer.md`) with:
+  - **`THREAD_SECTION`** — every other comment on the issue, in order, each
+    labeled by provenance: `Comment by @user (automated by Yeti):`,
+    `Comment by @user (bot):`, or `MAINTAINER (binding) — comment by @user:`
+    for human comments. The `MAINTAINER (binding)` label tells the reviewer
+    a human decision is not up for re-litigation.
+  - **`ROUND_INFO`** — `"This is review round N of maxPlanRounds."`, plus,
+    only on the final round, an explicit instruction not to manufacture
+    findings if nothing rises to Blocking (so the loop can actually converge
+    to APPROVED at the cap instead of stalling on invented nitpicks).
+  - **Finding ID prefix** — new findings use `R<n>-...` in the first loop
+    segment. After a human-comment reset, new findings use
+    `S<segment>-R<round>-...` so a fresh round 1 cannot collide with findings
+    from an earlier segment, while `ROUND_INFO` and the round budget remain
+    relative to the current segment.
+  - The plan comment body itself (`PLAN_BODY`), elided from `THREAD_SECTION`
+    so it isn't duplicated in the prompt.
 - Uses the configured backend/model from `JOB_AI["plan-reviewer"]` (uses `enqueueCopilot` for copilot, `enqueueCodex` for codex, `enqueue` for claude)
-- Posts review as a comment prefixed with `## Plan Review`
-- Reacts 👍 to the plan comment (marks as processed)
-- Removes `Needs Plan Review` label, adds `Ready` label
+- **Blocking/Advisory contract** (full rules in `src/policies/plan-reviewer.md`):
+  a finding is **Blocking** only if implementing the plan as written would
+  fail an explicit issue requirement, break existing behavior/build/tests,
+  rest on a codebase claim the reviewer verified is false, or contradict an
+  explicit maintainer decision in the thread — every Blocking finding must
+  cite a `path:line` the reviewer actually read. Everything else (style,
+  test-coverage suggestions, "consider also") is **Advisory** and never gates
+  approval. When any prior Plan Review exists in the thread, the reviewer must
+  first disposition every earlier finding (resolved/not resolved/settled, or
+  carried-over after a human-comment reset) before raising new ones.
+- **Verdict is always requested and always rendered**, whether or not
+  `reviewLoop` is on: the AI ends its output with `VERDICT: APPROVED` or
+  `VERDICT: NEEDS REVISION` on its own line (last such line wins if more than
+  one appears); `renderVerdict()` replaces that raw line with a bold
+  human-readable form in the posted comment — `**Verdict: APPROVED**` or
+  `**Verdict: NEEDS REVISION** (N blocking)`, counting `[R<n>-B<n>]` bullets.
+  A missing verdict line is logged and treated as needs-revision.
+- Posts the review as a comment prefixed with `## Plan Review`, worktree
+  paths scrubbed (`claude.scrubWorktreePaths()`), followed by the invisible
+  `<!-- yeti-review-of:id:updatedAt -->` marker (not shown to humans)
+- Label transition depends on `reviewLoop`:
+  - **`reviewLoop` off** (default): always removes `Needs Plan Review`, adds
+    `Ready` — the human-in-the-loop workflow below.
+  - **`reviewLoop` on, verdict APPROVED**: removes `Needs Plan Review`, adds
+    `Ready`.
+  - **`reviewLoop` on, verdict NEEDS REVISION, under `maxPlanRounds`**:
+    removes `Needs Plan Review`, adds `Needs Refinement` — sends the issue
+    back to issue-refiner's label-routing (see issue-refiner's
+    `processReviewRevision`) for a targeted revision, no human involved.
+  - **`reviewLoop` on, verdict NEEDS REVISION, at `maxPlanRounds`**: posts a
+    "⚠️ Maximum plan review rounds reached" warning comment, then removes
+    `Needs Plan Review` and adds `Ready` — the loop always terminates at the
+    cap rather than cycling indefinitely.
 
-### Human-in-the-loop workflow
+### Human-in-the-loop workflow (`reviewLoop` off — the default)
 
 The adversarial review is **for the human**, not for automatic refinement.
-When plan-reviewer is enabled, the full lifecycle is:
+With `reviewLoop` off, the full lifecycle is:
 
 1. **issue-refiner** produces or refines a plan → adds `Needs Plan Review`
-2. **plan-reviewer** critiques the plan via a different AI → posts `## Plan Review` → adds `Ready`
+2. **plan-reviewer** critiques the plan via a different AI → posts `## Plan Review` (with verdict) → adds `Ready`
 3. **Human** reads both the plan and the adversarial critique, then decides:
    - **Plan is good** → add `Refined` label to start implementation
    - **Review raised valid concerns** → post feedback comments on the issue →
      issue-refiner detects unreacted comments, refines the plan, and routes it
      back through plan-reviewer for another review cycle
 
-The review does **not** automatically feed back into refinement. This is
-intentional — without a human gatekeeper, the two AIs could enter an infinite
-loop of critiquing and revising each other's plans. The `Ready` label always
-means "a human needs to look at this."
+Without a human gatekeeper, two AIs critiquing and revising each other's
+plans could loop indefinitely — `reviewLoop` off avoids that by always
+landing on `Ready` and waiting for a human. The `Ready` label always means
+"a human needs to look at this" whenever `reviewLoop` is off.
+
+### Convergent loop workflow (`reviewLoop` on)
+
+With `reviewLoop` on, the same review runs but a NEEDS REVISION verdict
+short-circuits straight back to issue-refiner instead of stopping at
+`Ready`:
+
+1. **issue-refiner** produces or refines a plan → adds `Needs Plan Review`
+2. **plan-reviewer** reviews with full thread context → posts `## Plan Review` with a verdict
+3. **APPROVED** → `Ready` (human implements or approves); **NEEDS REVISION
+   under the round cap** → `Needs Refinement`, and issue-refiner's
+   `processReviewRevision()` (see the issue-refiner section) makes a
+   targeted, in-place revision addressing every finding by ID, then re-adds
+   `Needs Plan Review` — repeating from step 2
+4. This repeats until either APPROVED, or `maxPlanRounds` review rounds
+   (counted since the most recent human comment via `countPlanRounds()`)
+   have completed, at which point plan-reviewer posts a warning and forces
+   `Ready` regardless of verdict. The companion `countSegments()` value keeps
+   finding IDs unique across those human-comment resets by adding an
+   `S<n>-` prefix only in segment 2 and later.
+5. **A human comment posted at any point outranks the loop**: issue-refiner's
+   label routing checks for unreacted human feedback first, routes it (and
+   any pending review) to a full `processRefinement()` pass instead of
+   `processReviewRevision()`, and the next `countPlanRounds()` call resets to
+   0 since rounds only count reviews posted after the last human comment
+
+No AI-to-AI loop runs unbounded: the round cap and the "don't manufacture
+findings on the final round" prompt instruction both push the loop toward
+termination.
 
 ## issue-worker
 
@@ -572,3 +705,86 @@ proposed prompt change before applying it — no automatic prompt
 modifications are made. Notifications are sent when an improvement is
 found.
 
+## learning-consolidator
+
+**Source**: `src/jobs/learning-consolidator.ts`
+**Trigger**: Daily schedule, or immediately when the pending-learnings count
+reaches `learningsPendingThreshold`
+**Schedule**: Runs at hour configured by `schedules.learningConsolidatorHour`
+(default: 6 AM local time)
+
+Closes the yeti-side (environment/tooling) half of the self-improvement loop
+(see `src/learnings.ts` in [Modules](modules.md)). Operates only on
+`SELF_REPO` — the repo Yeti's own source lives in — since its job is to edit
+Yeti's own policies and docs, not a target repo.
+
+**Inputs**: pending `"yeti"`-kind rows from the `learnings` table (see
+[Database Schema](database-schema.md)), fetched via
+`db.getPendingLearnings("yeti")`. If there are none, the job returns
+immediately without creating a worktree or task record.
+
+**Guards**:
+
+- **Tier check**: skips (info log only) if `SELF_REPO` doesn't have at least
+  the `createPR` capability tier — mirrors the guard other PR-creating jobs use.
+- **Fresh duplicate-PR check**: before doing any work, lists open PRs on
+  `SELF_REPO` with `fresh: true` (bypassing the `listPRs` 60s TTL cache — same
+  rationale as `getOpenPRForIssue()`) and skips if any open PR's head branch
+  starts with `yeti/learnings-`. This prevents pile-up when a previous
+  consolidation PR hasn't been merged yet, and avoids the race where a
+  just-created PR is invisible during the cache window.
+- **Tree-diff guard**: after the AI pass, only pushes/creates a PR if both
+  `hasNewCommits(wtPath, defaultBranch)` and `hasTreeDiff(wtPath,
+  defaultBranch)` are true (the standard PR-creating-job guard — see Key
+  Patterns). If the AI dismissed every pending learning (no commits expected)
+  this is simply skipped; if some learnings were left neither dismissed nor
+  committed, a warning is logged and they remain `pending` for the next run.
+
+**Policy**: `learning-consolidator.md`, rendered with a single `${LEARNINGS}`
+variable — `formatLearnings(rows)` renders each pending row as one bullet:
+`- [id] (reported by <job_name> while working on <repo>, <created_at>)
+<summary>`. The policy instructs the AI to read `yeti/OVERVIEW.md` and
+`src/policies/_preamble.md`, then for each learning either fold it into
+`_preamble.md` (environment-wide), a specific job policy (job-specific),
+a `yeti/` doc (architectural knowledge about Yeti itself), or leave it
+alone (already covered / not actionable) — editing and merging existing
+guidance rather than appending changelog-style entries.
+
+**DISMISSED line protocol**: after committing its edits (or making none), the
+AI prints one line per learning it chose *not* to fold in, in the exact form
+`DISMISSED: <id>: <one-line reason>`. `parseDismissals(output)` extracts these
+via `/^DISMISSED:\s*(\d+)\s*:\s*(.+)$/gim`, and the job filters the parsed IDs
+against the actual pending set (`pendingIds`) before acting — an AI
+hallucinating an ID that wasn't in the pending list is silently ignored
+rather than crashing or dismissing an unrelated row. Each valid dismissal
+calls `db.dismissLearning(id, reason)`.
+
+**Outputs / status transitions**:
+
+- Dismissed learnings (from the parsed `DISMISSED:` lines) → `status =
+  'dismissed'`, `reason` set.
+- When a PR is created, **every** non-dismissed learning in the batch —
+  `consolidated = pending.filter(l => !dismissedIds.has(l.id))` — is marked
+  `status = 'consolidated'` with `pr_number` set, via
+  `db.markLearningsConsolidated(ids, prNumber)`. This is not verified per
+  learning: the AI may have silently ignored one without dismissing it, and
+  it still gets marked `consolidated` alongside the ones actually folded in.
+  The "consolidated" list in the PR body is the AI's claim; a human reviewing
+  the PR should cross-check it against the actual diff before merging.
+- A learning stays `pending` only when the run as a whole produces no PR —
+  i.e. the tree-diff guard above trips (no new commits or no tree diff) while
+  `consolidated.length > 0`. In that case none of the batch's non-dismissed
+  learnings are touched and all of them remain `pending`, picked up again on
+  the next run.
+- On success: opens a PR titled `chore(learnings): consolidate <N>
+  environment learning(s)` against `SELF_REPO`'s default branch, branch name
+  `yeti/learnings-<datestamp>-<hex4>`. The PR body (`buildPRBody()`) lists
+  each consolidated learning (with reporting job/repo) and, if any, a
+  "Dismissed" section with `[id] <reason>` bullets, plus a footer noting that
+  merging deploys the learnings into every future agent prompt. Sends a
+  `notify()` on success.
+
+Unlike other PR-creating jobs, learning-consolidator does not invoke
+`enforceLearnings()` on itself — its own AI pass edits Yeti's policies/docs
+directly rather than doing general-purpose repo work, so there is no
+work-session learning to gate.

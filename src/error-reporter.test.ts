@@ -38,6 +38,7 @@ vi.mock("./github.js", () => {
 import { reportError, _lastReported } from "./error-reporter.js";
 import { ClaudeTimeoutError } from "./claude.js";
 import { ShutdownError } from "./shutdown.js";
+import { AutonomyError } from "./capability.js";
 import * as gh from "./github.js";
 import * as log from "./log.js";
 
@@ -87,6 +88,18 @@ describe("reportError", () => {
     expect(log.error).not.toHaveBeenCalled();
     expect(gh.searchIssues).not.toHaveBeenCalled();
     expect(gh.createIssue).not.toHaveBeenCalled();
+  });
+
+  it("does not file a GitHub issue for AutonomyError (logs and returns)", async () => {
+    const err = new AutonomyError("acme/r", "push", "advisory");
+
+    await reportError("autonomy-denied", "issue-worker push", err);
+
+    expect(log.warn).toHaveBeenCalledWith(expect.stringContaining("autonomy-denied"));
+    expect(log.error).not.toHaveBeenCalled();
+    expect(gh.searchIssues).not.toHaveBeenCalled();
+    expect(gh.createIssue).not.toHaveBeenCalled();
+    expect(gh.commentOnIssue).not.toHaveBeenCalled();
   });
 
   it("serializes plain objects with JSON.stringify instead of [object Object]", async () => {

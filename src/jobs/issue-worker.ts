@@ -1,4 +1,6 @@
-import { LABELS, JOB_AI, type Repo } from "../config.js";
+import { LABELS, JOB_AI, repoAutonomy, type Repo } from "../config.js";
+import { renderPolicy, type Autonomy } from "../policy.js";
+import { can } from "../capability.js";
 import * as gh from "../github.js";
 import { isRateLimited } from "../github.js";
 import * as claude from "../claude.js";
@@ -8,8 +10,21 @@ import { reportError } from "../error-reporter.js";
 import { notify } from "../notify.js";
 import { processTextForImages } from "../images.js";
 import * as planParser from "../plan-parser.js";
+import { enforceLearnings } from "../learnings.js";
 
-function buildPrompt(
+/** Format issue comments as the ${COMMENTS} block (empty string when there are none). */
+function formatComments(comments: gh.IssueComment[]): string {
+  const lines = comments.flatMap((c) => {
+    const label = gh.isYetiComment(c.body)
+      ? `Comment by @${c.login} (automated by Yeti):`
+      : `Comment by @${c.login}:`;
+    return [`---`, label, gh.stripYetiMarker(c.body), ``];
+  });
+  return lines.length ? lines.join("\n") + "\n" : "";
+}
+
+export function buildPrompt(
+  autonomy: Autonomy,
   fullName: string,
   issue: gh.Issue,
   plan: planParser.ParsedPlan | null,
@@ -20,51 +35,37 @@ function buildPrompt(
   imageContext: string,
 ): string {
   if (totalPhases === 1 || !plan) {
-    return [
-      `You are working on a GitHub issue for the repository ${fullName}.`,
-      `Issue #${issue.number}: ${issue.title}`,
-      ``,
-      issue.body,
-      ``,
-      ...comments.flatMap((c) => {
-        const label = gh.isYetiComment(c.body)
-          ? `Comment by @${c.login} (automated by Yeti):`
-          : `Comment by @${c.login}:`;
-        return [`---`, label, gh.stripYetiMarker(c.body), ``];
-      }),
-      `If \`yeti/OVERVIEW.md\` exists, read it first (and any linked documents that seem relevant to the issue) for context about the codebase.`,
-      ``,
-      `Please implement the changes needed to resolve this issue.`,
-      `Make commits with clear messages as you work.`,
-      imageContext,
-    ].join("\n");
+    return renderPolicy("issue-worker", autonomy, {
+      REPO: fullName,
+      NUM: String(issue.number),
+      TITLE: issue.title,
+      BODY: issue.body,
+      COMMENTS: formatComments(comments),
+      IMAGE_CONTEXT: imageContext,
+    });
   }
 
   const phase = plan.phases[currentPhase - 1];
-  return [
-    `You are working on PR ${currentPhase} of ${totalPhases} for issue #${issue.number} in ${fullName}.`,
-    `Issue: ${issue.title}`,
-    ``,
-    `If \`yeti/OVERVIEW.md\` exists, read it first (and any linked documents that seem relevant to the issue) for context about the codebase.`,
-    ``,
-    `## Full Plan`,
-    plan.preamble,
-    ...plan.phases.map((p) => `### PR ${p.phaseNumber}: ${p.title}\n${p.description}`),
-    ``,
-    `## Already Completed`,
-    mergedPRs.length > 0
-      ? mergedPRs.map((pr) => `- PR #${pr.number}: ${pr.title}`).join("\n")
-      : `None yet — this is the first PR.`,
-    ``,
-    `## Your Task`,
-    `Implement ONLY the changes for PR ${currentPhase}: ${phase.title}`,
-    ``,
-    phase.description,
-    ``,
-    `Do NOT implement changes from other phases.`,
-    `Make commits with clear messages as you work.`,
-    imageContext,
-  ].join("\n");
+  const planPhases = plan.phases
+    .map((p) => `### PR ${p.phaseNumber}: ${p.title}\n${p.description}`)
+    .join("\n");
+  const completed = mergedPRs.length > 0
+    ? mergedPRs.map((pr) => `- PR #${pr.number}: ${pr.title}`).join("\n")
+    : `None yet — this is the first PR.`;
+
+  return renderPolicy("issue-worker.phased", autonomy, {
+    CURRENT_PHASE: String(currentPhase),
+    TOTAL_PHASES: String(totalPhases),
+    NUM: String(issue.number),
+    REPO: fullName,
+    TITLE: issue.title,
+    PREAMBLE: plan.preamble,
+    PLAN_PHASES: planPhases,
+    COMPLETED: completed,
+    PHASE_TITLE: phase.title,
+    PHASE_DESCRIPTION: phase.description,
+    IMAGE_CONTEXT: imageContext,
+  });
 }
 
 async function postPhaseProgressComment(
@@ -190,13 +191,14 @@ async function processIssue(repo: Repo, issue: gh.Issue): Promise<void> {
     const imageContext = await processTextForImages([issue.body, ...comments.map((c) => c.body)], wtPath);
 
     // 3. Build phase-aware prompt
-    const prompt = buildPrompt(fullName, issue, plan, currentPhase, totalPhases, mergedPRs, comments, imageContext);
+    const prompt = buildPrompt(repoAutonomy(repo), fullName, issue, plan, currentPhase, totalPhases, mergedPRs, comments, imageContext);
 
     const aiOptions = JOB_AI["issue-worker"];
-    await claude.resolveEnqueue(aiOptions)(() => claude.runAI(prompt, wtPath!, aiOptions), gh.isItemPrioritized(fullName, issue.number) || gh.hasPriorityLabel(issue.labels));
+    const output = await claude.resolveEnqueue(aiOptions)(() => claude.runAI(prompt, wtPath!, aiOptions), gh.isItemPrioritized(fullName, issue.number) || gh.hasPriorityLabel(issue.labels));
+    await enforceLearnings(output, { jobName: "issue-worker", repo: fullName, wtPath, baseBranch: repo.defaultBranch, aiOptions });
 
     if (await claude.hasNewCommits(wtPath, repo.defaultBranch) && await claude.hasTreeDiff(wtPath, repo.defaultBranch)) {
-      await claude.pushBranch(wtPath, branchName);
+      await claude.pushBranch(wtPath, branchName, fullName);
       const description = await claude.generatePRDescription(
         wtPath, repo.defaultBranch, issue, aiOptions,
       );
@@ -262,6 +264,10 @@ export async function run(repos: Repo[]): Promise<void> {
 
   for (const repo of repos) {
     if (isRateLimited()) break;
+    if (!can(repo, "createPR")) {
+      log.info(`[issue-worker] skip ${repo.fullName} — tier below 'createPR' requirement`);
+      continue;
+    }
     try {
       // Track issues processed this tick to avoid re-processing in checkAndContinue
       const processedIssues = new Set<number>();

@@ -1,10 +1,12 @@
+import { stripPreamble } from "../test-preamble.js";
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { mockRepo } from "../test-helpers.js";
 
 vi.mock("../config.js", () => ({
-  WORK_DIR: "/home/testuser/.yeti",
+  WORK_DIR: "/tmp/yeti-promptev-test",
   SELF_REPO: "frostyard/yeti",
   JOB_AI: {},
+  repoAutonomy: () => "pr",
 }));
 
 vi.mock("../log.js", () => ({
@@ -50,12 +52,41 @@ const { mockFs, mockGh, mockClaude, mockDb } = vi.hoisted(() => ({
   },
 }));
 
-vi.mock("node:fs", () => ({ default: mockFs }));
+// The job's own fs usage (state file, prompt-under-test SOURCE reads like
+// src/jobs/issue-refiner.ts) is fully mocked via mockFs. renderPolicy (imported
+// transitively via ../policy.js) also reads through node:fs to load
+// src/policies/prompt-evaluator*.md from real disk, so existsSync/readFileSync
+// delegate to the real fs for any "policies" path — source-file paths (which
+// never contain "policies") correctly stay on the mock.
+vi.mock("node:fs", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("node:fs")>();
+  const isPolicyPath = (p: unknown) => typeof p === "string" && p.includes("policies");
+  return {
+    default: {
+      ...actual,
+      existsSync: (p: string) => (isPolicyPath(p) ? actual.existsSync(p) : mockFs.existsSync(p)),
+      readFileSync: (p: string, enc?: BufferEncoding) =>
+        isPolicyPath(p) ? actual.readFileSync(p, enc) : mockFs.readFileSync(p, enc),
+      writeFileSync: mockFs.writeFileSync,
+      mkdirSync: mockFs.mkdirSync,
+    },
+  };
+});
 vi.mock("../github.js", () => mockGh);
 vi.mock("../claude.js", () => mockClaude);
 vi.mock("../db.js", () => mockDb);
 
-import { run, PROMPT_REGISTRY, loadState, saveState, parseJudgment, buildReport } from "./prompt-evaluator.js";
+import {
+  run,
+  PROMPT_REGISTRY,
+  loadState,
+  saveState,
+  parseJudgment,
+  buildReport,
+  buildTestInputPrompt,
+  buildVariantPrompt,
+  buildJudgePrompt,
+} from "./prompt-evaluator.js";
 import { reportError } from "../error-reporter.js";
 
 // ── Sample AI outputs ──
@@ -381,5 +412,133 @@ describe("buildReport", () => {
     expect(report.body).toContain("variant output");
     expect(report.body).toContain("rationale text");
     expect(report.body).toContain("the variant prompt text");
+  });
+});
+
+describe("buildTestInputPrompt (policy template)", () => {
+  // Reconstructs the pre-migration inline prompt independently, proving the
+  // policy-template render is behavior-preserving.
+  function expected(promptSource: string, purpose: string): string {
+    return [
+      `You are helping evaluate an AI prompt used in a GitHub automation system.`,
+      ``,
+      `The prompt's purpose: ${purpose}`,
+      ``,
+      `Here is the current prompt function source code:`,
+      ``,
+      "```typescript",
+      promptSource,
+      "```",
+      ``,
+      `Generate 4 diverse test cases (GitHub issues) to evaluate this prompt against.`,
+      `Include:`,
+      `- 2 realistic issues (one well-specified, one vague/underspecified)`,
+      `- 2 adversarial edge cases (e.g., overly broad scope, missing acceptance criteria, ambiguous requirements)`,
+      ``,
+      `Return JSON in this exact format:`,
+      "```json",
+      `{`,
+      `  "testCases": [`,
+      `    { "title": "Issue title", "body": "Issue body text" }`,
+      `  ]`,
+      `}`,
+      "```",
+      ``,
+      `Return ONLY the JSON, no other text.`,
+    ].join("\n");
+  }
+
+  it("matches the pre-migration inline builder", () => {
+    const promptSource = 'function buildNewPlanPrompt() { return "prompt text"; }';
+    const purpose = "Produce an initial implementation plan from a GitHub issue";
+    const out = buildTestInputPrompt("pr", promptSource, purpose);
+    expect(stripPreamble(out).trimEnd()).toBe(expected(promptSource, purpose).trimEnd());
+  });
+});
+
+describe("buildVariantPrompt (policy template)", () => {
+  function expected(promptSource: string, purpose: string): string {
+    return [
+      `You are a prompt engineer improving an AI prompt used in a GitHub automation system.`,
+      ``,
+      `The prompt's purpose: ${purpose}`,
+      ``,
+      `Here is the current prompt function source code:`,
+      ``,
+      "```typescript",
+      promptSource,
+      "```",
+      ``,
+      `Analyze this prompt for weaknesses and propose an improved version.`,
+      `Consider:`,
+      `- Does it handle underspecified inputs well?`,
+      `- Does it give clear, actionable instructions?`,
+      `- Does it avoid encouraging guessing or speculation?`,
+      `- Is the scope guidance clear?`,
+      `- Are there missing instructions that would improve output quality?`,
+      ``,
+      `Return JSON in this exact format:`,
+      "```json",
+      `{`,
+      `  "variant": "The complete improved prompt text (not the function, just the prompt string it would produce)",`,
+      `  "rationale": "Explanation of what was changed and why"`,
+      `}`,
+      "```",
+      ``,
+      `Return ONLY the JSON, no other text.`,
+    ].join("\n");
+  }
+
+  it("matches the pre-migration inline builder", () => {
+    const promptSource = 'function buildNewPlanPrompt() { return "prompt text"; }';
+    const purpose = "Produce an initial implementation plan from a GitHub issue";
+    const out = buildVariantPrompt("pr", promptSource, purpose);
+    expect(stripPreamble(out).trimEnd()).toBe(expected(promptSource, purpose).trimEnd());
+  });
+});
+
+describe("buildJudgePrompt (policy template)", () => {
+  function expected(testCase: { title: string; body: string }, currentOutput: string, variantOutput: string): string {
+    return [
+      `You are judging two AI outputs produced by different prompts for the same input.`,
+      ``,
+      `## Test Input (GitHub Issue)`,
+      `**Title:** ${testCase.title}`,
+      `**Body:** ${testCase.body}`,
+      ``,
+      `## Output A (Current Prompt)`,
+      currentOutput,
+      ``,
+      `## Output B (Variant Prompt)`,
+      variantOutput,
+      ``,
+      `Score each output on these criteria (1-5 scale):`,
+      `- **specificity**: Does it reference concrete files, functions, or patterns?`,
+      `- **actionability**: Could a developer implement from this output?`,
+      `- **scopeAwareness**: Does it avoid over-engineering or under-engineering?`,
+      `- **uncertainty**: Does it flag ambiguity instead of guessing? (5 = appropriately uncertain)`,
+      ``,
+      `Return JSON in this exact format:`,
+      "```json",
+      `{`,
+      `  "scores": {`,
+      `    "current": { "specificity": 3, "actionability": 3, "scopeAwareness": 3, "uncertainty": 3 },`,
+      `    "variant": { "specificity": 4, "actionability": 4, "scopeAwareness": 4, "uncertainty": 4 }`,
+      `  },`,
+      `  "winner": "variant",`,
+      `  "reasoning": "Brief explanation of why the winner is better"`,
+      `}`,
+      "```",
+      ``,
+      `Return ONLY the JSON, no other text.`,
+    ].join("\n");
+  }
+
+  it("matches the pre-migration inline builder", () => {
+    const testCase = { title: "Add webhook support", body: "It would be nice to have webhooks." };
+    const currentOutput = "Current prompt output 1";
+    const variantOutput = "Variant prompt output 1";
+    const out = buildJudgePrompt("pr", testCase, currentOutput, variantOutput);
+    expect(stripPreamble(out).trimEnd()).toBe(expected(testCase, currentOutput, variantOutput).trimEnd());
   });
 });

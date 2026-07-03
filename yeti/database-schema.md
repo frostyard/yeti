@@ -114,3 +114,59 @@ Stores recent notification history for the dashboard. Populated by
 Notifications older than 7 days are pruned on startup and nightly by
 `main.ts`. There is no per-job retention limit — all notifications within
 the 7-day window are kept.
+
+## `learnings` table
+
+Backs the self-improvement loop's environment-side half (`src/learnings.ts`,
+`src/jobs/learning-consolidator.ts`). A row is written whenever a work job's
+`enforceLearnings()` gate parses a `LEARNINGS-YETI:` declaration out of an
+agent's output. Repo-side learnings (`LEARNINGS-REPO:`) are **not** stored
+here — they are committed as `yeti/learnings/<slug>.md` files in the target
+repo's own PR and never touch this table.
+
+| Column | Type | Constraints | Description |
+|--------|------|-------------|-------------|
+| `id` | INTEGER | PRIMARY KEY AUTOINCREMENT | Unique learning identifier |
+| `job_name` | TEXT | NOT NULL | Job that reported the learning (e.g. `issue-worker`, `ci-fixer`) |
+| `repo` | TEXT | NOT NULL | Full repo name the agent was working in when it reported the learning |
+| `kind` | TEXT | NOT NULL | `"repo"` or `"yeti"` — only `"yeti"` rows are currently inserted by `enforceLearnings()`; `kind` is stored for future use if repo learnings ever need DB tracking |
+| `summary` | TEXT | NOT NULL | One-line summary of the learning (the text after `LEARNINGS-YETI:`) |
+| `status` | TEXT | NOT NULL, default `'pending'` | One of: `pending`, `consolidated`, `dismissed` |
+| `reason` | TEXT | nullable | Set by `dismissLearning()` when the consolidator's AI pass judges the learning not actionable (from a `DISMISSED: <id>: <reason>` output line) |
+| `pr_number` | INTEGER | nullable | Set by `markLearningsConsolidated()` — the PR number that folded this learning into policy/docs |
+| `created_at` | TEXT | NOT NULL | ISO timestamp when the learning was recorded |
+
+### Indexes
+
+- `idx_learnings_status` on `status` — used by `getPendingLearnings()` /
+  `countPendingLearnings()` to find pending rows without a full scan
+
+### Dedup on insert
+
+`insertLearning(jobName, repo, kind, summary)` first checks for an existing
+row with the same `kind` + `summary` and `status = 'pending'`; if found, it
+returns that row's `id` instead of inserting a duplicate. This means the same
+environment friction reported by multiple jobs (or the same job across
+multiple runs) collapses into a single pending row rather than spamming the
+consolidator with near-identical entries. Dedup is exact-match on `summary`
+text, not fuzzy — near-duplicate phrasing still inserts a new row.
+
+### Lifecycle
+
+1. **pending**: `insertLearning()` inserts (or dedups into) a row with
+   `status = 'pending'` when a work job's gate parses a `LEARNINGS-YETI:`
+   line. `countPendingLearnings("yeti") >= LEARNINGS_PENDING_THRESHOLD`
+   (default 5, configurable via `learningsPendingThreshold`) triggers the
+   `learning-consolidator` job immediately, independent of its daily schedule.
+2. **consolidated**: `markLearningsConsolidated(ids, prNumber)` sets
+   `status = 'consolidated'` and records `pr_number` when the consolidator
+   successfully folds the learning into `_preamble.md`, a job policy, or a
+   `yeti/` doc and opens a PR.
+3. **dismissed**: `dismissLearning(id, reason)` sets `status = 'dismissed'`
+   and records `reason` when the consolidator's AI judges the learning
+   already covered, too vague, or not actionable (parsed from a
+   `DISMISSED: <id>: <reason>` line in its output).
+
+There is no automatic pruning for `learnings` rows — consolidated and
+dismissed rows accumulate as history, surfaced via `GET /api/learnings` and
+the dashboard's Learnings page.

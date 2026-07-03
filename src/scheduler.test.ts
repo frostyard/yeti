@@ -16,9 +16,14 @@ vi.mock("./db.js", () => ({
   completeJobRun: vi.fn(),
 }));
 
+vi.mock("./quiesce.js", () => ({
+  isUpdatePending: vi.fn().mockReturnValue(false),
+}));
+
 import { startJobs, msUntilHour, type Job } from "./scheduler.js";
 import { reportError } from "./error-reporter.js";
 import { insertJobRun, completeJobRun } from "./db.js";
+import { isUpdatePending } from "./quiesce.js";
 
 describe("msUntilHour", () => {
   beforeEach(() => { vi.useFakeTimers(); });
@@ -59,6 +64,37 @@ describe("scheduler", () => {
     await vi.advanceTimersByTimeAsync(0);
 
     expect(runFn).toHaveBeenCalledTimes(1);
+    scheduler.stop();
+  });
+
+  it("defers scheduled ticks while an update is pending", async () => {
+    vi.mocked(isUpdatePending).mockReturnValue(true);
+    const runFn = vi.fn().mockResolvedValue(undefined);
+    const scheduler = startJobs([makeJob("quiesce-job", runFn, 5000)]);
+
+    await vi.advanceTimersByTimeAsync(0);
+    await vi.advanceTimersByTimeAsync(5000);
+    expect(runFn).not.toHaveBeenCalled(); // no new work starts during quiesce
+
+    vi.mocked(isUpdatePending).mockReturnValue(false);
+    await vi.advanceTimersByTimeAsync(5000);
+    expect(runFn).toHaveBeenCalledTimes(1); // resumes once the update clears
+
+    scheduler.stop();
+  });
+
+  it("triggerJob returns 'update-pending' while an update is pending", async () => {
+    const runFn = vi.fn().mockResolvedValue(undefined);
+    const scheduler = startJobs([makeJob("known-job", runFn)]);
+    await vi.advanceTimersByTimeAsync(0);
+    runFn.mockClear();
+
+    vi.mocked(isUpdatePending).mockReturnValue(true);
+    expect(scheduler.triggerJob("known-job")).toBe("update-pending");
+    await vi.advanceTimersByTimeAsync(0);
+    expect(runFn).not.toHaveBeenCalled();
+
+    vi.mocked(isUpdatePending).mockReturnValue(false);
     scheduler.stop();
   });
 

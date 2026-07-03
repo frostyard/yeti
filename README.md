@@ -86,7 +86,8 @@ Starting from the release that introduces `enabledJobs`, you must explicitly lis
     "repo-standards",
     "improvement-identifier",
     "issue-auditor",
-    "triage-yeti-errors"
+    "triage-yeti-errors",
+    "learning-consolidator"
   ]
 }
 ```
@@ -150,7 +151,9 @@ By default, Yeti uses your personal `gh` CLI credentials. If you enable branch p
 
 ## Jobs
 
-Yeti runs 10 jobs on timers. Each job scans repos under the configured `githubOwners`, filtered by `allowedRepos` if set. Understanding what triggers each job is important — **most jobs do not require labels** and will discover work based on PR/issue state.
+Yeti runs 11 jobs on timers. Each job scans repos under the configured `githubOwners`, filtered by `allowedRepos` if set. Understanding what triggers each job is important — **most jobs do not require labels** and will discover work based on PR/issue state.
+
+Every job listed under **`enabledJobs`** must be added explicitly — see [`enabledJobs` migration](#enabledjobs-migration-required) above. This includes `learning-consolidator`: the self-improvement loop's gate (agents declaring environment/tooling friction after each work session) is always active for issue-worker, ci-fixer, review-addresser, and improvement-identifier whenever those jobs run, but the consolidation half — folding accumulated learnings into policies/docs via a PR — only runs if `learning-consolidator` is itself in `enabledJobs`.
 
 ### Jobs that require labels
 
@@ -167,6 +170,7 @@ These only fire when Yeti has already created branches or issues:
 | **review-addresser** | `yeti/` branch PR with review comments | Addresses reviewer feedback on Yeti-created PRs |
 | **triage-yeti-errors** | Issue with `[yeti-error]` in title | Investigates Yeti error issues |
 | **repo-standards** | Periodic (daily) | Syncs label definitions — does not create PRs or issues |
+| **learning-consolidator** | Periodic (daily), or immediately when pending environment learnings reach `learningsPendingThreshold` | Folds agent-reported environment/tooling learnings into `_preamble.md`, job policies, or `yeti/` docs via a PR against the self repo |
 
 ### Jobs that act on ANY matching issue or PR
 
@@ -199,7 +203,9 @@ Issues move through labels to track state:
 
 ```
 (new issue)         →  (refiner runs)  →  Plan comment posted  →  Ready
-                    →  (reviewer runs) →  Plan reviewed         →  Ready  [if plan-reviewer enabled]
+                    →  (reviewer runs) →  Plan reviewed         →  Ready       [reviewLoop off, or approved]
+                                                                →  Needs Refinement  [reviewLoop on + blocking findings; loops
+                                                                                       back to refiner, up to maxPlanRounds]
                     →  Human reviews plan + critique, then either:
                          • Adds "Refined" to approve implementation
                          • Posts feedback → refiner refines → reviewer re-reviews
@@ -207,7 +213,11 @@ Refined             →  (worker runs)   →  PR created  →  In Review
 In Review + LGTM    →  (merger runs)   →  PR merged
 ```
 
-The `Ready` label always means "waiting for a human decision." When plan-reviewer is enabled, the human sees both the plan and an adversarial critique before deciding whether to proceed. The review is **for the human**, not for automatic refinement — this prevents infinite back-and-forth between AIs.
+The `Ready` label always means "waiting for a human decision" — a person still has to add `Refined` before implementation starts, in both modes below.
+
+By default, plan-reviewer posts a single adversarial critique with a verdict and the issue goes straight to `Ready`: the human reads the plan and critique together and decides whether to approve or send feedback back to the refiner.
+
+With `reviewLoop: true`, the refiner and reviewer instead converge on their own first: a review with zero blocking findings is approved and the issue goes to `Ready`; a review with any blocking finding sends the issue back to `Needs Refinement` for a targeted, in-place plan revision, and the two jobs iterate up to `maxPlanRounds` (default 3) rounds. The round budget resets whenever a human comments — human feedback always wins over the automated loop — and after the round limit is reached the issue falls through to `Ready` for a person to resolve. Either way, the loop only ever prepares the plan for approval; it never adds `Refined` itself.
 
 The `Priority` label is used for queue ordering across all jobs but does not trigger any job on its own.
 
@@ -237,7 +247,8 @@ src/
     ├── issue-auditor.ts           Audits and classifies issues
     ├── doc-maintainer.ts          Keeps documentation up to date
     ├── repo-standards.ts          Syncs label definitions
-    └── triage-yeti-errors.ts      Investigates yeti error issues
+    ├── triage-yeti-errors.ts      Investigates yeti error issues
+    └── learning-consolidator.ts   Folds pending environment learnings into policies/docs via PR
 ```
 
 ## Attribution

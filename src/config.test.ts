@@ -494,3 +494,125 @@ describe("config", () => {
     expect(listener).not.toHaveBeenCalled();
   });
 });
+
+describe("autonomy config", () => {
+  // Minimal repo factory for these tests. Repo no longer carries an autonomy
+  // field — repoAutonomy resolves purely from AUTONOMY_MAP (keyed by fullName)
+  // and DEFAULT_AUTONOMY, identical to capability.ts's fullNameAutonomy.
+  const repo = (fullName: string): import("./config.js").Repo => ({
+    owner: fullName.split("/")[0],
+    name: fullName.split("/")[1],
+    fullName,
+    defaultBranch: "main",
+  });
+
+  it("defaults DEFAULT_AUTONOMY to 'pr' when unset", async () => {
+    const mod = await import("./config.js");
+
+    fs.mkdirSync(path.dirname(mod.CONFIG_PATH), { recursive: true });
+    fs.writeFileSync(mod.CONFIG_PATH, JSON.stringify({}));
+    mod.reloadConfig();
+
+    expect(mod.DEFAULT_AUTONOMY).toBe("pr");
+  });
+
+  it("repoAutonomy precedence: map > default; invalid map values coerce to pr", async () => {
+    const mod = await import("./config.js");
+
+    fs.mkdirSync(path.dirname(mod.CONFIG_PATH), { recursive: true });
+    fs.writeFileSync(
+      mod.CONFIG_PATH,
+      JSON.stringify({
+        defaultAutonomy: "issues",
+        autonomy: { "acme/mapped": "automerge", "acme/bad": "nonsense" },
+      }),
+    );
+    mod.reloadConfig();
+
+    expect(mod.DEFAULT_AUTONOMY).toBe("issues");
+
+    // Map wins over the default.
+    expect(mod.repoAutonomy(repo("acme/mapped"))).toBe("automerge");
+
+    // No map entry -> falls back to the configured default.
+    expect(mod.repoAutonomy(repo("acme/other"))).toBe("issues");
+
+    // Invalid map value is coerced to "pr" at load time, so it wins over the default.
+    expect(mod.repoAutonomy(repo("acme/bad"))).toBe("pr");
+  });
+
+  it("writeConfig live-reloads autonomy so capability checks use new tiers", async () => {
+    const mod = await import("./config.js");
+    const { can } = await import("./capability.js");
+
+    fs.mkdirSync(path.dirname(mod.CONFIG_PATH), { recursive: true });
+    fs.writeFileSync(mod.CONFIG_PATH, JSON.stringify({ defaultAutonomy: "advisory", autonomy: {} }));
+    mod.reloadConfig();
+
+    expect(can(repo("frostyard/updex"), "merge")).toBe(false);
+
+    mod.writeConfig({
+      defaultAutonomy: "pr",
+      autonomy: { "frostyard/updex": "automerge" },
+    });
+
+    expect(mod.DEFAULT_AUTONOMY).toBe("pr");
+    expect(mod.AUTONOMY_MAP).toEqual({ "frostyard/updex": "automerge" });
+    expect(can(repo("frostyard/updex"), "merge")).toBe(true);
+  });
+
+  it("writeConfig replaces autonomy wholesale so removed entries stay removed", async () => {
+    const mod = await import("./config.js");
+    const { can } = await import("./capability.js");
+
+    fs.mkdirSync(path.dirname(mod.CONFIG_PATH), { recursive: true });
+    fs.writeFileSync(
+      mod.CONFIG_PATH,
+      JSON.stringify({
+        defaultAutonomy: "advisory",
+        autonomy: { "frostyard/updex": "automerge" },
+      }),
+    );
+    mod.reloadConfig();
+
+    expect(can(repo("frostyard/updex"), "merge")).toBe(true);
+
+    mod.writeConfig({ autonomy: {} });
+
+    const written = JSON.parse(fs.readFileSync(mod.CONFIG_PATH, "utf-8"));
+    expect(written.autonomy).toEqual({});
+    expect(mod.AUTONOMY_MAP).toEqual({});
+    expect(can(repo("frostyard/updex"), "merge")).toBe(false);
+  });
+});
+
+describe("getEnvOverrides", () => {
+  it("returns only fields whose env var is currently set", async () => {
+    const { getEnvOverrides } = await import("./config.js");
+    delete process.env["YETI_AUTH_TOKEN"];
+    delete process.env["YETI_LOG_LEVEL"];
+    expect(getEnvOverrides()).toEqual({});
+
+    process.env["YETI_LOG_LEVEL"] = "warn";
+    process.env["YETI_AUTH_TOKEN"] = "secret";
+    try {
+      const overrides = getEnvOverrides();
+      expect(overrides.logLevel).toBe("YETI_LOG_LEVEL");
+      expect(overrides.authToken).toBe("YETI_AUTH_TOKEN");
+      expect(overrides).not.toHaveProperty("selfRepo");
+    } finally {
+      delete process.env["YETI_LOG_LEVEL"];
+      delete process.env["YETI_AUTH_TOKEN"];
+    }
+  });
+
+  it("treats an empty-string env var as an override (it still wins at load)", async () => {
+    const { getEnvOverrides } = await import("./config.js");
+    process.env["YETI_SELF_REPO"] = "";
+    try {
+      expect(getEnvOverrides().selfRepo).toBe("YETI_SELF_REPO");
+    } finally {
+      delete process.env["YETI_SELF_REPO"];
+    }
+  });
+});

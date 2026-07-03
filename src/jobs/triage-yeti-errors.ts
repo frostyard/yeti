@@ -1,9 +1,11 @@
-import { SELF_REPO, JOB_AI, type Repo } from "../config.js";
+import { SELF_REPO, JOB_AI, repoAutonomy, type Repo } from "../config.js";
 import * as gh from "../github.js";
 import * as claude from "../claude.js";
 import * as log from "../log.js";
 import * as db from "../db.js";
 import { reportError } from "../error-reporter.js";
+import { renderPolicy, type Autonomy } from "../policy.js";
+import { stripLearningsDeclaration } from "../learnings.js";
 
 export const REPORT_HEADER = "## Yeti Error Investigation Report";
 
@@ -192,84 +194,43 @@ function mapFingerprintToFile(fingerprint: string): string | null {
 }
 
 export function buildInvestigationPrompt(
+  autonomy: Autonomy,
   issue: gh.Issue,
   errorDetails: YetiErrorDetails,
   otherIssues: gh.Issue[],
 ): string {
-  const sections: string[] = [
-    `You are investigating an internal Yeti error.`,
-    ``,
-    `## Error Details`,
-    ``,
-    `**Issue #${issue.number}: ${issue.title}**`,
-    `**Fingerprint:** \`${errorDetails.fingerprint}\``,
-    `**Context:** ${errorDetails.context}`,
-    `**Timestamp:** ${errorDetails.timestamp}`,
-    ``,
-    `### Stack Trace / Error`,
-    `\`\`\``,
-    errorDetails.errorText,
-    `\`\`\``,
-    ``,
-    `### Full Issue Body`,
-    ``,
-    issue.body,
-    ``,
-    `## Instructions`,
-    ``,
-    `1. **Read \`yeti/OVERVIEW.md\` first** for architectural context about the Yeti codebase, then follow and read any linked documents relevant to this error.`,
-  ];
-
   const fileHint = mapFingerprintToFile(errorDetails.fingerprint);
-  if (fileHint) {
-    sections.push(
-      `2. **Read the source file** — the fingerprint \`${errorDetails.fingerprint}\` suggests the relevant source is \`${fileHint}\`. Read it and any related files.`,
-    );
-  } else {
-    sections.push(
-      `2. **Find and read the relevant source code** for the error.`,
-    );
-  }
+  const fileHintStep = fileHint
+    ? `2. **Read the source file** — the fingerprint \`${errorDetails.fingerprint}\` suggests the relevant source is \`${fileHint}\`. Read it and any related files.`
+    : `2. **Find and read the relevant source code** for the error.`;
 
-  sections.push(
-    `3. **Run verification commands** — reproduce the failing scenario where possible, check configuration, test edge cases. Use the codebase to understand the error path.`,
-    `4. **Determine the root cause** — explain what went wrong and why, with evidence from the code.`,
-    `5. **Recommend a fix** — describe what changes would resolve the issue.`,
-    ``,
-  );
-
+  let otherIssuesSection = "";
   if (otherIssues.length > 0) {
-    sections.push(`## Other Open Error Issues`);
-    sections.push(``);
+    const lines: string[] = [`## Other Open Error Issues`, ``];
     for (const other of otherIssues) {
       const truncBody = other.body.length > 500 ? other.body.slice(0, 500) + "..." : other.body;
-      sections.push(`### #${other.number}: ${other.title}`);
-      sections.push(truncBody);
-      sections.push(``);
+      lines.push(`### #${other.number}: ${other.title}`);
+      lines.push(truncBody);
+      lines.push(``);
     }
-    sections.push(
+    lines.push(
       `Review the issues above. If any share the same root cause as this error, include them in the RELATED_ISSUES line below.`,
       ``,
     );
+    otherIssuesSection = lines.join("\n") + "\n";
   }
 
-  sections.push(
-    `## Output Format`,
-    ``,
-    `Produce an investigation report with:`,
-    `- Verified root cause`,
-    `- Evidence from code reading and diagnostic commands`,
-    `- Recommended fix`,
-    ``,
-    `At the very end of your output, include exactly one line:`,
-    `RELATED_ISSUES: <comma-separated issue numbers, or "none">`,
-    ``,
-    `Example: \`RELATED_ISSUES: 45, 67\` or \`RELATED_ISSUES: none\``,
-    ``,
-    `Do NOT make any code changes or commits. Only produce the investigation report as text output.`,
-  );
-
-  return sections.join("\n");
+  return renderPolicy("triage-yeti-errors", autonomy, {
+    ISSUE_NUMBER: String(issue.number),
+    ISSUE_TITLE: issue.title,
+    FINGERPRINT: errorDetails.fingerprint,
+    CONTEXT: errorDetails.context,
+    TIMESTAMP: errorDetails.timestamp,
+    ERROR_TEXT: errorDetails.errorText,
+    ISSUE_BODY: issue.body,
+    FILE_HINT_STEP: fileHintStep,
+    OTHER_ISSUES_SECTION: otherIssuesSection,
+  });
 }
 
 export function parseRelatedIssues(output: string): number[] {
@@ -300,14 +261,14 @@ async function processIssue(
     db.updateTaskWorktree(taskId, wtPath, branchName);
 
     const errorDetails = parseYetiError(issue.body);
-    const prompt = buildInvestigationPrompt(issue, errorDetails, otherIssues);
+    const prompt = buildInvestigationPrompt(repoAutonomy(selfRepo), issue, errorDetails, otherIssues);
     const aiOptions = JOB_AI["triage-yeti-errors"];
     const output = await claude.resolveEnqueue(aiOptions)(() => claude.runAI(prompt, wtPath!, aiOptions), gh.hasPriorityLabel(issue.labels));
 
     if (output.trim()) {
       const relatedNumbers = parseRelatedIssues(output);
 
-      const reportBody = output.replace(/\nRELATED_ISSUES:.*$/m, "").trim();
+      const reportBody = stripLearningsDeclaration(output.replace(/\nRELATED_ISSUES:.*$/m, "")).trim();
       await gh.commentOnIssue(repo, issue.number, `${REPORT_HEADER}\n\n${reportBody}`);
       log.info(`[triage-yeti-errors] Posted investigation report for ${repo}#${issue.number}`);
 

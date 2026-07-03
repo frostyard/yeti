@@ -25,9 +25,11 @@ src/
 ├── discord.ts           Discord bot — notifications + job control commands (!yeti …)
 ├── webhooks.ts          GitHub webhook handler — HMAC verification, event routing, queue cache updates
 ├── error-reporter.ts    Deduplicating GitHub issue-based error reporter (filters ShutdownError, RateLimitError)
+├── learnings.ts         Self-improvement loop gate (enforceLearnings), declaration parser, consolidator trigger
 ├── images.ts            Image/attachment extraction + download for issue/PR context
 ├── version.ts           Build-time injected version string
 ├── plan-parser.ts       Parses multi-PR implementation plans into phases; exports PLAN_HEADER constant
+├── review-contract.ts   Shared review protocol: review marker dedup, verdict parse/render, round counting (used by plan-reviewer and issue-refiner)
 ├── startup-announce.ts  Announces new deployments via notify (version-change detection)
 ├── shutdown.ts          Graceful shutdown flag + ShutdownError class (shared across modules)
 ├── test-helpers.ts      Test factories (mockRepo, mockIssue, mockPR)
@@ -43,7 +45,7 @@ src/
 │   └── layout.ts        Shared layout (header, theme, siteTitle, formatters, TOAST_SCRIPT)
 └── jobs/
     ├── issue-refiner.ts        Discovers issues needing plans via comment analysis
-    ├── plan-reviewer.ts        Adversarial plan review using configurable AI backend
+    ├── plan-reviewer.ts        Adversarial plan review with thread context; Blocking/Advisory verdict contract
     ├── issue-worker.ts         Implements issues labelled "Refined" as PRs
     ├── ci-fixer.ts             Fixes failing CI and resolves merge conflicts
     ├── review-addresser.ts     Addresses review comments on Yeti PRs
@@ -54,7 +56,8 @@ src/
     ├── improvement-identifier.ts  Identifies codebase improvements via Claude, implements as PRs
     ├── mkdocs-update.ts        Daily MkDocs documentation update from recent git changes
     ├── issue-auditor.ts        Daily audit ensuring no issues fall between the cracks
-    └── prompt-evaluator.ts     Weekly self-improvement: A/B tests prompts, files issues for winners
+    ├── prompt-evaluator.ts     Weekly self-improvement: A/B tests prompts, files issues for winners
+    └── learning-consolidator.ts  Daily/threshold-triggered: folds pending environment learnings into policies/docs via PR
 
 scripts/
 └── ab-agent-test.sh       A/B test harness comparing AI backends (Claude vs Codex) on real issues
@@ -84,6 +87,7 @@ See [Modules](modules.md) for detailed descriptions of each module. Key relation
 - **`webhooks.ts`** GitHub webhook handler (HMAC-verified, routes issues/check_run/pull_request_review/pull_request events to job triggers, auto-merger triggering, and queue cache updates)
 - **`log.ts`** level-gated logging captured to DB via `AsyncLocalStorage`
 - **`error-reporter.ts`** deduplicating error reporter (GitHub issues + Discord, 30-min cooldown)
+- **`learnings.ts`** self-improvement loop gate (`enforceLearnings()`, `stripLearningsDeclaration()`) — persists environment learnings to the `learnings` table and triggers `learning-consolidator.ts`; see [Modules](modules.md) and the "Self-Improvement Loop" section below
 - **`images.ts`** extracts/downloads images and file attachments for AI context
 - **`plan-parser.ts`** parses multi-PR implementation plans into phases; exports shared `PLAN_HEADER` constant
 - **`notify.ts`** / **`discord.ts`** notification dispatch (DB + SSE + Discord) and Discord bot commands
@@ -95,7 +99,7 @@ The web dashboard is a first-class consumer of job, config, and queue data. Page
 
 ## Jobs
 
-Thirteen scheduled jobs run on timers or schedules.
+Fourteen scheduled jobs run on timers or schedules.
 See [Jobs](jobs.md) for detailed behavior of each.
 
 | Job | Trigger | Interval | Summary |
@@ -113,6 +117,7 @@ See [Jobs](jobs.md) for detailed behavior of each.
 | `mkdocs-update` | Daily at 4 AM | Scheduled | Updates MkDocs documentation from recent source code changes |
 | `issue-auditor` | Daily at 5 AM | Scheduled | Reconciles issue states, manages Ready and In Review labels |
 | `prompt-evaluator` | Daily at midnight | Scheduled | A/B tests plan-producing prompts against AI-generated variants, files issues for improvements |
+| `learning-consolidator` | Daily at 6 AM, or when pending learnings reach `learningsPendingThreshold` | Scheduled + threshold trigger | Folds pending environment learnings into `_preamble.md` / job policies / `yeti/` docs, opens a PR against `SELF_REPO` |
 
 ## Key Patterns
 
@@ -131,7 +136,7 @@ not labels. Six labels are used:
 ```
 Issues:
   Needs Refinement label →  (refiner posts plan)         →  Needs Plan Review added (if plan-reviewer enabled and plan actionable) or Ready added (if actionable) or no label (if blocking questions — waits for human)
-  Needs Plan Review label → (plan-reviewer critiques)    →  Ready added (default) or Needs Refinement (if reviewLoop + NEEDS REVISION + under maxPlanRounds)
+  Needs Plan Review label → (plan-reviewer critiques)    →  Ready added (default, or reviewLoop off) or Needs Refinement (if reviewLoop on + NEEDS REVISION + under maxPlanRounds) or Ready + warning comment (if reviewLoop on + at maxPlanRounds)
   Unreacted feedback     →  (refiner refines plan)       →  Needs Plan Review or Ready (if actionable) or no label (if blocking questions)
   Open PR + follow-up Q  →  (refiner posts response)     →  👍 reactions added (no label changes)
   Refined label          →  (worker creates PR)          →  Refined removed, Ready removed, In Review added
@@ -143,8 +148,21 @@ PRs:
   Doc PR (yeti/docs-*) + doc-only files + CI passing/skipped  →  (auto-merger)  →  merged (no LGTM required)
 ```
 
+With `reviewLoop` on, a rejected plan converges autonomously without human
+intervention: `NEEDS REVISION → Needs Refinement → (issue-refiner revises the
+plan in place via processReviewRevision) → Needs Plan Review → …` repeating
+until either `APPROVED → Ready` or the round budget (`maxPlanRounds`, counted
+since the most recent human comment) is exhausted, at which point the issue
+falls through to `Ready` with a warning comment for human review. A human
+comment posted at any point outranks the loop: issue-refiner routes it to a
+full refinement pass (absorbing any pending review into the same revision)
+and resets the round count.
+
 Jobs track processed items via 👍 reactions on comments (issue-refiner,
 review-addresser) and by checking for existing report comments (triage jobs).
+Plan-review dedup uses an invisible `<!-- yeti-review-of:id:updatedAt -->`
+marker rather than reactions — see the `review-contract.ts` entry in
+[Modules](modules.md).
 The issue-auditor reconciles label state daily, adding missing `In Review`
 labels to issues with open PRs and removing stale ones.
 
@@ -278,6 +296,50 @@ prompts instruct Claude to read `yeti/OVERVIEW.md` (and linked docs) before
 starting work. This gives Claude accumulated architectural context about each
 repository.
 
+### Self-Improvement Loop
+
+Every AI session — not just doc-generating ones — is expected to surface two
+outputs: the work itself, and any reusable learning it discovered along the
+way. This is enforced mechanically (via `src/learnings.ts`), not left to
+prompt diligence alone, and writes back to two different places depending on
+what kind of learning it is:
+
+1. **Repo learnings** (`LEARNINGS-REPO:`) — a workaround, convention, or
+   trial-and-error discovery about the *target repository* Yeti is working
+   in. The agent commits it as a `yeti/learnings/<slug>.md` file in that
+   repo's own PR (`enforceLearnings()` only verifies via a `yeti/`-pathspec
+   tree-diff that the commit actually happened — it never writes the file).
+   These seeds are picked up later by `doc-maintainer`, which folds them into
+   that repo's topic docs under `yeti/`.
+2. **Environment/yeti learnings** (`LEARNINGS-YETI:`) — friction with the
+   managed environment or its tooling itself (not the target repo). These are
+   parsed and persisted to Yeti's own `learnings` table (see
+   [Database Schema](database-schema.md)), and the `learning-consolidator`
+   job periodically folds them into `src/policies/_preamble.md`, a specific
+   job policy, or a `yeti/` doc, then opens a PR against `SELF_REPO`. Once a
+   human merges that PR and it deploys, every future agent prompt across every
+   repo includes the learning — closing the loop.
+
+The mandate to end every session with a `LEARNINGS-REPO:` / `LEARNINGS-YETI:`
+declaration lives in `src/policies/_preamble.md`, which is prepended to
+**every** rendered prompt. `enforceLearnings()` gates on the declaration being
+present (retrying once if missing) after the main `runAI()` call in the four
+jobs that do general-purpose repo work: issue-worker, ci-fixer (both its
+conflict-resolution and CI-fix paths), review-addresser, and
+improvement-identifier's implementation phase. The gate never throws —
+a learnings bug must never fail the underlying task. See the `learnings.ts`
+entry in [Modules](modules.md) for the full `enforceLearnings()` contract.
+
+**Deployment nuance**: a user-placed override at `~/.yeti/policies/_preamble.md`
+**shadows** the bundled `src/policies/_preamble.md` entirely (first-hit-wins
+across `defaultPolicyDirs()` — see `resolvePreamblePath()` in `policy.ts`),
+it does not merge with it. If an operator maintains a custom preamble
+override, the self-improvement mandate (and any future consolidator-written
+additions to the bundled preamble) must be copied into that override by hand,
+or the loop silently stops working for that instance — agents simply won't be
+asked to declare learnings, and `parseLearnings()` will never see a
+declaration to parse.
+
 ### Branch Naming
 
 | Job | Pattern |
@@ -288,6 +350,7 @@ repository.
 | doc-maintainer | `yeti/docs-<YYYYMMDD>-<hex4>` |
 | improvement-identifier | `yeti/improve-<hex4>` |
 | mkdocs-update | `yeti/mkdocs-update-<YYYYMMDD>-<hex4>` |
+| learning-consolidator | `yeti/learnings-<YYYYMMDD>-<hex4>` |
 | ci-fixer / review-addresser | Uses existing PR branch |
 
 ### PR Title Conventions
@@ -297,6 +360,7 @@ repository.
 - `refactor: <title>` — automated improvements
 - `docs: update documentation for <repo>` — doc maintenance
 - `docs: update mkdocs content for <repo>` — mkdocs updates
+- `chore(learnings): consolidate <N> environment learning(s)` — learning-consolidator
 
 ### Tree-Diff Guard
 
@@ -378,6 +442,7 @@ defaults.
 | `schedules.mkdocsUpdateHour` | — | `4` (4 AM local time) |
 | `schedules.issueAuditorHour` | — | `5` (5 AM local time) |
 | `schedules.promptEvaluatorHour` | — | `0` (midnight local time) |
+| `schedules.learningConsolidatorHour` | — | `6` (6 AM local time) |
 | `logLevel` | `YETI_LOG_LEVEL` | `"debug"` (debug, info, warn, error) |
 | `logRetentionDays` | — | `14` |
 | `logRetentionPerJob` | — | `20` |
@@ -403,8 +468,9 @@ defaults.
 | `allowedRepos` | `YETI_ALLOWED_REPOS` | `null` (all repos) |
 | `prioritizedItems` | — | `[]` (array of `{repo, number}` processed first) |
 | `queueScanIntervalMs` | — | `300000` (5 min — how often the dashboard queue refreshes from GitHub labels; infrastructure, always runs) |
-| `reviewLoop` | — | `false` (when true, plan-reviewer can send plans back to issue-refiner for re-refinement) |
-| `maxPlanRounds` | — | `3` (max plan→review cycles before falling through to human review; minimum 1) |
+| `reviewLoop` | — | `false` (when true, a NEEDS REVISION verdict kicks the plan back to issue-refiner for a targeted in-place revision, converging autonomously without a human in the loop) |
+| `maxPlanRounds` | — | `3` (max plan→review cycles counted since the most recent human comment; a human comment resets the count; at the cap the issue falls through to `Ready` for human review; minimum 1) |
+| `learningsPendingThreshold` | — | `5` (pending environment learnings that immediately trigger learning-consolidator; minimum 1) |
 
 ### enabledJobs
 
@@ -413,7 +479,18 @@ Controls which jobs are registered with the scheduler at startup.
 - **Field**: `enabledJobs` (string array)
 - **Default**: `[]` — no jobs run if the field is absent or empty
 - **Live-reloadable**: yes (changes take effect without restart)
-- **Available values**: `issue-worker`, `issue-refiner`, `plan-reviewer`, `ci-fixer`, `review-addresser`, `doc-maintainer`, `auto-merger`, `repo-standards`, `improvement-identifier`, `issue-auditor`, `triage-yeti-errors`, `mkdocs-update`, `prompt-evaluator`
+- **Available values**: `issue-worker`, `issue-refiner`, `plan-reviewer`, `ci-fixer`, `review-addresser`, `doc-maintainer`, `auto-merger`, `repo-standards`, `improvement-identifier`, `issue-auditor`, `triage-yeti-errors`, `mkdocs-update`, `prompt-evaluator`, `learning-consolidator`
+
+**Self-improvement loop is split across two independent switches**: the
+`enforceLearnings()` gate (declaration retry, persistence, threshold trigger)
+is always active for issue-worker, ci-fixer, review-addresser, and
+improvement-identifier whenever those jobs are enabled — it's baked into the
+job code, not a separately configurable job. `learning-consolidator` is a
+normal scheduler entry like any other job: it must be explicitly listed in
+`enabledJobs` for the consolidation half (folding pending learnings into
+policies/docs and opening a PR) to actually run. Without it, environment
+learnings accumulate as `pending` rows in the `learnings` table indefinitely
+— harmless, but the loop never closes.
 
 **Migration note**: existing configs without `enabledJobs` will have no jobs start after upgrading. Add the desired job names to `enabledJobs` in `~/.yeti/config.json` before upgrading.
 

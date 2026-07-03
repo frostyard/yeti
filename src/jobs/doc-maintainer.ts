@@ -1,6 +1,8 @@
 import fs from "node:fs";
 import path from "node:path";
-import { JOB_AI, type Repo } from "../config.js";
+import { JOB_AI, repoAutonomy, type Repo } from "../config.js";
+import { renderPolicy, type Autonomy } from "../policy.js";
+import { can } from "../capability.js";
 import * as gh from "../github.js";
 import * as claude from "../claude.js";
 import * as log from "../log.js";
@@ -77,55 +79,33 @@ export async function ensureClaudeMdDocBlock(wtPath: string): Promise<boolean> {
   return true;
 }
 
-function buildDocPrompt(fullName: string, planCount = 0): string {
-  const lines = [
-    `You are maintaining documentation for the repository ${fullName}.`,
-    ``,
-    `Your goal is to create or update documentation under \`yeti/\` that is`,
-    `optimized for providing context when planning and implementing new features`,
-    `and bug fixes.`,
-    ``,
-    `Steps:`,
-    `1. Run \`mkdir -p yeti\` to ensure the directory exists.`,
-    `2. Read the codebase to understand its current structure, purpose, and key`,
-    `   patterns.`,
-    `3. If \`yeti/OVERVIEW.md\` exists, read it and all docs it links to, then`,
-    `   update them to reflect the current state of the code. Preserve accurate`,
-    `   content and update anything outdated. If it doesn't exist, create it`,
-    `   from scratch.`,
-    `4. \`yeti/OVERVIEW.md\` is the main entry point and should include:`,
-    `   - **Purpose**: What this repo does and its role (2-3 sentences)`,
-    `   - **Architecture**: Key directories, modules, and how they fit together`,
-    `   - **Key Patterns**: Important conventions, data flow, and design decisions`,
-    `   - **Configuration**: Key config values and environment variables`,
-    `5. For complex subsystems that need detailed coverage, create dedicated`,
-    `   documents (e.g., \`yeti/database-schema.md\`, \`yeti/api-design.md\`) and`,
-    `   link to them from OVERVIEW.md. Keep each focused on one subject.`,
-    `6. Keep OVERVIEW.md concise (200-500 lines). Dedicated docs can be longer`,
-    `   as needed for thorough coverage.`,
-    `7. Commit with message: "docs: update documentation [doc-maintainer]"`,
-    ``,
-    `Do NOT make any code changes. Only update documentation.`,
-  ];
+export function buildDocPrompt(autonomy: Autonomy, fullName: string, planCount = 0): string {
+  const plansSection = planCount > 0
+    ? [
+        ``,
+        `A \`.plans/\` directory has been created in the repo root containing implementation`,
+        `plans from ${planCount} recently-closed issues. Each file is named by issue number`,
+        `(e.g., \`.plans/42.md\`).`,
+        ``,
+        `Read these plans and extract any valuable architectural context, design decisions,`,
+        `conventions, or patterns into the existing documentation. Only add information that`,
+        `is actually reflected in the current codebase. If a plan contains nothing new for`,
+        `the docs, skip it. Do NOT commit the \`.plans/\` directory — it is temporary.`,
+      ].join("\n")
+    : "";
 
-  if (planCount > 0) {
-    lines.push(
-      ``,
-      `A \`.plans/\` directory has been created in the repo root containing implementation`,
-      `plans from ${planCount} recently-closed issues. Each file is named by issue number`,
-      `(e.g., \`.plans/42.md\`).`,
-      ``,
-      `Read these plans and extract any valuable architectural context, design decisions,`,
-      `conventions, or patterns into the existing documentation. Only add information that`,
-      `is actually reflected in the current codebase. If a plan contains nothing new for`,
-      `the docs, skip it. Do NOT commit the \`.plans/\` directory — it is temporary.`,
-    );
-  }
-
-  return lines.join("\n");
+  return renderPolicy("doc-maintainer", autonomy, {
+    REPO: fullName,
+    PLANS_SECTION: plansSection,
+  });
 }
 
 async function processRepo(repo: Repo): Promise<void> {
+  if (!can(repo, "createPR")) {
+    log.info(`[doc-maintainer] skip ${repo.fullName} — tier below 'createPR' requirement`);
+    return;
+  }
+
   const fullName = repo.fullName;
 
   // Step 1: Check for existing open docs PR
@@ -195,7 +175,7 @@ async function processRepo(repo: Repo): Promise<void> {
 
     // Step 5: Generate/update documentation
     log.info(`[doc-maintainer] Generating docs for ${fullName}`);
-    const prompt = buildDocPrompt(fullName, plans.length);
+    const prompt = buildDocPrompt(repoAutonomy(repo), fullName, plans.length);
     const aiOptions = JOB_AI["doc-maintainer"];
     await claude.resolveEnqueue(aiOptions)(() => claude.runAI(prompt, wtPath!, aiOptions));
 
@@ -213,7 +193,7 @@ async function processRepo(repo: Repo): Promise<void> {
     // Step 6: Push and create PR
     if (await claude.hasNewCommits(wtPath, repo.defaultBranch) && await claude.hasTreeDiff(wtPath, repo.defaultBranch)) {
       const description = await claude.generateDocsPRDescription(wtPath, repo.defaultBranch, aiOptions);
-      await claude.pushBranch(wtPath, branchName);
+      await claude.pushBranch(wtPath, branchName, fullName);
       const prNumber = await gh.createPR(
         fullName,
         branchName,

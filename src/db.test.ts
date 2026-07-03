@@ -25,6 +25,7 @@ import {
   getWorkItemsForRuns,
   getRecentWorkItems,
   getRecentActions,
+  getRecentTasksForItem,
   searchRunsByItem,
   insertJobRun,
   completeJobRun,
@@ -40,6 +41,12 @@ import {
   getRecentNotifications,
   getNotificationsSince,
   pruneOldNotifications,
+  insertLearning,
+  getLearnings,
+  getPendingLearnings,
+  countPendingLearnings,
+  markLearningsConsolidated,
+  dismissLearning,
   type Task,
 } from "./db.js";
 
@@ -95,6 +102,25 @@ describe("db", () => {
 
     const orphaned = getOrphanedTasks();
     expect(orphaned).toHaveLength(0);
+  });
+
+  it("getRecentTasksForItem returns matching tasks newest first and respects limit", () => {
+    const oldOtherItem = recordTaskStart("issue-refiner", "org/repo", 41, null);
+    recordTaskComplete(oldOtherItem);
+    const oldOtherJob = recordTaskStart("issue-worker", "org/repo", 42, null);
+    recordTaskComplete(oldOtherJob);
+    const first = recordTaskStart("issue-refiner", "org/repo", 42, null);
+    recordTaskFailed(first, "Empty revision output");
+    const second = recordTaskStart("issue-refiner", "org/repo", 42, null);
+    recordTaskComplete(second);
+    const third = recordTaskStart("issue-refiner", "org/repo", 42, null);
+    recordTaskFailed(third, "Other failure");
+
+    const tasks = getRecentTasksForItem("issue-refiner", "org/repo", 42);
+
+    expect(tasks.map((task) => task.id)).toEqual([third, second, first]);
+    expect(getRecentTasksForItem("issue-refiner", "org/repo", 42, 2).map((task) => task.id))
+      .toEqual([third, second]);
   });
 
   it("getOrphanedTasks returns only running tasks", () => {
@@ -788,5 +814,67 @@ describe("notifications", () => {
     const pruned = pruneOldNotifications(7);
     expect(pruned).toBe(1);
     expect(getRecentNotifications()).toHaveLength(1);
+  });
+});
+
+describe("learnings", () => {
+  beforeEach(() => {
+    initDb();
+  });
+
+  afterEach(() => {
+    closeDb();
+  });
+
+  it("inserts and reads back a pending learning", () => {
+    const id = insertLearning("issue-worker", "org/repo", "yeti", "use brew not apt");
+    const rows = getLearnings();
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({
+      id, job_name: "issue-worker", repo: "org/repo", kind: "yeti",
+      summary: "use brew not apt", status: "pending", reason: null, pr_number: null,
+    });
+  });
+
+  it("dedups identical pending summaries of the same kind", () => {
+    const a = insertLearning("issue-worker", "org/repo", "yeti", "use brew");
+    const b = insertLearning("ci-fixer", "org/other", "yeti", "use brew");
+    expect(b).toBe(a);
+    expect(getLearnings()).toHaveLength(1);
+  });
+
+  it("does not dedup against consolidated learnings", () => {
+    const a = insertLearning("issue-worker", "org/repo", "yeti", "use brew");
+    markLearningsConsolidated([a], 42);
+    const b = insertLearning("issue-worker", "org/repo", "yeti", "use brew");
+    expect(b).not.toBe(a);
+  });
+
+  it("filters by status and counts pending by kind", () => {
+    insertLearning("issue-worker", "org/repo", "yeti", "learning one");
+    const two = insertLearning("issue-worker", "org/repo", "yeti", "learning two");
+    insertLearning("issue-worker", "org/repo", "repo", "repo learning");
+    dismissLearning(two, "already covered");
+    expect(countPendingLearnings()).toBe(2);
+    expect(countPendingLearnings("yeti")).toBe(1);
+    expect(getPendingLearnings("yeti")).toHaveLength(1);
+    expect(getLearnings("dismissed")).toHaveLength(1);
+    expect(getLearnings("dismissed")[0].reason).toBe("already covered");
+  });
+
+  it("marks learnings consolidated with the PR number", () => {
+    const a = insertLearning("issue-worker", "org/repo", "yeti", "one");
+    const b = insertLearning("issue-worker", "org/repo", "yeti", "two");
+    markLearningsConsolidated([a, b], 123);
+    const rows = getLearnings("consolidated");
+    expect(rows).toHaveLength(2);
+    expect(rows[0].pr_number).toBe(123);
+    expect(countPendingLearnings()).toBe(0);
+  });
+
+  it("markLearningsConsolidated with empty ids is a no-op", () => {
+    insertLearning("issue-worker", "org/repo", "yeti", "one");
+    markLearningsConsolidated([], 99);
+    expect(countPendingLearnings()).toBe(1);
   });
 });
