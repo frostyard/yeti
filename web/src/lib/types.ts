@@ -63,7 +63,7 @@ export interface Overview {
   jobSchedules: Record<string, JobSchedule>;
   jobAi: Record<string, { backend?: AiBackend; model?: string }>;
   discord: DiscordStatus;
-  counts: { running: number; queuePending: number; recentDone: number; recentFailed: number; pendingLearnings: number };
+  counts: { running: number; queuePending: number; queueBlockedByTier: number; recentDone: number; recentFailed: number; pendingLearnings: number };
   system: SystemStats;
   updatePending: boolean;
   pendingUpdateTag: string | null;
@@ -99,6 +99,8 @@ export interface QueueItem {
   checkStatus?: "passing" | "failing" | "pending";
   prNumber?: number;
   prioritized?: boolean;
+  blockedByTier?: string;
+  requiredTier?: string;
 }
 
 export interface QueueResponse {

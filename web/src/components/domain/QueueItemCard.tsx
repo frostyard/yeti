@@ -1,5 +1,5 @@
 import { Link } from "react-router-dom";
-import { Star, GitPullRequest, CircleDot, CheckCircle2, XCircle, Clock } from "lucide-react";
+import { Star, GitPullRequest, CircleDot, CheckCircle2, XCircle, Clock, AlertTriangle } from "lucide-react";
 import type { QueueItem } from "../../lib/types";
 import { Badge } from "../ui/status";
 import { RelativeTime } from "../ui/time";
@@ -28,6 +28,12 @@ export function QueueItemCard({ item, actions }: { item: QueueItem; actions?: Re
           <CheckIcon status={item.checkStatus} />
           <span className="truncate text-[13px] text-text">{item.title}</span>
         </div>
+        {item.blockedByTier && (
+          <Badge color="var(--warning)" className="mt-1 max-w-full whitespace-normal text-left leading-4">
+            <AlertTriangle size={11} className="shrink-0" />
+            <span className="min-w-0">blocked: repo tier '{item.blockedByTier}' &lt; '{item.requiredTier}'</span>
+          </Badge>
+        )}
       </div>
       <Badge color={meta.color} className="shrink-0">{meta.label}</Badge>
       <RelativeTime iso={item.updatedAt} className="hidden shrink-0 text-[12px] text-muted sm:inline" />

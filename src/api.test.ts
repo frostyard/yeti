@@ -12,6 +12,9 @@ vi.mock("./config.js", () => ({
   getConfigForDisplay: vi.fn(),
   getEnvOverrides: vi.fn(),
   writeConfig: vi.fn(),
+  repoAutonomy: () => "advisory",
+  AUTONOMY_MAP: {},
+  DEFAULT_AUTONOMY: "advisory",
 }));
 
 vi.mock("./github.js", () => ({
@@ -74,7 +77,7 @@ vi.mock("./sysstats.js", () => ({
   getSystemStats: vi.fn(),
 }));
 
-import { buildConfigUpdate } from "./api.js";
+import { buildConfigUpdate, computeTierBlock } from "./api.js";
 
 describe("buildConfigUpdate autonomy fields", () => {
   it("accepts valid defaultAutonomy and autonomy entries", () => {
@@ -115,5 +118,30 @@ describe("buildConfigUpdate autonomy fields", () => {
 
     expect(updates).toHaveProperty("autonomy");
     expect(updates.autonomy).toEqual({});
+  });
+});
+
+describe("computeTierBlock", () => {
+  it("flags refined items when the repo tier cannot create PRs", () => {
+    expect(computeTierBlock("refined", "advisory")).toEqual({
+      blockedByTier: "advisory",
+      requiredTier: "pr",
+    });
+  });
+
+  it("does not flag items when the repo tier satisfies the category action", () => {
+    expect(computeTierBlock("refined", "pr")).toBeNull();
+    expect(computeTierBlock("auto-mergeable", "automerge")).toBeNull();
+  });
+
+  it("does not flag categories that only need advisory tier", () => {
+    expect(computeTierBlock("needs-refinement", "advisory")).toBeNull();
+  });
+
+  it("requires automerge tier for auto-mergeable items", () => {
+    expect(computeTierBlock("auto-mergeable", "pr")).toEqual({
+      blockedByTier: "pr",
+      requiredTier: "automerge",
+    });
   });
 });

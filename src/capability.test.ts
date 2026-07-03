@@ -10,7 +10,7 @@ vi.mock("./config.js", () => ({
   AUTONOMY_MAP: { "acme/advisory-repo": "advisory", "acme/merge-repo": "automerge" },
 }));
 
-import { can, assertCapability, fullNameAutonomy, AutonomyError, type Action } from "./capability.js";
+import { can, assertCapability, fullNameAutonomy, tierSatisfies, AutonomyError, type Action } from "./capability.js";
 
 const repo = (tier?: string): import("./config.js").Repo => {
   const r = { owner: "acme", name: "r", fullName: "acme/r", defaultBranch: "main" };
@@ -40,6 +40,23 @@ describe("can", () => {
   for (const [tier, action, expected] of cases) {
     it(`${tier} ${expected ? "can" : "cannot"} ${action}`, () => {
       expect(can(repo(tier), action)).toBe(expected);
+    });
+  }
+});
+
+describe("tierSatisfies", () => {
+  const cases: Array<[string, Action, boolean]> = [
+    ["advisory", "comment", true],
+    ["advisory", "createPR", false],
+    ["issues", "createIssue", true],
+    ["issues", "push", false],
+    ["pr", "push", true],
+    ["pr", "merge", false],
+    ["automerge", "merge", true],
+  ];
+  for (const [tier, action, expected] of cases) {
+    it(`${tier} ${expected ? "satisfies" : "does not satisfy"} ${action}`, () => {
+      expect(tierSatisfies(tier as import("./policy.js").Autonomy, action)).toBe(expected);
     });
   }
 });
