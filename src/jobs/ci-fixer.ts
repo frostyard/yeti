@@ -222,6 +222,7 @@ async function fixCI(repo: Repo, pr: gh.PR, failLog: string): Promise<void> {
   try {
     wtPath = await claude.createWorktreeFromBranch(repo, pr.headRefName, "ci-fixer");
     db.updateTaskWorktree(taskId, wtPath, pr.headRefName);
+    const preSha = await claude.getHeadSha(wtPath);
 
     const prompt = buildFixPrompt(repoAutonomy(repo), fullName, pr, failLog);
 
@@ -231,6 +232,8 @@ async function fixCI(repo: Repo, pr: gh.PR, failLog: string): Promise<void> {
 
     if (await claude.hasNewCommits(wtPath, pr.headRefName) && await claude.hasTreeDiff(wtPath, pr.headRefName)) {
       await claude.pushBranch(wtPath, pr.headRefName, fullName);
+      const newShas = await claude.getNewCommitShas(wtPath, preSha);
+      db.recordTaskCommits(taskId, newShas);
       try {
         const description = await claude.regeneratePRDescription(wtPath, pr.baseRefName, pr, aiOptions);
         await gh.updatePRBody(fullName, pr.number, description);
@@ -299,13 +302,13 @@ async function fileUnrelatedIssue(
   }
 }
 
-export function buildRevertPrompt(autonomy: Autonomy, pr: gh.PR, changedFiles: string[], gitLog: string): string {
+export function buildRevertPrompt(autonomy: Autonomy, pr: gh.PR, changedFiles: string[], shas: string[]): string {
   return renderPolicy("ci-fixer.revert", autonomy, {
     PR_NUMBER: String(pr.number),
     PR_TITLE: pr.title,
     HEAD_REF: pr.headRefName,
     CHANGED_FILES: changedFiles.map((f) => `- ${f}`).join("\n"),
-    GIT_LOG: gitLog,
+    SHAS: shas.map((sha) => `- ${sha}`).join("\n"),
   });
 }
 
@@ -328,15 +331,39 @@ async function revertPreviousUnrelatedFixes(
     wtPath = await claude.createWorktreeFromBranch(repo, pr.headRefName, "ci-fixer-revert");
     db.updateTaskWorktree(taskId, wtPath, pr.headRefName);
 
-    const gitLog = await claude.git(
-      ["log", "--oneline", `origin/${pr.baseRefName}..HEAD`],
-      wtPath,
-    );
+    const recorded = db.getCiFixerFixCommitShas(fullName, pr.number);
+    if (recorded.length === 0) {
+      db.recordTaskComplete(taskId);
+      return;
+    }
 
-    const prompt = buildRevertPrompt(repoAutonomy(repo), pr, changedFiles, gitLog);
+    const recordedSet = new Set(recorded);
+    const branchOrder = await claude.commitsOnBranch(wtPath, pr.baseRefName);
+    const alreadyReverted = new Set(await claude.getRevertedShas(wtPath, pr.baseRefName));
+    const toRevert = branchOrder.filter((sha) => recordedSet.has(sha) && !alreadyReverted.has(sha));
 
-    const aiOptions = JOB_AI["ci-fixer"];
-    await claude.resolveEnqueue(aiOptions)(() => claude.runAI(prompt, wtPath!, aiOptions), gh.hasPriorityLabel(pr.labels));
+    if (toRevert.length === 0) {
+      db.recordTaskComplete(taskId);
+      return;
+    }
+
+    const startSha = await claude.getHeadSha(wtPath);
+    let conflicted = false;
+    for (const sha of toRevert) {
+      const { clean } = await claude.revertCommit(wtPath, sha);
+      if (!clean) {
+        await claude.abortRevert(wtPath);
+        conflicted = true;
+        break;
+      }
+    }
+
+    if (conflicted) {
+      await claude.resetHard(wtPath, startSha);
+      const prompt = buildRevertPrompt(repoAutonomy(repo), pr, changedFiles, toRevert);
+      const aiOptions = JOB_AI["ci-fixer"];
+      await claude.resolveEnqueue(aiOptions)(() => claude.runAI(prompt, wtPath!, aiOptions), gh.hasPriorityLabel(pr.labels));
+    }
 
     if (await claude.hasNewCommits(wtPath, pr.headRefName) && await claude.hasTreeDiff(wtPath, pr.headRefName)) {
       await claude.pushBranch(wtPath, pr.headRefName, fullName);

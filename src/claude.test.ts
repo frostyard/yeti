@@ -45,7 +45,7 @@ vi.mock("node:fs", () => ({
   },
 }));
 
-import { enqueue, queueStatus, randomSuffix, datestamp, hasNewCommits, hasTreeDiff, generatePRDescription, generateDocsPRDescription, regeneratePRDescription, cancelCurrentTask, cancelQueuedTasks, createWorktree, createWorktreeFromBranch, pushBranch, deleteRemoteBranch, ensureClone, ClaudeTimeoutError, runAI, copilotQueueStatus, enqueueCopilot, codexQueueStatus, enqueueCodex, AiTimeoutError, resolveEnqueue, scrubWorktreePaths, findZeroWorkerJobs, warnZeroWorkerJobs } from "./claude.js";
+import { enqueue, queueStatus, randomSuffix, datestamp, hasNewCommits, hasTreeDiff, getNewCommitShas, commitsOnBranch, getRevertedShas, revertCommit, abortRevert, resetHard, generatePRDescription, generateDocsPRDescription, regeneratePRDescription, cancelCurrentTask, cancelQueuedTasks, createWorktree, createWorktreeFromBranch, pushBranch, deleteRemoteBranch, ensureClone, ClaudeTimeoutError, runAI, copilotQueueStatus, enqueueCopilot, codexQueueStatus, enqueueCodex, AiTimeoutError, resolveEnqueue, scrubWorktreePaths, findZeroWorkerJobs, warnZeroWorkerJobs } from "./claude.js";
 import { ShutdownError } from "./shutdown.js";
 import * as shutdown from "./shutdown.js";
 import * as capability from "./capability.js";
@@ -302,6 +302,86 @@ describe("hasNewCommits", () => {
 
     const result = await hasNewCommits("/tmp/wt", "main");
     expect(result).toBe(false);
+  });
+});
+
+describe("ci-fixer git helpers", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("getNewCommitShas returns rev-list SHAs after the starting SHA", async () => {
+    mockExecFile.mockImplementation((_cmd, args: any, _opts: any, cb: any) => {
+      expect(args).toEqual(["rev-list", "base-sha..HEAD"]);
+      cb(null, "sha2\nsha1\n", "");
+      return undefined as any;
+    });
+
+    await expect(getNewCommitShas("/tmp/wt", "base-sha")).resolves.toEqual(["sha2", "sha1"]);
+  });
+
+  it("commitsOnBranch returns branch SHAs newest first", async () => {
+    mockExecFile.mockImplementation((_cmd, args: any, _opts: any, cb: any) => {
+      expect(args).toEqual(["rev-list", "origin/main..HEAD"]);
+      cb(null, "sha3\nsha2\n", "");
+      return undefined as any;
+    });
+
+    await expect(commitsOnBranch("/tmp/wt", "main")).resolves.toEqual(["sha3", "sha2"]);
+  });
+
+  it("getRevertedShas parses git revert commit bodies", async () => {
+    const sha1 = "a".repeat(40);
+    const sha2 = "b".repeat(40);
+    mockExecFile.mockImplementation((_cmd, args: any, _opts: any, cb: any) => {
+      expect(args).toEqual(["log", "origin/main..HEAD", "--format=%b"]);
+      cb(null, `This reverts commit ${sha1}.\n\nother text\nThis reverts commit ${sha2}.\n`, "");
+      return undefined as any;
+    });
+
+    await expect(getRevertedShas("/tmp/wt", "main")).resolves.toEqual([sha1, sha2]);
+  });
+
+  it("revertCommit uses an explicit Yeti git identity and reports clean success", async () => {
+    const calls: string[][] = [];
+    mockExecFile.mockImplementation((_cmd, args: any, _opts: any, cb: any) => {
+      calls.push([...args]);
+      cb(null, "", "");
+      return undefined as any;
+    });
+
+    await expect(revertCommit("/tmp/wt", "abc123")).resolves.toEqual({ clean: true });
+    expect(calls[0]).toEqual([
+      "-c", "user.email=yeti@users.noreply.github.com",
+      "-c", "user.name=Yeti",
+      "revert", "abc123", "--no-edit",
+    ]);
+  });
+
+  it("revertCommit reports clean false on non-zero git exit", async () => {
+    mockExecFile.mockImplementation((_cmd, _args: any, _opts: any, cb: any) => {
+      cb(Object.assign(new Error("conflict"), { code: 1 }), "", "CONFLICT");
+      return undefined as any;
+    });
+
+    await expect(revertCommit("/tmp/wt", "abc123")).resolves.toEqual({ clean: false });
+  });
+
+  it("abortRevert and resetHard run their exact git commands", async () => {
+    const calls: string[][] = [];
+    mockExecFile.mockImplementation((_cmd, args: any, _opts: any, cb: any) => {
+      calls.push([...args]);
+      cb(null, "", "");
+      return undefined as any;
+    });
+
+    await abortRevert("/tmp/wt");
+    await resetHard("/tmp/wt", "start-sha");
+
+    expect(calls).toEqual([
+      ["revert", "--abort"],
+      ["reset", "--hard", "start-sha"],
+    ]);
   });
 });
 

@@ -37,6 +37,13 @@ export function initDb(): void {
   }
   db.exec(`CREATE INDEX IF NOT EXISTS idx_tasks_run_id ON tasks(run_id)`);
 
+  // Migration: record commit SHAs produced by tasks that push commits.
+  try {
+    db.exec(`ALTER TABLE tasks ADD COLUMN commit_shas TEXT`);
+  } catch {
+    // Column already exists — safe to ignore
+  }
+
   db.exec(`
     CREATE TABLE IF NOT EXISTS job_runs (
       id           INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -101,6 +108,7 @@ export interface Task {
   worktree_path: string | null;
   branch_name: string | null;
   run_id: string | null;
+  commit_shas: string | null;
   status: string;
   error: string | null;
   started_at: string;
@@ -186,6 +194,13 @@ export function recordTaskFailed(taskId: number, error: string): void {
       `UPDATE tasks SET status = 'failed', error = ?, completed_at = datetime('now') WHERE id = ?`,
     )
     .run(error, taskId);
+}
+
+export function recordTaskCommits(taskId: number, shas: string[]): void {
+  if (shas.length === 0) return;
+  getDb()
+    .prepare(`UPDATE tasks SET commit_shas = ? WHERE id = ?`)
+    .run(shas.join("\n"), taskId);
 }
 
 export function getOrphanedTasks(): Task[] {
@@ -434,6 +449,22 @@ export function hasPreviousCiFixerTasks(repo: string, prNumber: number): boolean
     )
     .get(repo, prNumber);
   return row !== undefined;
+}
+
+export function getCiFixerFixCommitShas(repo: string, prNumber: number): string[] {
+  const rows = getDb()
+    .prepare(
+      `SELECT commit_shas FROM tasks
+       WHERE job_name = 'ci-fixer'
+         AND repo = ?
+         AND item_number = ?
+         AND status = 'completed'
+         AND commit_shas IS NOT NULL
+       ORDER BY id DESC`,
+    )
+    .all(repo, prNumber) as Array<{ commit_shas: string | null }>;
+
+  return rows.flatMap((row) => row.commit_shas?.split("\n").filter(Boolean) ?? []);
 }
 
 export function getRecentTasksForItem(

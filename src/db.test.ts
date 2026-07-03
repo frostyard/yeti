@@ -18,8 +18,10 @@ import {
   updateTaskWorktree,
   recordTaskComplete,
   recordTaskFailed,
+  recordTaskCommits,
   getOrphanedTasks,
   getRunningTasks,
+  getCiFixerFixCommitShas,
   setRunIdProvider,
   getTasksByRunId,
   getWorkItemsForRuns,
@@ -103,6 +105,62 @@ describe("db", () => {
 
     const orphaned = getOrphanedTasks();
     expect(orphaned).toHaveLength(0);
+  });
+
+  it("recordTaskCommits stores newline-separated commit SHAs on the task", () => {
+    const id = recordTaskStart("ci-fixer", "org/repo", 42, null);
+
+    recordTaskCommits(id, ["sha-one", "sha-two"]);
+
+    const task = _rawDb().prepare("SELECT * FROM tasks WHERE id = ?").get(id) as Task;
+    expect(task.commit_shas).toBe("sha-one\nsha-two");
+  });
+
+  it("recordTaskCommits leaves commit_shas null for an empty SHA list", () => {
+    const id = recordTaskStart("ci-fixer", "org/repo", 42, null);
+
+    recordTaskCommits(id, []);
+
+    const task = _rawDb().prepare("SELECT * FROM tasks WHERE id = ?").get(id) as Task;
+    expect(task.commit_shas).toBeNull();
+  });
+
+  it("getCiFixerFixCommitShas returns completed plain ci-fixer task SHAs newest first", () => {
+    const oldFix = recordTaskStart("ci-fixer", "org/repo", 42, null);
+    recordTaskCommits(oldFix, ["old-a", "old-b"]);
+    recordTaskComplete(oldFix);
+
+    const mergeConflict = recordTaskStart("ci-fixer:merge-conflict", "org/repo", 42, null);
+    recordTaskCommits(mergeConflict, ["merge-a"]);
+    recordTaskComplete(mergeConflict);
+
+    const revertTask = recordTaskStart("ci-fixer:revert", "org/repo", 42, null);
+    recordTaskCommits(revertTask, ["revert-a"]);
+    recordTaskComplete(revertTask);
+
+    const otherPr = recordTaskStart("ci-fixer", "org/repo", 99, null);
+    recordTaskCommits(otherPr, ["other-pr"]);
+    recordTaskComplete(otherPr);
+
+    const otherRepo = recordTaskStart("ci-fixer", "org/other", 42, null);
+    recordTaskCommits(otherRepo, ["other-repo"]);
+    recordTaskComplete(otherRepo);
+
+    const running = recordTaskStart("ci-fixer", "org/repo", 42, null);
+    recordTaskCommits(running, ["running-a"]);
+
+    const failed = recordTaskStart("ci-fixer", "org/repo", 42, null);
+    recordTaskCommits(failed, ["failed-a"]);
+    recordTaskFailed(failed, "boom");
+
+    const backfill = recordTaskStart("ci-fixer", "org/repo", 42, null);
+    recordTaskComplete(backfill);
+
+    const newestFix = recordTaskStart("ci-fixer", "org/repo", 42, null);
+    recordTaskCommits(newestFix, ["new-a"]);
+    recordTaskComplete(newestFix);
+
+    expect(getCiFixerFixCommitShas("org/repo", 42)).toEqual(["new-a", "old-a", "old-b"]);
   });
 
   it("getRecentTasksForItem returns matching tasks newest first and respects limit", () => {

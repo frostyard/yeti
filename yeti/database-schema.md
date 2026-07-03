@@ -21,6 +21,7 @@ at startup) and operational visibility.
 | `worktree_path` | TEXT | nullable | Filesystem path to the task's worktree |
 | `branch_name` | TEXT | nullable | Git branch name used by this task |
 | `run_id` | TEXT | nullable | UUID of the parent job run (links to `job_runs.run_id`) |
+| `commit_shas` | TEXT | nullable | Newline-separated full commit SHAs produced by the task, used by ci-fixer to deterministically revert its own prior fixes |
 | `status` | TEXT | NOT NULL, default `'running'` | One of: `running`, `completed`, `failed` |
 | `error` | TEXT | nullable | Error message if status is `failed` |
 | `started_at` | TEXT | NOT NULL | ISO timestamp when task started |
@@ -41,9 +42,12 @@ at startup) and operational visibility.
 2. **Worktree created**: `updateTaskWorktree()` fills in `worktree_path` and
    `branch_name` (these are null initially because they're set after the
    worktree is created)
-3. **Complete**: `recordTaskComplete()` sets status to `completed` with
+3. **Commits pushed**: jobs that need deterministic commit tracking can call
+   `recordTaskCommits()` with the full SHAs produced by the task. `ci-fixer`
+   uses this to identify its own previous fix commits without AI inference.
+4. **Complete**: `recordTaskComplete()` sets status to `completed` with
    timestamp
-4. **Failed**: `recordTaskFailed()` sets status to `failed` with error
+5. **Failed**: `recordTaskFailed()` sets status to `failed` with error
    message and timestamp
 
 ### Crash Recovery
