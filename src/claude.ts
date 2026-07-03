@@ -120,6 +120,9 @@ export function queueStatus(): { pending: number; active: number } {
 }
 
 export function enqueue<T>(fn: () => Promise<T>, priority = false): Promise<T> {
+  if (MAX_CLAUDE_WORKERS <= 0) {
+    return Promise.reject(new Error("Claude backend is disabled (maxClaudeWorkers is 0)"));
+  }
   return claudeQueue.enqueue(fn, priority);
 }
 
@@ -153,6 +156,36 @@ export function resolveEnqueue(aiOptions?: AiOptions): typeof enqueue {
   if (aiOptions?.backend === "codex") return enqueueCodex;
   if (aiOptions?.backend === "copilot") return enqueueCopilot;
   return enqueue;
+}
+
+export function workerCountForBackend(backend: AiBackend): number {
+  switch (backend) {
+    case "copilot": return MAX_COPILOT_WORKERS;
+    case "codex": return MAX_CODEX_WORKERS;
+    default: return MAX_CLAUDE_WORKERS;
+  }
+}
+
+/** Enabled jobs whose resolved AI backend currently has 0 workers. */
+export function findZeroWorkerJobs(
+  enabledJobs: readonly string[],
+  jobAi: Readonly<Record<string, { backend?: AiBackend }>>,
+): Array<{ job: string; backend: AiBackend }> {
+  const jobs: Array<{ job: string; backend: AiBackend }> = [];
+  for (const job of enabledJobs) {
+    const backend = jobAi[job]?.backend ?? "claude";
+    if (workerCountForBackend(backend) <= 0) jobs.push({ job, backend });
+  }
+  return jobs;
+}
+
+export function warnZeroWorkerJobs(
+  enabledJobs: readonly string[],
+  jobAi: Readonly<Record<string, { backend?: AiBackend }>>,
+): void {
+  for (const { job, backend } of findZeroWorkerJobs(enabledJobs, jobAi)) {
+    log.warn(`[config] job '${job}' resolves to backend '${backend}' which has 0 workers — its AI calls will fail`);
+  }
 }
 
 // ── Git helpers ──
@@ -614,4 +647,3 @@ export function cancelCurrentTask(): boolean {
   }
   return true;
 }
-

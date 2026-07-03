@@ -45,10 +45,11 @@ vi.mock("node:fs", () => ({
   },
 }));
 
-import { enqueue, queueStatus, randomSuffix, datestamp, hasNewCommits, hasTreeDiff, generatePRDescription, generateDocsPRDescription, regeneratePRDescription, cancelCurrentTask, cancelQueuedTasks, createWorktree, createWorktreeFromBranch, pushBranch, ensureClone, ClaudeTimeoutError, runAI, copilotQueueStatus, enqueueCopilot, codexQueueStatus, enqueueCodex, AiTimeoutError, resolveEnqueue, scrubWorktreePaths } from "./claude.js";
+import { enqueue, queueStatus, randomSuffix, datestamp, hasNewCommits, hasTreeDiff, generatePRDescription, generateDocsPRDescription, regeneratePRDescription, cancelCurrentTask, cancelQueuedTasks, createWorktree, createWorktreeFromBranch, pushBranch, ensureClone, ClaudeTimeoutError, runAI, copilotQueueStatus, enqueueCopilot, codexQueueStatus, enqueueCodex, AiTimeoutError, resolveEnqueue, scrubWorktreePaths, findZeroWorkerJobs, warnZeroWorkerJobs } from "./claude.js";
 import { ShutdownError } from "./shutdown.js";
 import * as shutdown from "./shutdown.js";
 import * as capability from "./capability.js";
+import * as log from "./log.js";
 import fs from "node:fs";
 import { execFile, spawn } from "node:child_process";
 import type { ChildProcess } from "node:child_process";
@@ -180,6 +181,101 @@ describe("concurrent queue", () => {
     } finally {
       (configMod as Record<string, unknown>).MAX_CLAUDE_WORKERS = 2;
     }
+  });
+});
+
+describe("enqueue zero-worker guard", () => {
+  it("rejects claude enqueue immediately when maxClaudeWorkers is 0", async () => {
+    const configMod = await import("./config.js");
+    (configMod as Record<string, unknown>).MAX_CLAUDE_WORKERS = 0;
+    try {
+      await expect(enqueue(() => Promise.resolve("x"))).rejects.toThrow(
+        "Claude backend is disabled (maxClaudeWorkers is 0)",
+      );
+    } finally {
+      (configMod as Record<string, unknown>).MAX_CLAUDE_WORKERS = 2;
+    }
+  });
+
+  it("accepts claude enqueue after maxClaudeWorkers is raised", async () => {
+    const configMod = await import("./config.js");
+    (configMod as Record<string, unknown>).MAX_CLAUDE_WORKERS = 0;
+    try {
+      await expect(enqueue(() => Promise.resolve("nope"))).rejects.toThrow(
+        "Claude backend is disabled",
+      );
+
+      (configMod as Record<string, unknown>).MAX_CLAUDE_WORKERS = 1;
+      await expect(enqueue(() => Promise.resolve("ok"))).resolves.toBe("ok");
+    } finally {
+      (configMod as Record<string, unknown>).MAX_CLAUDE_WORKERS = 2;
+    }
+  });
+});
+
+describe("zero-worker job warnings", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  afterEach(async () => {
+    const configMod = await import("./config.js");
+    (configMod as Record<string, unknown>).MAX_CLAUDE_WORKERS = 2;
+    (configMod as Record<string, unknown>).MAX_COPILOT_WORKERS = 1;
+    (configMod as Record<string, unknown>).MAX_CODEX_WORKERS = 1;
+  });
+
+  it("finds enabled jobs that default to a zero-worker claude backend", async () => {
+    const configMod = await import("./config.js");
+    (configMod as Record<string, unknown>).MAX_CLAUDE_WORKERS = 0;
+
+    expect(findZeroWorkerJobs(["learning-consolidator"], {})).toEqual([
+      { job: "learning-consolidator", backend: "claude" },
+    ]);
+  });
+
+  it("is quiet when the resolved backend has workers", () => {
+    expect(findZeroWorkerJobs(["a"], {})).toEqual([]);
+    expect(findZeroWorkerJobs(["x"], { x: { backend: "codex" } })).toEqual([]);
+  });
+
+  it("finds enabled jobs whose backend override has zero workers", async () => {
+    const configMod = await import("./config.js");
+    (configMod as Record<string, unknown>).MAX_CODEX_WORKERS = 0;
+
+    expect(findZeroWorkerJobs(["x"], { x: { backend: "codex" } })).toEqual([
+      { job: "x", backend: "codex" },
+    ]);
+  });
+
+  it("warns for enabled jobs that resolve to a zero-worker backend", async () => {
+    const configMod = await import("./config.js");
+    (configMod as Record<string, unknown>).MAX_CLAUDE_WORKERS = 0;
+
+    warnZeroWorkerJobs(["learning-consolidator"], {});
+
+    expect(log.warn).toHaveBeenCalledOnce();
+    expect(log.warn).toHaveBeenCalledWith(
+      "[config] job 'learning-consolidator' resolves to backend 'claude' which has 0 workers — its AI calls will fail",
+    );
+  });
+
+  it("warns for backend overrides that resolve to zero workers", async () => {
+    const configMod = await import("./config.js");
+    (configMod as Record<string, unknown>).MAX_COPILOT_WORKERS = 0;
+
+    warnZeroWorkerJobs(["x"], { x: { backend: "copilot" } });
+
+    expect(log.warn).toHaveBeenCalledOnce();
+    expect(log.warn).toHaveBeenCalledWith(
+      "[config] job 'x' resolves to backend 'copilot' which has 0 workers — its AI calls will fail",
+    );
+  });
+
+  it("does not warn when enabled jobs resolve to backends with workers", () => {
+    warnZeroWorkerJobs(["a", "b"], {});
+
+    expect(log.warn).not.toHaveBeenCalled();
   });
 });
 
@@ -966,9 +1062,13 @@ describe("pushBranch", () => {
 describe("cancelQueuedTasks", () => {
   it("rejects all pending items in the queue", async () => {
     const configMod = await import("./config.js");
-    (configMod as Record<string, unknown>).MAX_CLAUDE_WORKERS = 0;
+    (configMod as Record<string, unknown>).MAX_CLAUDE_WORKERS = 1;
     try {
-      // With MAX_CLAUDE_WORKERS=0, tasks stay queued (never start)
+      let releaseBlocker: () => void;
+      const blocker = new Promise<void>((resolve) => { releaseBlocker = resolve; });
+      const p0 = enqueue(async () => { await blocker; return "blocker"; });
+
+      // With the only worker occupied, these tasks stay queued.
       const p1 = enqueue(() => Promise.resolve("a"));
       const p2 = enqueue(() => Promise.resolve("b"));
 
@@ -978,6 +1078,9 @@ describe("cancelQueuedTasks", () => {
       await expect(p1).rejects.toBeInstanceOf(ShutdownError);
       await expect(p2).rejects.toThrow("Shutting down — task cancelled");
       await expect(p2).rejects.toBeInstanceOf(ShutdownError);
+
+      releaseBlocker!();
+      await expect(p0).resolves.toBe("blocker");
     } finally {
       (configMod as Record<string, unknown>).MAX_CLAUDE_WORKERS = 2;
     }
