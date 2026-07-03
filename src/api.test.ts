@@ -1,4 +1,5 @@
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it, beforeEach, vi } from "vitest";
+import type http from "node:http";
 
 vi.mock("./claude.js", () => ({
   queueStatus: vi.fn(),
@@ -8,6 +9,7 @@ vi.mock("./claude.js", () => ({
 }));
 
 vi.mock("./config.js", () => ({
+  AUTH_TOKEN: "test-token",
   LOG_LEVELS: ["debug", "info", "warn", "error"],
   getConfigForDisplay: vi.fn(),
   getEnvOverrides: vi.fn(),
@@ -77,7 +79,19 @@ vi.mock("./sysstats.js", () => ({
   getSystemStats: vi.fn(),
 }));
 
-import { buildConfigUpdate, computeTierBlock } from "./api.js";
+const updateCheckMocks = vi.hoisted(() => ({
+  requestUpdateCheck: vi.fn(),
+}));
+
+vi.mock("./update-check.js", () => ({
+  requestUpdateCheck: updateCheckMocks.requestUpdateCheck,
+}));
+
+import { buildConfigUpdate, computeTierBlock, handleApi } from "./api.js";
+
+beforeEach(() => {
+  vi.clearAllMocks();
+});
 
 describe("buildConfigUpdate autonomy fields", () => {
   it("accepts valid defaultAutonomy and autonomy entries", () => {
@@ -145,3 +159,56 @@ describe("computeTierBlock", () => {
     });
   });
 });
+
+describe("POST /api/update/check", () => {
+  it("requires auth before requesting an update check", async () => {
+    const { req, res, result } = apiHarness("POST", "/api/update/check");
+
+    await handleApi(req, res, {} as never, [], "2026-01-01T00:00:00.000Z");
+
+    expect(result.status).toBe(401);
+    expect(JSON.parse(result.body)).toEqual({ error: "unauthorized" });
+    expect(updateCheckMocks.requestUpdateCheck).not.toHaveBeenCalled();
+  });
+
+  it("touches the sentinel for an authenticated request", async () => {
+    const { req, res, result } = apiHarness("POST", "/api/update/check", {
+      authorization: "Bearer test-token",
+    });
+
+    await handleApi(req, res, {} as never, [], "2026-01-01T00:00:00.000Z");
+
+    expect(result.status).toBe(200);
+    expect(JSON.parse(result.body)).toEqual({ result: "requested" });
+    expect(updateCheckMocks.requestUpdateCheck).toHaveBeenCalledTimes(1);
+  });
+});
+
+function apiHarness(method: string, url: string, headers: Record<string, string> = {}) {
+  const req = {
+    method,
+    url,
+    headers,
+    socket: {},
+  } as http.IncomingMessage;
+
+  const result = {
+    status: 0,
+    headers: undefined as http.OutgoingHttpHeaders | undefined,
+    body: "",
+  };
+
+  const res = {
+    writeHead(status: number, headers?: http.OutgoingHttpHeaders) {
+      result.status = status;
+      result.headers = headers;
+      return this;
+    },
+    end(chunk?: unknown) {
+      result.body = chunk === undefined ? "" : String(chunk);
+      return this;
+    },
+  } as http.ServerResponse;
+
+  return { req, res, result };
+}

@@ -70,7 +70,7 @@ The cold reality: most of the time you spent on an issue was not making decision
 - **Multi-backend AI** --- Route different jobs to Claude, Copilot, or Codex with per-job model overrides
 - **Priority queue** --- Mark issues as `Priority` to move them to the front of every queue
 - **Live configuration** --- Most settings reload without restart. Pause jobs, skip items, adjust intervals from the dashboard.
-- **Auto-updates** --- A systemd timer checks for new releases every 60 seconds, downloads them, and restarts with health check and automatic rollback
+- **Auto-updates** --- A systemd timer checks for new releases hourly, with a dashboard button for immediate checks, then downloads and restarts with health check and automatic rollback
 - **Crash recovery** --- On startup, Yeti detects orphaned tasks from prior crashes, cleans up worktrees, and resumes cleanly
 
 ## Get started

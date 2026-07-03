@@ -3,7 +3,7 @@ Description=Yeti auto-updater timer
 
 [Timer]
 OnBootSec=30
-OnUnitActiveSec=60
+OnUnitActiveSec=3600
 
 [Install]
 WantedBy=timers.target

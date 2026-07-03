@@ -96,7 +96,7 @@ Tests are co-located (`*.test.ts` next to source). Heavy mocking of external bou
 ## Deployment
 
 - Deployed to `/opt/yeti` via systemd (`deploy/yeti.service`)
-- Auto-updates via `yeti-updater.timer` checking GitHub releases every 60s
+- Auto-updates via `yeti-updater.timer` checking GitHub releases hourly (`OnUnitActiveSec=3600`); the dashboard can trigger an immediate check by writing `~/.yeti/update-check-requested`, watched by the root `yeti-updater-trigger.path` unit.
 - Version tags: `v<YYYY-MM-DD>.<N>` — release workflow on push to `main`
 - Release tarball: `dist/` + `deploy/` + `node_modules/`
 - Health check: `GET /health` on port 9384 — returns `{status, version, activeTasks, updatePending}`; `activeTasks` is the deploy drain signal.

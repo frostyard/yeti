@@ -163,7 +163,7 @@ Releases are automatic. When changes land on `main`:
 1. The release workflow creates a version tag: `v<YYYY-MM-DD>.<N>`
 2. A release tarball is built: `dist/` + `deploy/` + `node_modules/`
 3. The tarball is published as a GitHub release
-4. Deployed instances pick up the release via the auto-updater within 60 seconds
+4. Deployed instances pick up the release via the hourly auto-updater, or sooner when the dashboard **Check for updates** button is used
 
 ---
 

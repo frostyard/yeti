@@ -3,6 +3,7 @@ import http from "node:http";
 import { EventEmitter } from "node:events";
 
 vi.mock("./config.js", () => ({
+  WORK_DIR: "/tmp/yeti",
   SERVER_PORT: 0,
   AUTH_TOKEN: "",
   WEBHOOK_SECRET: "",

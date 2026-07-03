@@ -40,6 +40,9 @@ sed "s/User=yeti/User=$USER_NAME/;s/Group=yeti/Group=$USER_NAME/;s|/home/yeti/|/
   sudo tee /etc/systemd/system/yeti.service >/dev/null
 sudo cp "$INSTALL_DIR/deploy/yeti-updater.service" /etc/systemd/system/
 sudo cp "$INSTALL_DIR/deploy/yeti-updater.timer" /etc/systemd/system/
+sed "s|/home/yeti/|/home/$USER_NAME/|" \
+  "$INSTALL_DIR/deploy/yeti-updater-trigger.path" | \
+  sudo tee /etc/systemd/system/yeti-updater-trigger.path >/dev/null
 chmod +x "$INSTALL_DIR/deploy/deploy.sh"
 
 REPO_OWNER="${REPO%%/*}"
@@ -160,6 +163,7 @@ log "Enabling and starting services..."
 sudo systemctl daemon-reload
 sudo systemctl enable --now yeti
 sudo systemctl enable --now yeti-updater.timer
+sudo systemctl enable --now yeti-updater-trigger.path
 
 log "Done! Yeti is running as $USER_NAME"
 log "  Status:  sudo systemctl status yeti"

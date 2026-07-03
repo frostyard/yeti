@@ -30,6 +30,14 @@ export function useJobActions() {
   return { trigger, pause, cancel };
 }
 
+export function useCheckForUpdates() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: api.checkForUpdates,
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["overview"] }),
+  });
+}
+
 export function useQueueActions() {
   const qc = useQueryClient();
   const invalidate = () => qc.invalidateQueries({ queryKey: ["queue"] });

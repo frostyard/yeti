@@ -64,7 +64,9 @@ The process handles `SIGTERM` gracefully, so systemd can stop it cleanly.
 
 ### Auto-updates
 
-The `yeti-updater.timer` checks for new GitHub releases every 60 seconds. When a new release is found, `deploy/deploy.sh` downloads the tarball, swaps the `dist/` directory, restarts the service, and verifies health via `http://localhost:9384/health`. If the health check fails, it automatically rolls back to the previous version.
+The `yeti-updater.timer` checks for new GitHub releases every hour. When a new release is found, `deploy/deploy.sh` downloads the tarball, swaps the `dist/` directory, restarts the service, and verifies health via `http://localhost:9384/health`. If the health check fails, it automatically rolls back to the previous version.
+
+The dashboard also has a **Check for updates** button. It writes `~/.yeti/update-check-requested`; the root-owned `yeti-updater-trigger.path` unit watches that sentinel and starts `yeti-updater.service` without granting the daemon sudo or polkit privileges.
 
 ## Upgrading
 

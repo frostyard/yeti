@@ -17,6 +17,10 @@ export interface Session {
   oauthLoginUrl: string;
 }
 
+export interface UpdateCheckResponse {
+  result: string;
+}
+
 export interface QueueDepth { pending: number; active: number; }
 
 export interface RunningTask {
