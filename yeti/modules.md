@@ -4,7 +4,7 @@ Detailed descriptions of each core module in `src/`.
 
 **`main.ts`** — Wires everything together. Initializes the SQLite database,
 recovers orphaned tasks from a previous crash (cleans up dangling worktrees,
-marks tasks failed), prunes old logs, registers all 13 jobs with the scheduler
+marks tasks failed), prunes old logs, registers all 14 jobs with the scheduler
 (interval jobs staggered by 2 seconds to prevent thundering herd), starts the
 HTTP server, launches the **queue label scanner** (an infrastructure timer that
 runs `scanQueueLabels()` on a configurable interval to keep the dashboard queue
@@ -27,6 +27,16 @@ descriptions for all six labels), `LEGACY_LABELS` (set of old labels cleaned up 
 and connection strings. `WORK_DIR` is always `~/.yeti`. Jobs must be listed in
 `ENABLED_JOBS` (the `enabledJobs` config field) to be registered with the
 scheduler — an empty or missing `enabledJobs` means no jobs start.
+Autonomy is configured with `defaultAutonomy` plus a per-repo `autonomy`
+map keyed by full repo name (`owner/repo`). `repoAutonomy(repo)` resolves
+`AUTONOMY_MAP[repo.fullName] ?? DEFAULT_AUTONOMY`; this must stay identical
+to `fullNameAutonomy()` in `capability.ts`, which exists for call sites that
+only have a string full name. `writeConfig()` deep-merges only `intervals`,
+`schedules`, and `jobAi`; `autonomy` is intentionally replaced wholesale so
+dashboard saves can remove overrides by writing an empty map. Keep config
+diagnostics on `console.warn` / `console.error` or in external listeners:
+`config.ts` must not import `log.ts` because `log.ts` imports config live
+bindings.
 `watchConfig()` installs a debounced `fs.watch` on the `CONFIG_PATH` directory
 and filters for `config.json`, so direct edits and atomic config-management
 pushes trigger `reloadConfig()` and `onConfigChange()` listeners without a
@@ -91,6 +101,17 @@ four states: `"passing"`, `"failing"`, `"pending"`, or `"none"` (no checks
 exist at all — used by auto-merger to distinguish doc-only PRs that skip CI
 from PRs with in-progress checks).
 
+**`capability.ts`** — Central autonomy enforcement. Exports the action model
+(`comment`, `label`, `reaction`, `createIssue`, `push`, `createPR`, `merge`),
+the `ACTION_MIN_TIER` map, `tierSatisfies()`, `can(repo, action)`, and
+`assertCapability(fullName, action)`. The tier order is
+`advisory < issues < pr < automerge`. `can()` is used as a pre-flight gate
+when a job has a `Repo` object; `assertCapability()` is a lower-level firewall
+for call sites that only know a full repo name. `AutonomyError` is expected
+control flow and is suppressed by the error reporter. Tests that mock
+`config.ts` for modules importing `capability.ts` must provide the full
+autonomy surface: `repoAutonomy`, `AUTONOMY_MAP`, and `DEFAULT_AUTONOMY`.
+
 **`github-app.ts`** — Optional GitHub App authentication. When configured
 (via `githubAppId`, `githubAppInstallationId`, `githubAppPrivateKeyPath`),
 gives Yeti a separate bot identity so humans can approve its PRs under branch
@@ -152,12 +173,26 @@ main-branch movement. Each Claude process has a configurable **timeout**
 and stdout byte count for observability. Timed-out processes throw
 `ClaudeTimeoutError` (carries diagnostic fields: `lastOutput`, `lastStderr`,
 `outputBytes`, `cwd`) which the error reporter includes in GitHub issue reports.
+Backends with zero workers are disabled rather than pending forever:
+`enqueue()` rejects when `MAX_CLAUDE_WORKERS <= 0`, and `enqueueCodex()` does
+the same for Codex. `findZeroWorkerJobs()` and `warnZeroWorkerJobs()` detect
+enabled jobs whose configured backend has no workers; `main.ts` calls the
+warning emitter at startup and on config reload. Git helpers also include
+deterministic ci-fixer support: `getNewCommitShas()`, `commitsOnBranch()`,
+`getRevertedShas()`, `revertCommit()`, `abortRevert()`, and `resetHard()`.
+Direct revert commits use inline Yeti git identity because the service user
+has no global git identity.
 
-**`db.ts`** — SQLite database at `~/.yeti/yeti.db`. Four tables: `tasks`
+**`db.ts`** — SQLite database at `~/.yeti/yeti.db`. Six tables: `tasks`
 (tracks every job invocation, linked to `job_runs` via `run_id`), `job_runs`
 (tracks scheduled job executions), `job_logs` (captures log output per run
-via `AsyncLocalStorage` context), and `notifications` (recent notification
-history for the dashboard). See [Database Schema](database-schema.md).
+via `AsyncLocalStorage` context), `notifications` (recent notification
+history for the dashboard), `job_shas` (last processed default-branch SHA per
+job/repo), and `learnings` (pending/consolidated/dismissed environment
+learnings). The `tasks.commit_shas` column records commits produced by tasks;
+ci-fixer uses `recordTaskCommits()` and `getCiFixerFixCommitShas()` to revert
+its own previous fix commits deterministically. See
+[Database Schema](database-schema.md).
 
 **`server.ts`** — Minimal `http.Server` with an embedded HTML/CSS/JS dashboard.
 Routes:
@@ -181,6 +216,8 @@ Routes:
 - `POST /queue/unskip` — Remove skip for an issue/PR
 - `POST /queue/prioritize` — Prioritize an issue/PR (processed first)
 - `POST /queue/deprioritize` — Remove priority for an issue/PR
+- `POST /api/update/check` — Touch the update-check sentinel so systemd starts
+  the updater service via `yeti-updater-trigger.path`
 - `GET /logs` — Log viewer with per-job filtering and item search
 - `GET /logs/:runId` — Individual run detail page with task list
 - `GET /logs/:runId/tail` — Live log tail (JSON, polls for new entries)
@@ -273,16 +310,18 @@ format, verdict parsing, and round counting without duplicating logic:
 - `parseVerdict(output)` — scans the AI's raw review output bottom-up for a
   `VERDICT: APPROVED` / `VERDICT: NEEDS REVISION` line (case-insensitive; the
   last matching line wins if the AI emits more than one) and returns
-  `"approved" | "needs-revision" | "missing"`. `"missing"` lets the caller log
-  a warning before falling back to treating it as needs-revision, rather than
-  silently mis-parsing.
+  `"approved" | "needs-revision" | "missing"`. This is now an advisory
+  cross-check only; plan-reviewer logs missing or disagreeing declarations but
+  routes on the computed Blocking count.
 - `countBlockingFindings(output)` — counts `- [R<n>-B<n>]` and
   `- [S<n>-R<n>-B<n>]` bullet lines (the Blocking findings list only, not
-  prior-round disposition lines), used to annotate the rendered verdict with a
-  count.
-- `renderVerdict(output)` — replaces the raw `VERDICT:` line with a bold
-  human-readable form for the comment actually posted to GitHub:
+  prior-round disposition lines). Zero Blocking findings mechanically means
+  `APPROVED`; one or more means `NEEDS REVISION`.
+- `renderVerdict(output, verdict)` — replaces or appends a bold
+  human-readable verdict for the comment actually posted to GitHub:
   `**Verdict: APPROVED**` or `**Verdict: NEEDS REVISION** (N blocking)`.
+  The caller passes the mechanically computed verdict so posted text always
+  matches routing even if the AI's `VERDICT:` line is missing or wrong.
 - `countPlanRounds(comments)` — counts completed review rounds for the
   *current* loop: Yeti review comments (`REVIEW_HEADER` + `isYetiComment()`)
   posted after the most recent non-bot human comment. Because a maintainer

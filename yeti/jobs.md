@@ -220,12 +220,14 @@ dedup live in the shared `src/review-contract.ts` module (see
   first disposition every earlier finding (resolved/not resolved/settled, or
   carried-over after a human-comment reset) before raising new ones.
 - **Verdict is always requested and always rendered**, whether or not
-  `reviewLoop` is on: the AI ends its output with `VERDICT: APPROVED` or
-  `VERDICT: NEEDS REVISION` on its own line (last such line wins if more than
-  one appears); `renderVerdict()` replaces that raw line with a bold
-  human-readable form in the posted comment — `**Verdict: APPROVED**` or
-  `**Verdict: NEEDS REVISION** (N blocking)`, counting `[R<n>-B<n>]` bullets.
-  A missing verdict line is logged and treated as needs-revision.
+  `reviewLoop` is on: the AI still ends its output with `VERDICT: APPROVED`
+  or `VERDICT: NEEDS REVISION`, but routing is computed mechanically from the
+  Blocking section. Zero counted Blocking findings means `APPROVED`; one or
+  more means `NEEDS REVISION`. The declared line is only a cross-check; a
+  missing or disagreeing declaration is logged. `renderVerdict()` replaces or
+  appends a bold human-readable verdict that always matches the computed
+  routing decision — `**Verdict: APPROVED**` or `**Verdict: NEEDS REVISION**
+  (N blocking)`.
 - Posts the review as a comment prefixed with `## Plan Review`, worktree
   paths scrubbed (`claude.scrubWorktreePaths()`), followed by the invisible
   `<!-- yeti-review-of:id:updatedAt -->` marker (not shown to humans)
