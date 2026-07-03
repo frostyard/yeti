@@ -23,8 +23,18 @@ Rules:
 
 ## Output
 
-After committing (or if you made no edits), print one line per learning you did NOT fold into a file, using its [id] from the list above:
+After committing (or if you made no edits), print exactly one protocol line for every pending learning, using its [id] from the list above.
+
+For each learning you folded into a file, print:
+
+FOLDED: <id>
+
+For each learning you did NOT fold into a file, print:
 
 DISMISSED: <id>: <one-line reason>
 
+Every pending id must appear in exactly one protocol line: either `FOLDED:` or `DISMISSED:`.
 Learnings you folded into files must NOT appear in DISMISSED lines.
+Learnings you dismissed must NOT appear in FOLDED lines.
+
+If you fold a learning into a file but forget its `FOLDED:` line, it will stay pending and may be presented again in a future run, which can produce duplicate guidance. When a future pending learning is already covered by existing policy or docs, make no edit and dismiss it as already covered.

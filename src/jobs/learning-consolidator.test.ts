@@ -46,7 +46,7 @@ vi.mock("../github.js", () => mockGh);
 vi.mock("../claude.js", () => mockClaude);
 vi.mock("../db.js", () => mockDb);
 
-import { run, parseDismissals, buildPRBody, formatLearnings } from "./learning-consolidator.js";
+import { run, parseDismissals, parseFolded, buildPRBody, formatLearnings } from "./learning-consolidator.js";
 
 const learning = (id: number, summary: string) => ({
   id, job_name: "issue-worker", repo: "test-org/app", kind: "yeti",
@@ -62,7 +62,7 @@ describe("learning-consolidator", () => {
     mockClaude.resolveEnqueue.mockReturnValue(mockClaude.enqueue);
     mockClaude.createWorktree.mockResolvedValue("/tmp/wt");
     mockClaude.removeWorktree.mockResolvedValue(undefined);
-    mockClaude.runAI.mockResolvedValue("consolidated everything");
+    mockClaude.runAI.mockResolvedValue("FOLDED: 1\nFOLDED: 2");
     mockClaude.hasNewCommits.mockResolvedValue(true);
     mockClaude.hasTreeDiff.mockResolvedValue(true);
     mockClaude.pushBranch.mockResolvedValue(undefined);
@@ -151,10 +151,51 @@ describe("learning-consolidator", () => {
   });
 
   it("dismissals from output are applied and excluded from the PR set", async () => {
-    mockClaude.runAI.mockResolvedValue("done\nDISMISSED: 2: already covered by preamble");
+    mockClaude.runAI.mockResolvedValue("FOLDED: 1\nDISMISSED: 2: already covered by preamble");
     await run([selfRepo]);
     expect(mockDb.dismissLearning).toHaveBeenCalledWith(2, "already covered by preamble");
     expect(mockDb.markLearningsConsolidated).toHaveBeenCalledWith([1], 77);
+  });
+
+  it("learning neither folded nor dismissed stays pending", async () => {
+    mockClaude.runAI.mockResolvedValue("FOLDED: 1");
+    await run([selfRepo]);
+    expect(mockDb.dismissLearning).not.toHaveBeenCalled();
+    expect(mockDb.markLearningsConsolidated).toHaveBeenCalledWith([1], 77);
+    expect(mockGh.createPR).toHaveBeenCalledWith(
+      "test-org/yeti",
+      "yeti/learnings-20260702-ab12",
+      expect.stringContaining("1 environment learning"),
+      expect.not.stringContaining("gh needs --head"),
+    );
+  });
+
+  it("no folded or dismissed lines leaves everything pending without a PR", async () => {
+    mockClaude.runAI.mockResolvedValue("did some edits");
+    await run([selfRepo]);
+    expect(mockGh.createPR).not.toHaveBeenCalled();
+    expect(mockDb.dismissLearning).not.toHaveBeenCalled();
+    expect(mockDb.markLearningsConsolidated).not.toHaveBeenCalled();
+    expect(mockDb.recordTaskComplete).toHaveBeenCalled();
+  });
+
+  it("FOLDED id not in pending is ignored", async () => {
+    mockClaude.runAI.mockResolvedValue("FOLDED: 99\nFOLDED: 1");
+    await run([selfRepo]);
+    expect(mockDb.markLearningsConsolidated).toHaveBeenCalledWith([1], 77);
+    expect(mockGh.createPR).toHaveBeenCalledWith(
+      "test-org/yeti",
+      "yeti/learnings-20260702-ab12",
+      expect.stringContaining("1 environment learning"),
+      expect.any(String),
+    );
+  });
+
+  it("id in both FOLDED and DISMISSED is dismissed, not consolidated", async () => {
+    mockClaude.runAI.mockResolvedValue("FOLDED: 1\nDISMISSED: 1: covered\nFOLDED: 2");
+    await run([selfRepo]);
+    expect(mockDb.dismissLearning).toHaveBeenCalledWith(1, "covered");
+    expect(mockDb.markLearningsConsolidated).toHaveBeenCalledWith([2], 77);
   });
 
   it("all dismissed → no PR", async () => {
@@ -177,6 +218,24 @@ describe("learning-consolidator", () => {
     await run([selfRepo]);
     expect(mockDb.recordTaskFailed).toHaveBeenCalled();
     expect(mockClaude.removeWorktree).toHaveBeenCalled();
+  });
+});
+
+describe("parseFolded", () => {
+  it("parses id lines, ignoring other text", () => {
+    expect(parseFolded("blah\nFOLDED: 3\nFOLDED: 10")).toEqual([3, 10]);
+  });
+
+  it("returns empty for output with no folded lines", () => {
+    expect(parseFolded("all dismissed")).toEqual([]);
+  });
+
+  it("parses case-insensitive FOLDED prefix", () => {
+    expect(parseFolded("folded: 3\nFolded: 5\nFOLDED: 7")).toEqual([3, 5, 7]);
+  });
+
+  it("ignores malformed lines with trailing text", () => {
+    expect(parseFolded("FOLDED: 3: reason\nFOLDED: 4")).toEqual([4]);
   });
 });
 

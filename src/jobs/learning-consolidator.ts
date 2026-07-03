@@ -24,6 +24,15 @@ export function parseDismissals(output: string): Array<{ id: number; reason: str
   return out;
 }
 
+/** Parse `FOLDED: <id>` lines from the agent's output. */
+export function parseFolded(output: string): number[] {
+  const out: number[] = [];
+  for (const m of output.matchAll(/^FOLDED:\s*(\d+)\s*$/gim)) {
+    out.push(parseInt(m[1], 10));
+  }
+  return out;
+}
+
 export function buildPRBody(
   consolidated: db.LearningRow[],
   dismissals: Array<{ id: number; reason: string }>,
@@ -82,13 +91,14 @@ export async function run(repos: Repo[]): Promise<void> {
 
     const pendingIds = new Set(pending.map((l) => l.id));
     const dismissals = parseDismissals(output).filter((d) => pendingIds.has(d.id));
+    const foldedIds = new Set(parseFolded(output).filter((id) => pendingIds.has(id)));
     for (const d of dismissals) {
       db.dismissLearning(d.id, d.reason);
       log.info(`[learning-consolidator] Dismissed learning ${d.id}: ${d.reason}`);
     }
 
     const dismissedIds = new Set(dismissals.map((d) => d.id));
-    const consolidated = pending.filter((l) => !dismissedIds.has(l.id));
+    const consolidated = pending.filter((l) => foldedIds.has(l.id) && !dismissedIds.has(l.id));
 
     if (
       consolidated.length > 0 &&
