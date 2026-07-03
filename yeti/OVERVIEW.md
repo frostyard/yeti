@@ -27,6 +27,7 @@ src/
 ├── error-reporter.ts    Deduplicating GitHub issue-based error reporter (filters ShutdownError, RateLimitError)
 ├── learnings.ts         Self-improvement loop gate (enforceLearnings), declaration parser, consolidator trigger
 ├── images.ts            Image/attachment extraction + download for issue/PR context
+├── update-check.ts      Manual dashboard-triggered update-check sentinel
 ├── version.ts           Build-time injected version string
 ├── plan-parser.ts       Parses multi-PR implementation plans into phases; exports PLAN_HEADER constant
 ├── review-contract.ts   Shared review protocol: review marker dedup, verdict parse/render, round counting (used by plan-reviewer and issue-refiner)
@@ -78,6 +79,7 @@ See [Modules](modules.md) for detailed descriptions of each module. Key relation
 
 - **`main.ts`** wires everything: DB init, crash recovery, job registration, config reload, graceful shutdown
 - **`config.ts`** loads config (env > config.json > defaults); exports `LABELS`, `INTERVALS`, `SCHEDULES`, `ENABLED_JOBS`
+- **`capability.ts`** enforces autonomy tiers (`advisory` → `issues` → `pr` → `automerge`) for comment/issue/PR/push/merge actions
 - **`scheduler.ts`** runs jobs on intervals or daily schedules with skip-if-busy semantics
 - **`github.ts`** wraps `gh` CLI with retry, rate-limit circuit breaker, TTL cache, and queue cache
 - **`github-app.ts`** optional GitHub App auth (JWT signing, installation tokens, `GH_TOKEN` injection)
@@ -90,6 +92,7 @@ See [Modules](modules.md) for detailed descriptions of each module. Key relation
 - **`error-reporter.ts`** deduplicating error reporter (GitHub issues + Discord, 30-min cooldown)
 - **`learnings.ts`** self-improvement loop gate (`enforceLearnings()`, `stripLearningsDeclaration()`) — persists environment learnings to the `learnings` table and triggers `learning-consolidator.ts`; see [Modules](modules.md) and the "Self-Improvement Loop" section below
 - **`images.ts`** extracts/downloads images and file attachments for AI context
+- **`update-check.ts`** writes the manual update-check sentinel consumed by the systemd path unit
 - **`plan-parser.ts`** parses multi-PR implementation plans into phases; exports shared `PLAN_HEADER` constant
 - **`notify.ts`** / **`discord.ts`** notification dispatch (DB + SSE + Discord) and Discord bot commands
 - **`startup-announce.ts`** announces new deployments; **`shutdown.ts`** shared shutdown flag
@@ -184,6 +187,13 @@ the `JOB_AI` config for that job, then call `runAI()` for backend-agnostic
 execution. This means any job can be switched to a different AI backend by
 setting `jobAi.<job-name>.backend` in `config.json` — no code changes needed.
 
+Backends with zero workers are treated as disabled. `enqueue()` and
+`enqueueCodex()` reject immediately when their worker count is `0`, and startup
+plus config reload log warnings for enabled jobs that resolve to any backend
+with zero workers. Tests that need a pending queue item should keep one worker
+busy with a blocking promise; setting a worker count to `0` exercises the
+disabled-backend path instead.
+
 Each process has a configurable timeout with SIGTERM/SIGKILL escalation. A
 5-minute heartbeat logs PID, elapsed time, and stdout byte count. Timed-out
 processes throw `ClaudeTimeoutError` with diagnostic fields, surfaced in error
@@ -254,33 +264,38 @@ Errors flow through two stages:
 
 ### CI-Fixer Two-Phase Design
 
-The ci-fixer uses a two-phase identify/process pattern (matching the pattern
-used by improvement-identifier and issue-refiner):
+The ci-fixer identifies all PR work first, then processes typed work items
+(`conflict`, `rerun`, `unrelated`, `fix`). Unrelated failures are grouped into
+one consolidated `[ci-unrelated]` issue per repo to avoid duplicate issue races,
+and `[ci-unrelated]` fix PRs skip classification so they do not loop on the
+same pre-existing failures. Prior ci-fixer fix commits are reverted
+deterministically from `tasks.commit_shas`; AI is only used when a clean
+in-code revert conflicts.
 
-1. **Identify**: Scans all PRs, checks merge state, CI status, and classifies
-   failures — collects typed `WorkItem` entries (a discriminated union with
-   variants: `conflict`, `rerun`, `unrelated`, `fix`)
-2. **Process**: Groups unrelated failures by repo (structural dedup — one
-   consolidated issue per repo), then processes remaining items concurrently
+### Autonomy Tiers
 
-This eliminates race conditions when multiple PRs in the same repo have
-unrelated CI failures — without the grouping, concurrent `searchIssues` +
-`createIssue` calls would produce duplicate issues.
+Each repo resolves an autonomy tier from `autonomy[owner/repo]` or
+`defaultAutonomy` (default `pr`). The tier is both a policy selector and an
+enforcement boundary:
 
-Reruns are emitted both for cancelled/startup-failure workflows and when
-failure log fetching returns empty (the `getFailedRunLog` two-tier fallback —
-CLI then REST API — both returned no output). Benign "already running" errors
-(a harmless race condition where the workflow restarted between detection and
-rerun) are caught and logged at info level rather than reported as errors.
+| Tier | Allows |
+|------|--------|
+| `advisory` | comments, labels, reactions |
+| `issues` | advisory actions plus issue creation |
+| `pr` | issues tier plus branch pushes and PR creation |
+| `automerge` | pr tier plus merging |
 
-**`[ci-unrelated]` fix PRs**: When ci-fixer processes a PR whose title
-contains `[ci-unrelated]` (i.e., a PR created by issue-worker to fix a
-`[ci-unrelated]` issue), it skips the classification step entirely and treats
-all CI failures as related. Without this guard, the classifier would see the
-pre-existing failures, classify them as "unrelated to the PR's changes", and
-the PR would stall indefinitely in a loop of filing redundant issues and
-reverting fix attempts. Errors on these PRs are posted as comments directly
-on the PR rather than creating `[yeti-error]` issues.
+Jobs perform pre-flight `can(repo, action)` checks before starting work that
+would exceed the repo's tier, and `assertCapability(fullName, action)` acts as
+a lower-level firewall. Autonomy denials are expected control flow:
+`AutonomyError` is logged and suppressed by the error reporter rather than
+opening `[yeti-error]` issues.
+
+The dashboard annotates queue items that look pending but cannot currently run
+because of autonomy. `refined` requires `createPR` (`pr` tier),
+`needs-review-addressing` requires `push` (`pr` tier), and `auto-mergeable`
+requires `merge` (`automerge` tier). Advisory-only categories are never marked
+tier-blocked.
 
 ### Image & Attachment Context
 
@@ -299,69 +314,16 @@ repository.
 
 ### Self-Improvement Loop
 
-Every AI session — not just doc-generating ones — is expected to surface two
-outputs: the work itself, and any reusable learning it discovered along the
-way. This is enforced mechanically (via `src/learnings.ts`), not left to
-prompt diligence alone, and writes back to two different places depending on
-what kind of learning it is:
+General-purpose AI jobs must end with `LEARNINGS-REPO:` and `LEARNINGS-YETI:`
+declarations. `enforceLearnings()` retries once if the declaration is missing,
+persists environment learnings to the `learnings` table, and lets
+`learning-consolidator` fold them into policies/docs. Repo learnings are
+committed into the target repo as `yeti/learnings/<slug>.md` seeds; later
+`doc-maintainer` runs fold those seeds into durable topic docs and delete them.
 
-1. **Repo learnings** (`LEARNINGS-REPO:`) — a workaround, convention, or
-   trial-and-error discovery about the *target repository* Yeti is working
-   in. The agent commits it as a `yeti/learnings/<slug>.md` file in that
-   repo's own PR (`enforceLearnings()` only verifies via a `yeti/`-pathspec
-   tree-diff that the commit actually happened — it never writes the file).
-   These seeds are picked up later by `doc-maintainer`, which folds them into
-   that repo's topic docs under `yeti/`.
-2. **Environment/yeti learnings** (`LEARNINGS-YETI:`) — friction with the
-   managed environment or its tooling itself (not the target repo). These are
-   parsed and persisted to Yeti's own `learnings` table (see
-   [Database Schema](database-schema.md)), and the `learning-consolidator`
-   job periodically folds them into `src/policies/_preamble.md`, a specific
-   job policy, or a `yeti/` doc, then opens a PR against `SELF_REPO`. Once a
-   human merges that PR and it deploys, every future agent prompt across every
-   repo includes the learning — closing the loop.
-
-The mandate to end every session with a `LEARNINGS-REPO:` / `LEARNINGS-YETI:`
-declaration lives in `src/policies/_preamble.md`, which is prepended to
-**every** rendered prompt. `enforceLearnings()` gates on the declaration being
-present (retrying once if missing) after the main `runAI()` call in the four
-jobs that do general-purpose repo work: issue-worker, ci-fixer (both its
-conflict-resolution and CI-fix paths), review-addresser, and
-improvement-identifier's implementation phase. The gate never throws —
-a learnings bug must never fail the underlying task. See the `learnings.ts`
-entry in [Modules](modules.md) for the full `enforceLearnings()` contract.
-
-**Deployment nuance**: a user-placed override at `~/.yeti/policies/_preamble.md`
-**shadows** the bundled `src/policies/_preamble.md` entirely (first-hit-wins
-across `defaultPolicyDirs()` — see `resolvePreamblePath()` in `policy.ts`),
-it does not merge with it. If an operator maintains a custom preamble
-override, the self-improvement mandate (and any future consolidator-written
-additions to the bundled preamble) must be copied into that override by hand,
-or the loop silently stops working for that instance — agents simply won't be
-asked to declare learnings, and `parseLearnings()` will never see a
-declaration to parse.
-
-### Branch Naming
-
-| Job | Pattern |
-|-----|---------|
-| issue-refiner | `yeti/plan-<N>-<hex4>` |
-| issue-worker | `yeti/issue-<N>-<hex4>` |
-| triage-yeti-errors | `yeti/investigate-error-<N>-<hex4>` |
-| doc-maintainer | `yeti/docs-<YYYYMMDD>-<hex4>` |
-| improvement-identifier | `yeti/improve-<hex4>` |
-| mkdocs-update | `yeti/mkdocs-update-<YYYYMMDD>-<hex4>` |
-| learning-consolidator | `yeti/learnings-<YYYYMMDD>-<hex4>` |
-| ci-fixer / review-addresser | Uses existing PR branch |
-
-### PR Title Conventions
-
-- `fix: resolve #N — <title>` — single-PR issue implementations
-- `fix(#N): <phase title> (X/Y)` — multi-PR issue phases
-- `refactor: <title>` — automated improvements
-- `docs: update documentation for <repo>` — doc maintenance
-- `docs: update mkdocs content for <repo>` — mkdocs updates
-- `chore(learnings): consolidate <N> environment learning(s)` — learning-consolidator
+A user override at `~/.yeti/policies/_preamble.md` shadows the bundled
+`src/policies/_preamble.md` entirely; it does not merge. Operators with a
+custom preamble must copy the self-improvement mandate into the override.
 
 ### Tree-Diff Guard
 
@@ -406,14 +368,13 @@ scheduled ticks but can still be triggered manually.
 ### Git Identity for Direct Commits
 
 All jobs normally commit via `runAI()`, which delegates to the Claude/Copilot/Codex
-CLI — these handle git identity internally. The one exception is
-`ensureClaudeMdDocBlock()` in doc-maintainer, which commits directly via
-`claude.git()`. Because the `yeti` system user has no global git config, direct
-`git commit` calls must pass inline identity flags:
+CLI — these handle git identity internally. Direct in-code git commits must
+pass inline identity flags because the `yeti` system user has no global git
+config:
 `git -c user.email=yeti@users.noreply.github.com -c user.name=Yeti commit ...`.
-The `GIT_COMMIT_CLAUDEMD` constant in `doc-maintainer.ts` centralizes this. Any
-future code path that commits directly (bypassing AI backends) needs the same
-treatment.
+`doc-maintainer` uses this for the direct `CLAUDE.md` doc-block commit, and
+ci-fixer uses the same identity for deterministic `git revert --no-edit`
+commits.
 
 ### Commit Tag
 
@@ -458,6 +419,8 @@ defaults.
 | `codexTimeoutMs` | `YETI_CODEX_TIMEOUT_MS` | `1200000` (20 min, minimum 60s) |
 | `includeForks` | `YETI_INCLUDE_FORKS` | `false` (only source repos discovered) |
 | `jobAi` | — | `{}` (per-job AI backend/model overrides — all jobs respect this) |
+| `defaultAutonomy` | — | `"pr"` (default autonomy tier for repos not listed in `autonomy`) |
+| `autonomy` | — | `{}` (per-repo `owner/repo` autonomy overrides; dashboard saves replace the whole map) |
 | `authToken` | `YETI_AUTH_TOKEN` | *(empty — auth disabled)* |
 | `githubAppClientId` | `YETI_GITHUB_APP_CLIENT_ID` | *(empty — OAuth disabled)* |
 | `githubAppClientSecret` | `YETI_GITHUB_APP_CLIENT_SECRET` | *(empty — OAuth disabled)* |
@@ -475,51 +438,24 @@ defaults.
 
 ### enabledJobs
 
-Controls which jobs are registered with the scheduler at startup.
-
-- **Field**: `enabledJobs` (string array)
-- **Default**: `[]` — no jobs run if the field is absent or empty
-- **Live-reloadable**: yes (changes take effect without restart)
-- **Available values**: `issue-worker`, `issue-refiner`, `plan-reviewer`, `ci-fixer`, `review-addresser`, `doc-maintainer`, `auto-merger`, `repo-standards`, `improvement-identifier`, `issue-auditor`, `triage-yeti-errors`, `mkdocs-update`, `prompt-evaluator`, `learning-consolidator`
-
-**Self-improvement loop is split across two independent switches**: the
-`enforceLearnings()` gate (declaration retry, persistence, threshold trigger)
-is always active for issue-worker, ci-fixer, review-addresser, and
-improvement-identifier whenever those jobs are enabled — it's baked into the
-job code, not a separately configurable job. `learning-consolidator` is a
-normal scheduler entry like any other job: it must be explicitly listed in
-`enabledJobs` for the consolidation half (folding pending learnings into
-policies/docs and opening a PR) to actually run. Without it, environment
-learnings accumulate as `pending` rows in the `learnings` table indefinitely
-— harmless, but the loop never closes.
-
-**Migration note**: existing configs without `enabledJobs` will have no jobs start after upgrading. Add the desired job names to `enabledJobs` in `~/.yeti/config.json` before upgrading.
+Controls which jobs are registered with the scheduler at startup; empty or
+missing means no worker jobs start. It is live-reloadable. The declaration half
+of the self-improvement loop is baked into work jobs, but
+`learning-consolidator` must also be listed here for pending environment
+learnings to be folded into policies/docs.
 
 ### allowedRepos
 
-Restricts which repositories Yeti processes. Applied as a filter on `listRepos()`.
-
-- **Field**: `allowedRepos` (string array or `null`)
-- **Env var**: `YETI_ALLOWED_REPOS` (comma-separated)
-- **Default**: `null` — no filtering, all discovered repos are processed
-- **Live-reloadable**: yes
-- `null` = all repos; `[]` = selfRepo only; `["repo-a", "repo-b"]` = those repos + selfRepo
-- `selfRepo` is always included regardless of the list (ensures Yeti can always process its own error issues)
-- Matching is case-insensitive; uses short repo names (not `owner/repo`)
-- Warns at runtime if a configured name doesn't match any discovered repository (includes a hint about `includeForks` when fork discovery is disabled)
-- Editable via the dashboard config UI; empty input maps to `[]` (no repos except selfRepo), not `null` (all repos). To restore `null` (all repos), remove the `allowedRepos` key from `config.json` directly.
+Restricts `listRepos()` by short repo name. `null` means all discovered repos;
+`[]` means only `selfRepo`; explicit entries are case-insensitive and
+`selfRepo` is always included. The dashboard config UI maps an empty input to
+`[]`, not `null`; remove the key from `config.json` to restore all repos.
 
 ### includeForks
 
-Controls whether forked repositories are included in discovery.
-
-- **Field**: `includeForks` (boolean)
-- **Env var**: `YETI_INCLUDE_FORKS`
-- **Default**: `false` — only source (non-fork) repos are discovered via `gh repo list --source`
-- **Live-reloadable**: yes (clearing both the repo cache and the all-org-repos cache)
-- When `true`, the `--source` flag is omitted from `gh repo list`, so forks in the org appear alongside source repos
-- Affects both `listRepos()` (worker discovery) and `listAllOrgRepos()` (Repos onboarding page)
-- PRs created on forks stay within the fork — `gh pr create --repo <fork>` targets the fork, not the upstream parent
+When false, Yeti discovers only source repos via `gh repo list --source`. When
+true, forks are included in both worker discovery and the Repos onboarding
+page; PRs created on forks target the fork, not the upstream parent.
 
 Config changes made via the web UI (`POST /config`) and external edits to
 `~/.yeti/config.json` take effect immediately at runtime — no restart required.
@@ -532,6 +468,17 @@ changes are propagated to the scheduler via listeners that call
 `updateInterval()` / `updateScheduledHour()`. The only exception is `port`
 (requires socket re-bind), which is shown as read-only in the UI.
 
+`writeConfig()` deep-merges only `intervals`, `schedules`, and `jobAi`; all
+other object fields are replaced as whole values. `autonomy` deliberately
+stays out of the deep-merge list because dashboard saves submit the complete
+per-repo map and must be able to remove overrides by writing `{}`.
+
+`config.ts` must not import `log.ts`: `log.ts` reads config live bindings such
+as `LOG_LEVEL`, so importing the logger from config would create a circular
+dependency during module initialization. Diagnostics in config loading and
+watching use `console.warn` / `console.error`, or logging happens from callers
+that listen for config changes.
+
 Env vars always take priority over `config.json`. Fields set via env var
 are shown as disabled in the config UI with a note indicating the override.
 
@@ -541,68 +488,11 @@ not manage their credentials.
 The Discord integration requires creating a Discord application, bot token, and private channel. See
 [Discord Setup](discord-setup.md) for the full walkthrough.
 
-## Vision
+## Technology Stack & Deployment
 
-See [Future Yeti — Vision](VISION.md) for the long-term architectural
-direction: orchestrator-based multi-agent execution, mechanical plan checking,
-wave-parallel task execution, and persistent per-repo state. Derived from
-research into GSD, CCPM, Symphony, PAUL, and GAAI harness patterns.
-
-## Technology Stack
-
-- **Runtime**: Node.js 22
-- **Language**: TypeScript (strict mode, ES2022 target, Node16 modules, ESM)
-- **Database**: SQLite via better-sqlite3 (WAL mode)
-- **Testing**: Vitest — co-located test files, heavy mocking of external boundaries
-- **CI**: GitHub Actions on self-hosted runner — build + test on every push
-- **History cleanup**: Workflow-dispatch action for branch cleanup and `git-filter-repo` to audit/scrub git secrets
-- **Releases**: Date-based version tags (`v<YYYY-MM-DD>.<N>`), self-describing tarball attached to GitHub Release (includes `.repo` file identifying the source repository)
-- **Auto-updates**: systemd timer checks for new releases hourly, plus an on-demand dashboard trigger via `yeti-updater-trigger.path`; downloads + swaps + health checks with automatic rollback
-- **Multi-instance deploy**: Release tarballs embed a `.repo` file so multiple instances (from different forks) can run independently on the same host
-
-## Deployment & Multi-Instance Support
-
-Release tarballs are **self-describing**: the CI workflow writes the source
-repository (`owner/repo`) into a `.repo` file embedded in the tarball. Both
-`deploy.sh` and `install.sh` use a three-level fallback to determine which
-GitHub repository to monitor for updates:
-
-1. `$INSTALL_DIR/.repo` — from the release tarball (highest priority)
-2. `selfRepo` from `~/.yeti/config.json` — manual override
-3. Default `frostyard/yeti` — backwards compatibility
-
-This enables **multi-instance deployments**: different forks of Yeti can each
-release their own tarball, and multiple instances can coexist on the same host
-(using different `INSTALL_DIR` or systemd units), each self-updating from its
-own fork's releases. The `install.sh` bootstrap script pre-populates
-`selfRepo` and `githubOwners` in the initial config from the detected repo.
-
-**Dynamic user detection**: `deploy.sh` resolves the service user dynamically
-by reading the `User=` directive from the installed systemd unit file
-(`/etc/systemd/system/yeti.service`), then derives the home directory via
-`getent passwd`. This avoids hardcoding a username, allowing the service to
-run as any user without modifying deploy scripts.
-
-## Filesystem Layout (Runtime)
-
-```
-~/.yeti/
-├── config.json          Configuration file
-├── env                  Environment overrides (loaded by systemd)
-├── yeti.db             SQLite database
-├── last-version         Tracks last announced version (deployment announcements)
-├── update-check-requested  Manual update-check sentinel watched by systemd
-├── repos/
-│   └── <owner>/<repo>/  Main clone per repository
-└── worktrees/
-    └── <owner>/<repo>/
-        └── <job>/
-            └── <branch>/   Isolated worktree per task
-
-/opt/yeti/               (INSTALL_DIR — deployment artifacts)
-├── .repo                Source repository (e.g. "frostyard/yeti")
-├── .current-version     Currently deployed version tag
-├── dist/                Compiled TypeScript output
-├── deploy/              Deployment scripts
-└── node_modules/        Runtime dependencies
-```
+Yeti is Node.js 22 + strict TypeScript ESM, backed by SQLite via
+better-sqlite3, tested with Vitest, and released as date-tagged tarballs.
+GitHub Actions build/test on every push. See [Deployment](deployment.md) for
+systemd update mechanics, self-describing release tarballs, multi-instance
+behavior, and runtime filesystem layout. See [Future Yeti — Vision](VISION.md)
+for the longer-term orchestrator direction.
