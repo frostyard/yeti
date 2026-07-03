@@ -41,10 +41,16 @@ export function parseLearnings(output: string): ParsedLearnings {
 
 /** Remove declaration lines from output destined for GitHub comments/PR bodies. */
 export function stripLearningsDeclaration(output: string): string {
-  return output
+  const firstDeclaration = output.search(/^\s*LEARNINGS-(REPO|YETI):.*$/im);
+  if (firstDeclaration === -1) return output;
+
+  const head = output.slice(0, firstDeclaration);
+  const tail = output
+    .slice(firstDeclaration)
     .replace(/^\s*LEARNINGS-(REPO|YETI):.*$/gim, "")
-    .replace(/\n{3,}/g, "\n\n")
-    .trimEnd();
+    .replace(/\n{3,}/g, "\n\n");
+
+  return (head + tail).trimEnd();
 }
 
 let consolidatorTrigger: (() => void) | null = null;
