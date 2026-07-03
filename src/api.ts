@@ -20,8 +20,8 @@ import { isUpdatePending, pendingUpdateTag } from "./quiesce.js";
 import { requestUpdateCheck } from "./update-check.js";
 import { getSystemStats } from "./sysstats.js";
 import { readBody, parseCookies, safeCompare, isAuthEnabled, getSession, requireApiAuth, sendJson, tokenCookie } from "./http-util.js";
-import type { Autonomy } from "./policy.js";
-import { ACTION_MIN_TIER, fullNameAutonomy, tierSatisfies, type Action } from "./capability.js";
+import { listLoadedPolicies, type Autonomy } from "./policy.js";
+import { ACTION_MIN_TIER, JOB_GATED_ACTION, fullNameAutonomy, jobsSkippedAtTier, tierSatisfies, type Action } from "./capability.js";
 
 /** Maps don't survive JSON.stringify — flatten to a plain object for the wire. */
 function mapToObject<V>(m: Map<string, V>): Record<string, V> {
@@ -160,6 +160,28 @@ function buildJobsPayload(scheduler: Scheduler, allJobs: JobInfo[]): unknown[] {
       nextRunIn: computeNextRunIn(sched, latest, paused.has(name)),
     };
   });
+}
+
+async function buildPoliciesPayload(): Promise<Record<string, unknown>> {
+  const repos = await listRepos();
+  return {
+    policies: listLoadedPolicies(),
+    defaultAutonomy: config.DEFAULT_AUTONOMY,
+    repos: repos.map((repo) => {
+      const tier = fullNameAutonomy(repo.fullName);
+      return {
+        fullName: repo.fullName,
+        tier,
+        tierSource: repo.fullName in config.AUTONOMY_MAP ? "map" : "default",
+        skippedJobs: jobsSkippedAtTier(tier).map((gate) => gate.job),
+      };
+    }),
+    jobGates: Object.entries(JOB_GATED_ACTION).map(([job, action]) => ({
+      job,
+      action,
+      requiredTier: ACTION_MIN_TIER[action],
+    })),
+  };
 }
 
 // ── Config update validation (JSON body) ──
@@ -468,6 +490,8 @@ export async function handleApi(
     if (p === "/api/overview") { sendJson(res, 200, buildOverviewPayload(scheduler, startedAt)); return; }
 
     if (p === "/api/jobs") { sendJson(res, 200, buildJobsPayload(scheduler, allJobs)); return; }
+
+    if (p === "/api/policies") { sendJson(res, 200, await buildPoliciesPayload()); return; }
 
     if (p === "/api/queue") {
       const myAttention = getQueueSnapshot(MY_ATTENTION_CATEGORIES);

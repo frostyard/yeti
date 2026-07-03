@@ -10,7 +10,17 @@ vi.mock("./config.js", () => ({
   AUTONOMY_MAP: { "acme/advisory-repo": "advisory", "acme/merge-repo": "automerge" },
 }));
 
-import { can, assertCapability, fullNameAutonomy, tierSatisfies, AutonomyError, type Action } from "./capability.js";
+import {
+  can,
+  assertCapability,
+  fullNameAutonomy,
+  tierSatisfies,
+  jobsSkippedAtTier,
+  JOB_GATED_ACTION,
+  AutonomyError,
+  type Action,
+} from "./capability.js";
+import { JOB_DESCRIPTIONS } from "./job-meta.js";
 
 const repo = (tier?: string): import("./config.js").Repo => {
   const r = { owner: "acme", name: "r", fullName: "acme/r", defaultBranch: "main" };
@@ -75,6 +85,29 @@ describe("assertCapability", () => {
       expect(err.fullName).toBe("acme/advisory-repo");
       expect(err.action).toBe("createPR");
       expect(err.tier).toBe("advisory");
+    }
+  });
+});
+
+describe("jobsSkippedAtTier", () => {
+  it("lists every pre-flight-gated job below pr tier", () => {
+    expect(jobsSkippedAtTier("advisory").map((g) => g.job)).toEqual(Object.keys(JOB_GATED_ACTION));
+    expect(jobsSkippedAtTier("issues").map((g) => g.job)).toEqual(Object.keys(JOB_GATED_ACTION));
+  });
+
+  it("lists only merge-gated jobs at pr tier", () => {
+    expect(jobsSkippedAtTier("pr")).toEqual([
+      { job: "auto-merger", action: "merge", requiredTier: "automerge" },
+    ]);
+  });
+
+  it("lists no skipped jobs at automerge tier", () => {
+    expect(jobsSkippedAtTier("automerge")).toEqual([]);
+  });
+
+  it("uses job names that exist in job metadata", () => {
+    for (const job of Object.keys(JOB_GATED_ACTION)) {
+      expect(JOB_DESCRIPTIONS).toHaveProperty(job);
     }
   });
 });

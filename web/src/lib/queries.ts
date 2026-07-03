@@ -4,6 +4,7 @@ import { api } from "./api";
 export const useSession = () => useQuery({ queryKey: ["session"], queryFn: api.session, staleTime: 30_000, retry: false });
 export const useOverview = () => useQuery({ queryKey: ["overview"], queryFn: api.overview, refetchInterval: 10_000 });
 export const useJobs = () => useQuery({ queryKey: ["jobs"], queryFn: api.jobs, refetchInterval: 10_000 });
+export const usePolicies = () => useQuery({ queryKey: ["policies"], queryFn: api.policies, refetchInterval: 30_000 });
 export const useQueue = () => useQuery({ queryKey: ["queue"], queryFn: api.queue, refetchInterval: 60_000 });
 export const useConfig = () => useQuery({ queryKey: ["config"], queryFn: api.config });
 export const useRepos = () => useQuery({ queryKey: ["repos"], queryFn: api.repos, refetchInterval: 60_000 });

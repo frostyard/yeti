@@ -8,6 +8,7 @@ export type NotificationLevel = "info" | "warn" | "error";
 export type LearningStatus = "pending" | "consolidated" | "dismissed";
 export type LogLevel = "debug" | "info" | "warn" | "error";
 export type RunStatus = "running" | "completed" | "failed";
+export type Autonomy = "advisory" | "issues" | "pr" | "automerge";
 
 export interface Session {
   authEnabled: boolean;
@@ -91,6 +92,32 @@ export interface Job {
   schedule: { intervalMs?: number; scheduledHour?: number };
   lastRun: JobRunSummary | null;
   nextRunIn: number | null;
+}
+
+export interface PolicyInfo {
+  name: string;
+  path: string;
+  source: "override" | "bundled";
+}
+
+export interface RepoTierInfo {
+  fullName: string;
+  tier: Autonomy;
+  tierSource: "map" | "default";
+  skippedJobs: string[];
+}
+
+export interface JobGate {
+  job: string;
+  action: string;
+  requiredTier: Autonomy;
+}
+
+export interface PoliciesResponse {
+  policies: PolicyInfo[];
+  defaultAutonomy: Autonomy;
+  repos: RepoTierInfo[];
+  jobGates: JobGate[];
 }
 
 export interface QueueItem {

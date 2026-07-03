@@ -32,6 +32,30 @@ export function tierSatisfies(tier: Autonomy, action: Action): boolean {
   return TIER_RANK[tier] >= TIER_RANK[ACTION_MIN_TIER[action]];
 }
 
+// Jobs with an explicit pre-flight can() guard that skips the run when the tier is too low.
+export const JOB_GATED_ACTION: Record<string, Action> = {
+  "issue-worker": "createPR",
+  "improvement-identifier": "createPR",
+  "doc-maintainer": "createPR",
+  "mkdocs-update": "createPR",
+  "learning-consolidator": "createPR",
+  "ci-fixer": "push",
+  "review-addresser": "push",
+  "auto-merger": "merge",
+};
+
+export interface JobGate {
+  job: string;
+  action: Action;
+  requiredTier: Autonomy;
+}
+
+export function jobsSkippedAtTier(tier: Autonomy): JobGate[] {
+  return Object.entries(JOB_GATED_ACTION)
+    .filter(([, action]) => !tierSatisfies(tier, action))
+    .map(([job, action]) => ({ job, action, requiredTier: ACTION_MIN_TIER[action] }));
+}
+
 /** Pre-flight capability check. Resolves the tier via repoAutonomy, which is identical to fullNameAutonomy (AUTONOMY_MAP ?? DEFAULT). */
 export function can(repo: Repo, action: Action): boolean {
   return tierSatisfies(repoAutonomy(repo), action);
