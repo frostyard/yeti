@@ -1,6 +1,6 @@
 import crypto from "node:crypto";
 import { LABELS, ALLOWED_REPOS, GITHUB_OWNERS, SELF_REPO } from "./config.js";
-import { LABEL_TO_CATEGORY, populateQueueCache, removeQueueCacheEntry, removeQueueItem, updateQueueItemPriority, hasPriorityLabel, isRepoNameAllowed } from "./github.js";
+import { LABEL_TO_CATEGORY, populateQueueCache, removeQueueCacheEntry, removeQueueItem, updateQueueItemPriority, hasPriorityLabel, isRepoNameAllowed, getSelfLogin } from "./github.js";
 import type { Scheduler } from "./scheduler.js";
 import * as log from "./log.js";
 
@@ -41,7 +41,7 @@ const LABEL_TO_JOB: Record<string, string> = {
 
 // ── Webhook event handler ──
 
-export function handleWebhookEvent(event: string, payload: unknown, scheduler: Scheduler): { action: string } {
+export async function handleWebhookEvent(event: string, payload: unknown, scheduler: Scheduler): Promise<{ action: string }> {
   if (event === "ping") return { action: "pong" };
 
   const p = payload as Record<string, unknown>;
@@ -62,7 +62,23 @@ export function handleWebhookEvent(event: string, payload: unknown, scheduler: S
     return handlePullRequestEvent(p);
   }
 
+  if (event === "issue_comment") {
+    return handleIssueCommentEvent(p, scheduler);
+  }
+
+  if (event === "pull_request_review_comment") {
+    return handlePullRequestReviewCommentEvent(p, scheduler);
+  }
+
   return { action: "ignored" };
+}
+
+function triggerJob(jobName: string, scheduler: Scheduler): { action: string; result: string } {
+  const result = scheduler.triggerJob(jobName);
+
+  if (result === "started") return { action: `triggered:${jobName}`, result };
+  if (result === "already-running") return { action: "skipped:already-running", result };
+  return { action: "skipped:job-not-enabled", result };
 }
 
 // ── Issues event handler ──
@@ -129,12 +145,9 @@ function handleLabeled(
       return { action: "cache-updated" };
     }
 
-    const result = scheduler.triggerJob(jobName);
+    const { action, result } = triggerJob(jobName, scheduler);
     log.info(`[webhook] ${label} on ${repo}#${number} → ${jobName}: ${result}`);
-
-    if (result === "started") return { action: `triggered:${jobName}` };
-    if (result === "already-running") return { action: "skipped:already-running" };
-    return { action: "skipped:job-not-enabled" };
+    return { action };
   }
 
   return { action: "ignored" };
@@ -178,12 +191,9 @@ function handleCheckRunEvent(p: Record<string, unknown>, scheduler: Scheduler): 
   // Skip check runs not associated with a PR
   if (!checkRun.pull_requests || checkRun.pull_requests.length === 0) return { action: "ignored" };
 
-  const result = scheduler.triggerJob("ci-fixer");
+  const { action, result } = triggerJob("ci-fixer", scheduler);
   log.info(`[webhook] check_run ${conclusion} on ${repo} → ci-fixer: ${result}`);
-
-  if (result === "started") return { action: "triggered:ci-fixer" };
-  if (result === "already-running") return { action: "skipped:already-running" };
-  return { action: "skipped:job-not-enabled" };
+  return { action };
 }
 
 // ── Pull request review event handler ──
@@ -210,12 +220,9 @@ function handlePullRequestReviewEvent(p: Record<string, unknown>, scheduler: Sch
   const isYetiPR = headRef.startsWith("yeti/issue-") || headRef.startsWith("yeti/improve-");
   if (!isYetiPR && author !== "dependabot[bot]") return { action: "ignored" };
 
-  const result = scheduler.triggerJob("auto-merger");
+  const { action, result } = triggerJob("auto-merger", scheduler);
   log.info(`[webhook] pull_request_review approved on ${repo}#${pr.number} → auto-merger: ${result}`);
-
-  if (result === "started") return { action: "triggered:auto-merger" };
-  if (result === "already-running") return { action: "skipped:already-running" };
-  return { action: "skipped:job-not-enabled" };
+  return { action };
 }
 
 // ── Pull request event handler ──
@@ -236,4 +243,64 @@ function handlePullRequestEvent(p: Record<string, unknown>): { action: string } 
   removeQueueItem(repo, pr.number);
   log.info(`[webhook] Removed queue entries for ${repo}#${pr.number} (PR closed)`);
   return { action: "cache-updated" };
+}
+
+// ── Comment event handlers ──
+
+async function isSelfOrBot(author: string | undefined): Promise<boolean> {
+  if (!author) return true;
+  if (author.toLowerCase().endsWith("[bot]")) return true;
+
+  const selfLogin = await getSelfLogin();
+  return author.toLowerCase() === selfLogin.toLowerCase();
+}
+
+async function handleIssueCommentEvent(p: Record<string, unknown>, scheduler: Scheduler): Promise<{ action: string }> {
+  if (p.action !== "created") return { action: "ignored" };
+
+  const repo = (p.repository as { full_name?: string } | undefined)?.full_name;
+  const issue = p.issue as { number?: number; pull_request?: unknown } | undefined;
+  const author = (p.comment as { user?: { login?: string } } | undefined)?.user?.login;
+
+  if (!repo || !issue?.number) return { action: "ignored" };
+
+  if (!isRepoAllowed(repo)) {
+    log.info(`[webhook] Skipping issue_comment from ${repo} — not in allowed repos`);
+    return { action: "skipped:not-allowed-repo" };
+  }
+
+  if (await isSelfOrBot(author)) {
+    log.info(`[webhook] Skipping issue_comment from ${repo}#${issue.number} — self/bot author`);
+    return { action: "skipped:self-or-bot" };
+  }
+
+  const isPullRequestConversation = Object.prototype.hasOwnProperty.call(issue, "pull_request");
+  const jobName = isPullRequestConversation ? "review-addresser" : "issue-refiner";
+  const { action, result } = triggerJob(jobName, scheduler);
+  log.info(`[webhook] issue_comment created on ${repo}#${issue.number} → ${jobName}: ${result}`);
+  return { action };
+}
+
+async function handlePullRequestReviewCommentEvent(p: Record<string, unknown>, scheduler: Scheduler): Promise<{ action: string }> {
+  if (p.action !== "created") return { action: "ignored" };
+
+  const repo = (p.repository as { full_name?: string } | undefined)?.full_name;
+  const pr = p.pull_request as { number?: number } | undefined;
+  const author = (p.comment as { user?: { login?: string } } | undefined)?.user?.login;
+
+  if (!repo || !pr?.number) return { action: "ignored" };
+
+  if (!isRepoAllowed(repo)) {
+    log.info(`[webhook] Skipping pull_request_review_comment from ${repo} — not in allowed repos`);
+    return { action: "skipped:not-allowed-repo" };
+  }
+
+  if (await isSelfOrBot(author)) {
+    log.info(`[webhook] Skipping pull_request_review_comment from ${repo}#${pr.number} — self/bot author`);
+    return { action: "skipped:self-or-bot" };
+  }
+
+  const { action, result } = triggerJob("review-addresser", scheduler);
+  log.info(`[webhook] pull_request_review_comment created on ${repo}#${pr.number} → review-addresser: ${result}`);
+  return { action };
 }

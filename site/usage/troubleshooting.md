@@ -230,7 +230,7 @@ ls ~/.yeti/worktrees/*/*/
 
 1. Is `webhookSecret` set in config? The endpoint returns 404 without it.
 2. Is the webhook active in your GitHub App settings? Check **Settings > Developer settings > GitHub Apps > your app > Webhook**.
-3. Are the right events subscribed? You need **Issues** and **Check runs**.
+3. Are the right events subscribed? You need **Issues**, **Issue comments**, **Check runs**, and **Pull request review comments**.
 4. Check GitHub's webhook delivery log (App settings > Advanced > Recent Deliveries) for failed deliveries or signature mismatches.
 5. Verify Yeti's external URL is reachable from GitHub. The webhook URL is auto-configured on startup.
 

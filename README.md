@@ -8,6 +8,12 @@ Yeti periodically scans GitHub repositories and uses Claude to:
 - **Work issues** — issues labelled `Refined` are picked up, implemented in an isolated worktree, and submitted as a PR
 - **Fix CI** — open PRs with failing checks are analysed and patched automatically
 
+Optional GitHub webhooks accelerate the same scans: labels and CI events trigger
+their jobs immediately, human issue comments wake the issue-refiner, and PR
+conversation or review-thread comments wake the review-addresser. Comment
+webhooks ignore Yeti's own comments and any `[bot]` author to avoid self-trigger
+loops.
+
 ## How it works
 
 Three jobs run on simple timers (5 min for issues, 10 min for CI). Each job:
