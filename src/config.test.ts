@@ -479,6 +479,38 @@ describe("config", () => {
     expect(display.maxPlanRounds).toBe(2); // floored
   });
 
+  it("learningsPendingThreshold falls back to 5 for non-numeric values", async () => {
+    const mod = await import("./config.js");
+
+    fs.mkdirSync(path.dirname(mod.CONFIG_PATH), { recursive: true });
+    fs.writeFileSync(mod.CONFIG_PATH, JSON.stringify({ learningsPendingThreshold: "not-a-number" }));
+
+    const display = mod.getConfigForDisplay();
+    expect(display.learningsPendingThreshold).toBe(5);
+  });
+
+  it("learningsPendingThreshold clamps values below 1 and floors floats", async () => {
+    const mod = await import("./config.js");
+
+    fs.mkdirSync(path.dirname(mod.CONFIG_PATH), { recursive: true });
+    fs.writeFileSync(mod.CONFIG_PATH, JSON.stringify({ learningsPendingThreshold: 0 }));
+
+    let display = mod.getConfigForDisplay();
+    expect(display.learningsPendingThreshold).toBe(5); // falls back to default
+
+    fs.writeFileSync(mod.CONFIG_PATH, JSON.stringify({ learningsPendingThreshold: -3 }));
+    display = mod.getConfigForDisplay();
+    expect(display.learningsPendingThreshold).toBe(5);
+
+    fs.writeFileSync(mod.CONFIG_PATH, JSON.stringify({ learningsPendingThreshold: 0.5 }));
+    display = mod.getConfigForDisplay();
+    expect(display.learningsPendingThreshold).toBe(5);
+
+    fs.writeFileSync(mod.CONFIG_PATH, JSON.stringify({ learningsPendingThreshold: 2.7 }));
+    display = mod.getConfigForDisplay();
+    expect(display.learningsPendingThreshold).toBe(2); // floored
+  });
+
   it("offConfigChange removes listener", async () => {
     const mod = await import("./config.js");
 
