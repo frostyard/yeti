@@ -73,6 +73,16 @@ export function initDb(): void {
   `);
 
   db.exec(`
+    CREATE TABLE IF NOT EXISTS job_shas (
+      job_name   TEXT NOT NULL,
+      repo       TEXT NOT NULL,
+      sha        TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      PRIMARY KEY (job_name, repo)
+    )
+  `);
+
+  db.exec(`
     CREATE TABLE IF NOT EXISTS learnings (
       id         INTEGER PRIMARY KEY AUTOINCREMENT,
       job_name   TEXT NOT NULL,
@@ -434,6 +444,25 @@ export function hasPreviousCiFixerTasks(repo: string, prNumber: number): boolean
     )
     .get(repo, prNumber);
   return row !== undefined;
+}
+
+export function getLastJobSha(jobName: string, repo: string): string | null {
+  const row = getDb()
+    .prepare(`SELECT sha FROM job_shas WHERE job_name = ? AND repo = ?`)
+    .get(jobName, repo) as { sha: string } | undefined;
+  return row?.sha ?? null;
+}
+
+export function recordJobSha(jobName: string, repo: string, sha: string): void {
+  getDb()
+    .prepare(`
+      INSERT INTO job_shas (job_name, repo, sha, updated_at)
+      VALUES (?, ?, ?, datetime('now'))
+      ON CONFLICT(job_name, repo) DO UPDATE SET
+        sha = excluded.sha,
+        updated_at = excluded.updated_at
+    `)
+    .run(jobName, repo, sha);
 }
 
 export function getRecentTasksForItem(

@@ -97,6 +97,7 @@ import {
   addReviewCommentReaction,
   getCommentReactions,
   getPRReviewDecision,
+  getRemoteHead,
   scanQueueLabels,
   clearQueueCacheByCategories,
   issueUrl,
@@ -2271,6 +2272,32 @@ describe("scanQueueLabels", () => {
     // Restore defaults
     (config as Record<string, unknown>).SKIPPED_ITEMS = [];
     (config as Record<string, unknown>).PRIORITIZED_ITEMS = [];
+  });
+});
+
+describe("getRemoteHead", () => {
+  beforeEach(() => {
+    mockExecFile.mockReset();
+    clearRateLimitState();
+  });
+
+  it("fetches the current branch head SHA and commit message", async () => {
+    mockExecFile.mockImplementation(
+      (_cmd: string, args: string[], _opts: unknown, cb: (err: Error | null, stdout: string, stderr: string) => void) => {
+        expect(args).toEqual([
+          "api",
+          "repos/org/repo/commits/release%2F2026",
+          "--jq",
+          "{sha: .sha, message: .commit.message}",
+        ]);
+        cb(null, JSON.stringify({ sha: "abc123", message: "docs updated" }), "");
+      },
+    );
+
+    await expect(getRemoteHead("org/repo", "release/2026")).resolves.toEqual({
+      sha: "abc123",
+      message: "docs updated",
+    });
   });
 });
 

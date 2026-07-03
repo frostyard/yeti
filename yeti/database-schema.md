@@ -115,6 +115,23 @@ Notifications older than 7 days are pruned on startup and nightly by
 `main.ts`. There is no per-job retention limit — all notifications within
 the 7-day window are kept.
 
+## `job_shas` table
+
+Stores the last successfully processed default-branch head SHA for jobs that
+gate scheduled work on repository changes.
+
+| Column | Type | Constraints | Description |
+|--------|------|-------------|-------------|
+| `job_name` | TEXT | NOT NULL, PRIMARY KEY with `repo` | Job that processed the SHA (e.g. `mkdocs-update`) |
+| `repo` | TEXT | NOT NULL, PRIMARY KEY with `job_name` | Full repo name (e.g. `frostyard/yeti`) |
+| `sha` | TEXT | NOT NULL | Default-branch head SHA successfully processed by the job |
+| `updated_at` | TEXT | NOT NULL | Timestamp when this SHA was recorded |
+
+### Helpers
+
+- `getLastJobSha(jobName, repo)` returns the recorded SHA or `null`
+- `recordJobSha(jobName, repo, sha)` upserts the SHA for a job/repo pair
+
 ## `learnings` table
 
 Backs the self-improvement loop's environment-side half (`src/learnings.ts`,
