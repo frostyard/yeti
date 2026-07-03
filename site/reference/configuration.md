@@ -82,12 +82,40 @@ Optional. Enables GitHub webhook support for near-real-time job triggers. See [G
 | `skippedItems` | `{repo, number}[]` | `[]` | -- | Yes | Issues/PRs to skip during processing |
 | `prioritizedItems` | `{repo, number}[]` | `[]` | -- | Yes | High-priority items processed first |
 
+## Autonomy
+
+Autonomy tiers cap what actions Yeti may take on each repository. The tier is resolved per repo: the `autonomy` map (keyed by `owner/name`) overrides the instance-wide `defaultAutonomy`. Both fields are live-reloadable and have no env var.
+
+| Field | Type | Default | Env Var | Live Reload | Description |
+|-------|------|---------|---------|:-----------:|-------------|
+| `defaultAutonomy` | `"advisory" \| "issues" \| "pr" \| "automerge"` | `"pr"` | -- | Yes | Instance-wide autonomy tier applied to any repo not listed in `autonomy`. Invalid values fall back to `"pr"`. |
+| `autonomy` | `Record<string, tier>` | `{}` | -- | Yes | Per-repo autonomy overrides, keyed by full name (`owner/name`). |
+
+Each tier is a superset of the ones below it. An action is only allowed if the repo's tier meets or exceeds the tier the action requires:
+
+| Tier | Permits (cumulative) |
+|------|----------------------|
+| `advisory` | Comment, label, react on issues/PRs |
+| `issues` | Everything in `advisory`, plus creating issues |
+| `pr` | Everything in `issues`, plus pushing branches and opening PRs |
+| `automerge` | Everything in `pr`, plus merging PRs |
+
+Actions blocked by tier are surfaced on the dashboard queue (each affected item shows its current tier and the tier the action requires) rather than silently dropped. See [Issue Lifecycle — Autonomy Tiers](workflow.md#autonomy-tiers).
+
 ## Plan Review Loop
 
 | Field | Type | Default | Env Var | Live Reload | Description |
 |-------|------|---------|---------|:-----------:|-------------|
 | `reviewLoop` | `boolean` | `false` | -- | Yes | Enable iterative plan refinement. When true, plan-reviewer can send plans back to issue-refiner instead of always marking Ready. |
 | `maxPlanRounds` | `number` | `3` | -- | Yes | Maximum plan→review cycles before falling through to human review. Minimum 1. |
+
+## Self-Improvement (Learnings)
+
+| Field | Type | Default | Env Var | Live Reload | Description |
+|-------|------|---------|---------|:-----------:|-------------|
+| `learningsPendingThreshold` | `number` | `5` | -- | Yes | Number of pending environment learnings that triggers the [learning-consolidator](jobs/learning-consolidator.md) job early. Minimum 1. |
+
+See [Issue Lifecycle — Self-Improvement Loop](workflow.md#self-improvement-loop) for how agents report learnings and how they are consolidated.
 
 ## Intervals
 
@@ -114,6 +142,7 @@ All schedule fields live inside the `schedules` object, are specified as hour of
 | `improvementIdentifierHour` | `3` (3 AM) | improvement-identifier run hour |
 | `mkdocsUpdateHour` | `4` (4 AM) | mkdocs-update run hour |
 | `issueAuditorHour` | `5` (5 AM) | issue-auditor run hour |
+| `learningConsolidatorHour` | `6` (6 AM) | learning-consolidator run hour |
 | `promptEvaluatorHour` | `0` (Midnight) | prompt-evaluator run hour |
 
 ---
@@ -192,6 +221,7 @@ A more complete configuration with intervals, schedules, and integrations:
     "improvement-identifier",
     "issue-auditor",
     "mkdocs-update",
+    "learning-consolidator",
     "prompt-evaluator"
   ],
   "intervals": {
@@ -205,13 +235,19 @@ A more complete configuration with intervals, schedules, and integrations:
     "improvementIdentifierHour": 3,
     "mkdocsUpdateHour": 4,
     "issueAuditorHour": 5,
+    "learningConsolidatorHour": 6,
     "promptEvaluatorHour": 0
   },
   "jobAi": {
     "plan-reviewer": { "backend": "copilot" }
   },
+  "defaultAutonomy": "pr",
+  "autonomy": {
+    "my-org/experimental-repo": "issues"
+  },
   "reviewLoop": false,
   "maxPlanRounds": 3,
+  "learningsPendingThreshold": 5,
   "logLevel": "debug",
   "logRetentionDays": 14,
   "logRetentionPerJob": 20

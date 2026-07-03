@@ -1,105 +1,73 @@
 # HTTP API
 
-Yeti exposes an HTTP server (default port `9384`) that serves both the web dashboard and a set of API endpoints for monitoring and control.
+Yeti exposes an HTTP server (default port `9384`) that serves both the web dashboard and a JSON API under `/api/*`. The dashboard is a React/Vite single-page app that talks exclusively to these JSON endpoints — there are no server-rendered HTML pages except the SPA shell and OAuth redirects.
 
 ---
 
 ## Authentication
 
-When `authToken` is configured or GitHub OAuth is enabled, most routes require authentication. Auth is provided via any of:
+Auth is enabled when `authToken` is set **or** GitHub OAuth is configured (either or both). When enabled, all `/api/*` routes except the public ones below require authentication, provided via any of:
 
-- **Header:** `Authorization: Bearer <token>` (when `authToken` is set)
-- **Cookie:** `yeti_token` (set by the token login form, when `authToken` is set)
+- **Header:** `Authorization: Bearer <authToken>` (when `authToken` is set)
+- **Cookie:** `yeti_token` (set by `POST /api/login`, when `authToken` is set)
 - **Cookie:** `yeti_session` (set by GitHub OAuth sign-in, when OAuth is configured)
 
-The `/health`, `/status`, `/login`, `POST /login`, and `/auth/*` routes are accessible without authentication.
+Protected `/api/*` routes return a JSON `401` (not an HTML redirect) when unauthenticated. The following routes never require auth: `GET /health`, `GET /api/session`, `POST /api/login`, `POST /api/logout`, the `/auth/*` OAuth routes, and `POST /webhooks/github`.
 
 ---
 
-## Routes
-
-### Public Routes
+## Public Routes
 
 | Method | Path | Description |
 |--------|------|-------------|
-| `GET` | `/health` | Health check. Returns `{"status": "ok", "version": "..."}` |
-| `GET` | `/status` | System status with job states, uptime, queue stats, and integration status (JSON) |
-| `GET` | `/login` | Login page (HTML). Redirects to `/` if auth is disabled |
-| `POST` | `/login` | Submit auth token via form. Sets `yeti_token` cookie on success |
-| `GET` | `/auth/github` | Redirect to GitHub OAuth authorization page. Sets a CSRF state cookie |
-| `GET` | `/auth/callback` | OAuth callback. Exchanges code for user identity, checks org membership, sets `yeti_session` cookie |
-| `GET` | `/auth/logout` | Clears session cookie and redirects to `/login` |
-| `POST` | `/webhooks/github` | GitHub webhook receiver. HMAC-SHA256 verified via `X-Hub-Signature-256` header. Returns 404 when `webhookSecret` is not configured |
+| `GET` | `/health` | Health check and deploy drain signal. Returns `{status, version, activeTasks, updatePending}` |
+| `GET` | `/api/session` | Auth probe — never returns 401. Reports whether auth is enabled, whether the caller is authenticated, and which methods are available |
+| `POST` | `/api/login` | Submit auth token as JSON `{"token": "..."}`. Sets the `yeti_token` cookie on success |
+| `POST` | `/api/logout` | Clears the `yeti_token` and `yeti_session` cookies |
+| `GET` | `/auth/github` | Redirect to GitHub OAuth authorization. Sets a CSRF state cookie |
+| `GET` | `/auth/callback` | OAuth callback. Exchanges code for identity, checks org membership, sets `yeti_session` cookie |
+| `GET` | `/auth/logout` | Clears the session cookie and redirects to `/login` |
+| `POST` | `/webhooks/github` | GitHub webhook receiver. HMAC-SHA256 verified via `X-Hub-Signature-256`. Returns 404 when `webhookSecret` is unset |
 
-### Dashboard (Auth Required)
+---
 
-| Method | Path | Description |
-|--------|------|-------------|
-| `GET` | `/` | Main dashboard -- job status, worker queues, running tasks, schedule info |
-| `GET` | `/jobs` | Jobs page -- all registered jobs with backend, model, schedule, status, and controls |
-| `GET` | `/repos` | Repos page -- configured repositories with active queue items and recent completed tasks |
-| `GET` | `/notifications` | Notifications page -- recent notification history with job, message, level |
-
-### Repo Management (Auth Required)
+## Data Routes (Auth Required, GET)
 
 | Method | Path | Description |
 |--------|------|-------------|
-| `POST` | `/repos/add` | Add a repo to `allowedRepos`. Body: `{"repo": "repo-name"}`. Returns `{"result": "added"}` |
+| `GET` | `/api/overview` | Overview payload — job states, worker queues, running tasks, schedules, integrations, and host system stats |
+| `GET` | `/api/jobs` | All registered jobs with backend, model, schedule, status, and controls metadata |
+| `GET` | `/api/queue` | Work queue grouped by human vs. Yeti attention, with tier-blocked annotations |
+| `GET` | `/api/runs` | Recent job runs (log history). Supports filtering query params |
+| `GET` | `/api/runs/:runId` | Individual run detail with full logs and associated tasks |
+| `GET` | `/api/runs/:runId/tail` | Live log tail (JSON). Supports `?after=<id>` for polling |
+| `GET` | `/api/runs/issue` | Issue-specific run history. Requires `?repo=owner/name&number=123` |
+| `GET` | `/api/notifications` | Recent notification history |
+| `GET` | `/api/learnings` | Pending/consolidated environment learnings |
+| `GET` | `/api/config` | Current config `{values, envOverrides}` with sensitive fields masked |
+| `GET` | `/api/repos` | Configured repositories with active queue items and recent completed tasks |
+| `GET` | `/api/notifications/stream` | Server-Sent Events stream for real-time notifications (see below) |
 
-### Job Control (Auth Required)
+---
 
-| Method | Path | Description |
-|--------|------|-------------|
-| `POST` | `/trigger/:job` | Manually trigger a job. Returns `200` (started), `409` (already running), or `404` (unknown job) |
-| `POST` | `/pause/:job` | Toggle pause/resume for a job. Persists to config file |
-| `POST` | `/cancel` | Cancel the currently-running Claude task (SIGTERM escalation) |
-
-### Queue Management (Auth Required)
-
-| Method | Path | Description |
-|--------|------|-------------|
-| `GET` | `/queue` | Work queue page -- items grouped by "My Attention" and "Yeti's Attention" |
-| `POST` | `/queue/merge` | Squash-merge a PR. Body: `{"repo": "owner/name", "prNumber": 123}` |
-| `POST` | `/queue/skip` | Skip an issue/PR. Body: `{"repo": "owner/name", "number": 123}` |
-| `POST` | `/queue/unskip` | Remove a skip. Body: `{"repo": "owner/name", "number": 123}` |
-| `POST` | `/queue/prioritize` | Mark item as high-priority. Body: `{"repo": "owner/name", "number": 123}` |
-| `POST` | `/queue/deprioritize` | Remove priority. Body: `{"repo": "owner/name", "number": 123}` |
-
-### Logs (Auth Required)
+## Control Routes (Auth Required, POST)
 
 | Method | Path | Description |
 |--------|------|-------------|
-| `GET` | `/logs` | Log viewer. Supports query params: `?job=<name>` to filter by job, `?search=<term>` to search by item |
-| `GET` | `/logs/:runId` | Individual run detail page with full logs and associated tasks |
-| `GET` | `/logs/:runId/tail` | Live log tail (JSON). Supports `?after=<id>` for polling. Returns `{status, completed_at, logs: [...]}` |
-| `GET` | `/logs/issue` | Issue-specific logs. Requires `?repo=owner/name&number=123` |
+| `POST` | `/api/jobs/:name/trigger` | Manually trigger a job. `200` (started), `404` (unknown), or `409` (busy / update pending) |
+| `POST` | `/api/jobs/:name/pause` | Toggle pause/resume for a job. Persists to `pausedJobs`. Returns `{result: "paused" \| "resumed"}` |
+| `POST` | `/api/tasks/cancel` | Cancel the currently-running AI task (SIGTERM→SIGKILL). Returns `{result: "cancelled" \| "no-active-task"}` |
+| `POST` | `/api/update/check` | Request an immediate update check (writes the update-check sentinel). Returns `{result: "requested"}` |
+| `POST` | `/api/queue/merge` | Squash-merge a PR. Body: `{"repo": "owner/name", "prNumber": 123}` |
+| `POST` | `/api/queue/skip` | Skip an issue/PR. Body: `{"repo": "owner/name", "number": 123}` |
+| `POST` | `/api/queue/unskip` | Remove a skip. Body: `{"repo": "owner/name", "number": 123}` |
+| `POST` | `/api/queue/prioritize` | Mark item high-priority. Body: `{"repo": "owner/name", "number": 123}` |
+| `POST` | `/api/queue/deprioritize` | Remove priority. Body: `{"repo": "owner/name", "number": 123}` |
+| `POST` | `/api/repos` | Add a repo to `allowedRepos`. Body: `{"repo": "repo-name"}`. Returns `{result: "added"}` |
+| `POST` | `/api/config` | Update whitelisted config fields. Triggers live reload. Returns `{saved: true, tab}` |
+| `POST` | `/api/learnings/:id/dismiss` | Dismiss a pending environment learning (idempotent). Optional body `{"reason": "..."}` |
 
-### Real-time Notifications (Auth Required)
-
-| Method | Path | Description |
-|--------|------|-------------|
-| `GET` | `/notifications/stream` | Server-Sent Events stream for real-time notifications. Supports `Last-Event-ID` header for replay of missed events. Sends a keepalive comment every 30 seconds |
-
-Each SSE event contains a JSON payload:
-
-```json
-{
-  "id": 42,
-  "jobName": "issue-worker",
-  "message": "Opened PR #99 for issue #50",
-  "url": "https://github.com/org/repo/pull/99",
-  "level": "info",
-  "createdAt": "2026-03-25T14:30:00.000Z"
-}
-```
-
-### Configuration (Auth Required)
-
-| Method | Path | Description |
-|--------|------|-------------|
-| `GET` | `/config` | Config editor page (HTML form). Supports `?saved=1` flash message and `?tab=<id>` to select a tab |
-| `POST` | `/config` | Update config fields via form submission. Triggers live reload. Redirects to `/config?saved=1&tab=<id>` |
-| `GET` | `/config/api` | Current config as JSON with sensitive fields masked (auth token, Discord bot token show `****<last 4 chars>`) |
+Env-overridden config fields are dropped from `POST /api/config` writes, since the environment value wins at load time.
 
 ---
 
@@ -110,48 +78,23 @@ Each SSE event contains a JSON payload:
 ```json
 {
   "status": "ok",
-  "version": "v2026-03-15.1"
+  "version": "v2026-07-01.1",
+  "activeTasks": 1,
+  "updatePending": false
 }
 ```
 
-### Status
+`activeTasks` is the deploy drain signal — the updater waits for it to reach `0` before restarting. `updatePending` reflects the quiesce sentinel.
+
+### Session
 
 ```json
 {
-  "status": "ok",
-  "startedAt": "2026-03-15T10:00:00.000Z",
-  "uptime": 3600,
-  "jobs": {
-    "issue-refiner": false,
-    "issue-worker": true
-  },
-  "pausedJobs": ["improvement-identifier"],
-  "claudeQueue": { "pending": 0, "active": 1 },
-  "copilotQueue": { "pending": 0, "active": 0 },
-  "runningTasks": [
-    {
-      "jobName": "issue-worker",
-      "repo": "frostyard/yeti",
-      "itemNumber": 42,
-      "startedAt": "2026-03-15T10:30:00"
-    }
-  ],
-  "jobSchedules": {
-    "issue-refiner": {
-      "intervalMs": 300000,
-      "lastCompletedAt": "2026-03-15T10:25:00Z",
-      "nextRunIn": 180000
-    },
-    "doc-maintainer": {
-      "scheduledHour": 1,
-      "lastCompletedAt": "2026-03-15T01:05:00Z",
-      "nextRunIn": 52200000
-    }
-  },
-  "discord": {
-    "connected": true,
-    "guildName": "Frostyard"
-  }
+  "authEnabled": true,
+  "authenticated": false,
+  "username": null,
+  "methods": { "token": true, "oauth": false },
+  "oauthLoginUrl": "/auth/github"
 }
 ```
 
@@ -161,7 +104,7 @@ Each SSE event contains a JSON payload:
 { "result": "started" }
 ```
 
-Possible `result` values: `"started"`, `"already-running"`, `"unknown"`.
+`200` for `started`; `404` for an unknown job; `409` when the job is already running or an update is pending.
 
 ### Cancel Task
 
@@ -169,23 +112,42 @@ Possible `result` values: `"started"`, `"already-running"`, `"unknown"`.
 { "result": "cancelled" }
 ```
 
-Possible `result` values: `"cancelled"`, `"no-active-task"`.
+Possible values: `"cancelled"`, `"no-active-task"`.
+
+---
+
+## Real-time Notifications
+
+`GET /api/notifications/stream` is a Server-Sent Events stream. It supports the `Last-Event-ID` header to replay events missed while disconnected and sends a keepalive comment periodically. Each event carries a JSON payload:
+
+```json
+{
+  "id": 42,
+  "jobName": "issue-worker",
+  "message": "Opened PR #99 for issue #50",
+  "url": "https://github.com/org/repo/pull/99",
+  "level": "info",
+  "createdAt": "2026-07-01T14:30:00.000Z"
+}
+```
 
 ---
 
 ## Queue Categories
 
-The queue page groups items into two sections:
+`GET /api/queue` groups items into two sections:
 
-**My Attention** (items waiting for a human):
+**Human attention** (waiting for a person):
 
-- `ready` -- Issues with plans ready for review
+- `ready` — issues with plans ready for review
 
-**Yeti's Attention** (items Yeti is working on or will work on):
+**Yeti attention** (Yeti is working on or will work on):
 
-- `needs-refinement` -- Issues needing plans
-- `refined` -- Issues approved for implementation
-- `needs-review-addressing` -- PRs with unaddressed review comments
-- `auto-mergeable` -- PRs ready to auto-merge
-- `needs-triage` -- Error issues needing investigation
-- `needs-plan-review` -- Plans awaiting adversarial review
+- `needs-refinement` — issues needing plans
+- `refined` — issues approved for implementation
+- `needs-review-addressing` — PRs with unaddressed review comments
+- `auto-mergeable` — PRs ready to auto-merge
+- `needs-triage` — error issues needing investigation
+- `needs-plan-review` — plans awaiting adversarial review
+
+Items whose next action exceeds their repo's [autonomy tier](configuration.md#autonomy) are annotated with the current tier and the tier the action requires, so the dashboard can show why they are held.

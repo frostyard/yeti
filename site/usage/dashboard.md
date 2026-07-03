@@ -18,7 +18,7 @@ When both methods are configured, the login page shows both options. Without eit
 
 ## Main page
 
-The root page (`/`) is your command center. It shows every registered job with:
+The root page (`/`) is your command center. Alongside the job list it surfaces at-a-glance counts (recent successes/failures, pending environment learnings, and queue items held by their [autonomy tier](../reference/configuration.md#autonomy)), a **System** panel with live host health (CPU, load, memory, and disk usage), and a **Check for updates** button that asks the updater to look for a new release immediately. It shows every registered job with:
 
 | Column | Description |
 |---|---|
@@ -66,6 +66,8 @@ Each queue item shows:
 - **Repository** name
 - **Issue or PR number** and title
 - **Current labels**
+
+Items whose next action exceeds their repository's [autonomy tier](../reference/configuration.md#autonomy) are tagged with the current tier and the tier the action requires, so you can see exactly why Yeti is holding off (and raise the tier or act manually).
 
 ### Actions
 
@@ -137,7 +139,7 @@ Each job row shows:
 |---|---|
 | **Job** | Name and a short description of what the job does |
 | **Enabled** | Whether the job is in the `enabledJobs` config list |
-| **Backend** | Which AI backend the job uses (Claude or Copilot) |
+| **Backend** | Which AI backend the job uses (Claude, Copilot, or Codex) |
 | **Model** | The AI model override, or "default" |
 | **Schedule** | Interval (e.g., "Every 5 min") or daily hour (e.g., "Daily at 1:00") |
 | **Status** | Running, Paused, Idle, or Disabled |
@@ -160,11 +162,11 @@ The config page (`/config`) lets you view and edit Yeti's configuration directly
 
 | Tab | Contents |
 |-----|----------|
-| **General** | GitHub owners, allowed repos, forks, log level, plan review loop, server port |
+| **General** | GitHub owners, self repo, allowed repos, forks, log level, queue scan interval, log retention, plan review loop (`maxPlanRounds`), and the learnings PR threshold |
 | **Scheduling** | Job intervals and daily schedule hours |
-| **AI Backends** | Worker concurrency, timeouts, and per-job backend/model overrides |
+| **AI** | Worker concurrency, timeouts, and per-job backend/model overrides |
 | **Integrations** | Discord bot, GitHub App, and OAuth settings |
-| **Security** | Auth token and webhook secret |
+| **Security** | Auth token, webhook secret, enabled jobs, and **autonomy tiers** (default tier plus per-repo overrides) |
 
 - **View** --- All current configuration values are displayed. Sensitive fields like tokens are masked. Fields overridden by environment variables are shown as disabled with a note.
 - **Edit** --- Modify `config.json` in-place. Changes are saved to disk and trigger a live reload --- no restart needed for most fields. The active tab is preserved across saves.

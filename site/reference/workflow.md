@@ -311,3 +311,42 @@ Documentation PRs created by the [doc-maintainer](jobs/doc-maintainer.md) are au
 
 - All changed files are under `yeti/` or end in `.md`
 - Checks pass **or** no checks are configured
+
+---
+
+## Autonomy Tiers
+
+Every repository has an **autonomy tier** that caps how far Yeti may act on it. The tier is resolved per repo from the [`autonomy` map](configuration.md#autonomy), falling back to `defaultAutonomy` (default `pr`). Tiers are cumulative — each includes the actions of the ones below it:
+
+| Tier | Yeti may... |
+|------|-------------|
+| `advisory` | Comment, label, and react on issues/PRs |
+| `issues` | ...also create issues |
+| `pr` | ...also push branches and open PRs |
+| `automerge` | ...also merge PRs |
+
+A job only performs an action if the repo's tier permits it. For example, on an `issues`-tier repo the issue-refiner still plans and the ci-fixer can still file `[ci-unrelated]` issues, but the issue-worker will not open PRs and the auto-merger will not merge. Items whose next step is blocked by the tier are not silently dropped — the dashboard queue tags each one with its current tier and the tier the action requires, so you can raise the tier (or act manually) when ready.
+
+## Self-Improvement Loop
+
+Yeti improves its own prompts and environment guidance from the friction its agents hit while working. Every work session must produce two things: the work itself **and** any learning worth keeping. This is enforced mechanically, not by prompt diligence alone.
+
+**Declaration.** The shared prompt preamble requires every agent session to end with two lines:
+
+```
+LEARNINGS-REPO: none
+LEARNINGS-YETI: none
+```
+
+- `LEARNINGS-REPO: yeti/learnings/<slug>.md: <summary>` — a fact about the *repository being worked on*. The agent commits the file alongside its PR; the [doc-maintainer](jobs/doc-maintainer.md) later folds these seeds into topic docs.
+- `LEARNINGS-YETI: <summary>` — a fact about *this managed environment or its tooling*. No file is written; the daemon persists it.
+
+**The gate.** After the main AI call in the [issue-worker](jobs/issue-worker.md), [ci-fixer](jobs/ci-fixer.md), [review-addresser](jobs/review-addresser.md), and [improvement-identifier](jobs/improvement-identifier.md), `enforceLearnings()` runs:
+
+1. **Missing declaration** → one retry in the same worktree asking the agent to declare.
+2. **Repo learnings** are verified against the base branch (and merge base) via a `yeti/` pathspec tree-diff — a claimed file that does not actually differ is rejected.
+3. **Environment learnings** are written to the `learnings` database table as `pending` (max 5 per run). When the pending count reaches [`learningsPendingThreshold`](configuration.md#self-improvement-learnings) (default 5), the [learning-consolidator](jobs/learning-consolidator.md) is triggered early.
+
+The gate never fails a task, and declaration lines are stripped from any AI output posted to GitHub (plans, reviews, reports, comments).
+
+**Consolidation.** The [learning-consolidator](jobs/learning-consolidator.md) job (daily, or on threshold) folds pending environment learnings into `src/policies/_preamble.md`, job policies, or `yeti/` docs and opens a PR against `selfRepo`. Once merged and deployed, the learning ships in every future agent prompt.

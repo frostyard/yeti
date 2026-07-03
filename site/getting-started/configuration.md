@@ -39,7 +39,7 @@ For a typical starting point, enable the core workflow jobs:
 ]
 ```
 
-All available jobs: `issue-refiner`, `issue-worker`, `ci-fixer`, `review-addresser`, `auto-merger`, `doc-maintainer`, `repo-standards`, `improvement-identifier`, `issue-auditor`, `triage-yeti-errors`, `plan-reviewer`, `mkdocs-update`.
+All available jobs: `issue-refiner`, `issue-worker`, `ci-fixer`, `review-addresser`, `auto-merger`, `doc-maintainer`, `repo-standards`, `improvement-identifier`, `issue-auditor`, `triage-yeti-errors`, `plan-reviewer`, `mkdocs-update`, `learning-consolidator`, `prompt-evaluator`.
 
 ### `githubOwners`
 
@@ -124,6 +124,8 @@ Most configuration changes take effect without restarting the service. When you 
 - `jobAi`
 - `includeForks`
 - `reviewLoop`, `maxPlanRounds`
+- `learningsPendingThreshold`
+- `defaultAutonomy`, `autonomy`
 - `logLevel`
 - `logRetentionDays`, `logRetentionPerJob`
 - `queueScanIntervalMs`
