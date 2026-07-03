@@ -739,6 +739,13 @@ immediately without creating a worktree or task record.
   Patterns). If the AI dismissed every pending learning (no commits expected)
   this is simply skipped; if some learnings were left neither dismissed nor
   committed, a warning is logged and they remain `pending` for the next run.
+- **Orphan-branch cleanup**: after a successful `pushBranch`, if `createPR`
+  throws before returning a PR number, the catch path best-effort deletes the
+  just-pushed `yeti/learnings-*` remote branch via `git push origin
+  :refs/heads/<branch>` (`claude.deleteRemoteBranch`). The learnings stay
+  `pending`, but the failed attempt does not leave a branch that the open-PR
+  duplicate guard cannot see. Deletion failures are logged and swallowed so
+  they never mask the original task failure.
 
 **Policy**: `learning-consolidator.md`, rendered with a single `${LEARNINGS}`
 variable — `formatLearnings(rows)` renders each pending row as one bullet:

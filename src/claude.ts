@@ -582,6 +582,11 @@ export async function pushBranch(wtPath: string, branchName: string, fullName: s
   await git(["push", "origin", `HEAD:refs/heads/${branchName}`], wtPath);
 }
 
+export async function deleteRemoteBranch(wtPath: string, branchName: string, fullName: string): Promise<void> {
+  assertCapability(fullName, "push");
+  await git(["push", "origin", `:refs/heads/${branchName}`], wtPath);
+}
+
 // ── Claude invocation ──
 
 export class AiTimeoutError extends Error {
@@ -614,4 +619,3 @@ export function cancelCurrentTask(): boolean {
   }
   return true;
 }
-

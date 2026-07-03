@@ -28,6 +28,7 @@ const { mockGh, mockClaude, mockDb } = vi.hoisted(() => ({
     hasNewCommits: vi.fn(),
     hasTreeDiff: vi.fn(),
     pushBranch: vi.fn(),
+    deleteRemoteBranch: vi.fn(),
     randomSuffix: vi.fn().mockReturnValue("ab12"),
     datestamp: vi.fn().mockReturnValue("20260702"),
   },
@@ -65,6 +66,7 @@ describe("learning-consolidator", () => {
     mockClaude.hasNewCommits.mockResolvedValue(true);
     mockClaude.hasTreeDiff.mockResolvedValue(true);
     mockClaude.pushBranch.mockResolvedValue(undefined);
+    mockClaude.deleteRemoteBranch.mockResolvedValue(undefined);
     mockGh.listPRs.mockResolvedValue([]);
     mockGh.createPR.mockResolvedValue(77);
     mockDb.getPendingLearnings.mockReturnValue([learning(1, "use brew"), learning(2, "gh needs --head")]);
@@ -99,6 +101,53 @@ describe("learning-consolidator", () => {
     );
     expect(mockDb.markLearningsConsolidated).toHaveBeenCalledWith([1, 2], 77);
     expect(mockDb.recordTaskComplete).toHaveBeenCalled();
+    expect(mockClaude.deleteRemoteBranch).not.toHaveBeenCalled();
+  });
+
+  it("createPR failure after push deletes the orphaned branch and leaves learnings pending", async () => {
+    mockGh.createPR.mockRejectedValue(new Error("pr boom"));
+
+    await run([selfRepo]);
+
+    expect(mockClaude.pushBranch).toHaveBeenCalledWith("/tmp/wt", "yeti/learnings-20260702-ab12", "test-org/yeti");
+    expect(mockClaude.deleteRemoteBranch).toHaveBeenCalledWith("/tmp/wt", "yeti/learnings-20260702-ab12", "test-org/yeti");
+    expect(mockDb.markLearningsConsolidated).not.toHaveBeenCalled();
+    expect(mockDb.recordTaskFailed).toHaveBeenCalledWith(1, "Error: pr boom");
+    expect(mockClaude.removeWorktree).toHaveBeenCalledWith(selfRepo, "/tmp/wt");
+  });
+
+  it("push failure does not attempt remote branch deletion", async () => {
+    mockClaude.pushBranch.mockRejectedValue(new Error("push boom"));
+
+    await run([selfRepo]);
+
+    expect(mockGh.createPR).not.toHaveBeenCalled();
+    expect(mockClaude.deleteRemoteBranch).not.toHaveBeenCalled();
+    expect(mockDb.markLearningsConsolidated).not.toHaveBeenCalled();
+    expect(mockDb.recordTaskFailed).toHaveBeenCalledWith(1, "Error: push boom");
+  });
+
+  it("remote branch deletion failure after createPR failure is swallowed", async () => {
+    mockGh.createPR.mockRejectedValue(new Error("pr boom"));
+    mockClaude.deleteRemoteBranch.mockRejectedValue(new Error("delete boom"));
+
+    await run([selfRepo]);
+
+    expect(mockClaude.deleteRemoteBranch).toHaveBeenCalledWith("/tmp/wt", "yeti/learnings-20260702-ab12", "test-org/yeti");
+    expect(mockDb.recordTaskFailed).toHaveBeenCalledWith(1, "Error: pr boom");
+    expect(mockDb.markLearningsConsolidated).not.toHaveBeenCalled();
+  });
+
+  it("failure after createPR succeeds does not delete the PR branch", async () => {
+    mockDb.markLearningsConsolidated.mockImplementation(() => {
+      throw new Error("db boom");
+    });
+
+    await run([selfRepo]);
+
+    expect(mockGh.createPR).toHaveBeenCalled();
+    expect(mockClaude.deleteRemoteBranch).not.toHaveBeenCalled();
+    expect(mockDb.recordTaskFailed).toHaveBeenCalledWith(1, "Error: db boom");
   });
 
   it("dismissals from output are applied and excluded from the PR set", async () => {
