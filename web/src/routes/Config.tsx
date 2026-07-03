@@ -1,7 +1,8 @@
 import { useEffect, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { Plus, Save, Trash2 } from "lucide-react";
-import { useConfig, useSaveConfig } from "../lib/queries";
+import { useConfig, useJobs, useSaveConfig } from "../lib/queries";
+import type { AiBackend } from "../lib/types";
 import { Tabs, TabPanel } from "../components/ui/Tabs";
 import { Card, Button, Skeleton, SectionHeader } from "../components/ui/base";
 import { Field, TextInput, SelectInput, Toggle } from "../components/ui/FormField";
@@ -15,10 +16,12 @@ const TABS = [
 ];
 const LOG_LEVELS = ["debug", "info", "warn", "error"];
 const AUTONOMY_TIERS = ["advisory", "issues", "pr", "automerge"] as const;
+const AI_BACKENDS = ["claude", "copilot", "codex"] as const;
 const MASK = "•••• (set — leave blank to keep)";
 
 type AutonomyTier = (typeof AUTONOMY_TIERS)[number];
 type AutonomyRow = { repo: string; tier: AutonomyTier };
+type JobConfigMap = Record<string, { backend: AiBackend; model: string; enabled: boolean }>;
 type Draft = Record<string, unknown>;
 const num = (v: unknown, d = 0) => (typeof v === "number" ? v : d);
 const csv = (v: unknown) => (Array.isArray(v) ? v.join(", ") : "");
@@ -35,6 +38,7 @@ const autonomyRows = (v: unknown): AutonomyRow[] =>
 
 export function Config() {
   const { data, isLoading } = useConfig();
+  const { data: jobs } = useJobs();
   const cfg = data?.values;
   const env = data?.envOverrides ?? {};
   const save = useSaveConfig();
@@ -47,7 +51,8 @@ export function Config() {
     if (!cfg) return;
     const intervals = (cfg.intervals as Record<string, number>) ?? {};
     const schedules = (cfg.schedules as Record<string, number>) ?? {};
-    setDraft({
+    setDraft((d) => ({
+      jobConfig: d.jobConfig,
       githubOwners: csv(cfg.githubOwners),
       selfRepo: cfg.selfRepo ?? "",
       logLevel: cfg.logLevel ?? "info",
@@ -65,14 +70,33 @@ export function Config() {
       maxClaudeWorkers: num(cfg.maxClaudeWorkers, 2),
       maxCopilotWorkers: num(cfg.maxCopilotWorkers, 1),
       maxCodexWorkers: num(cfg.maxCodexWorkers, 1),
-      enabledJobs: csv(cfg.enabledJobs),
       allowedRepos: csv(cfg.allowedRepos),
       discordChannelId: cfg.discordChannelId ?? "",
       discordAllowedUsers: csv(cfg.discordAllowedUsers),
       discordBotToken: "",
       authToken: "",
-    });
+    }));
   }, [cfg]);
+
+  useEffect(() => {
+    if (!jobs) return;
+    setDraft((d) => {
+      const existing = (d.jobConfig as JobConfigMap | undefined) ?? {};
+      let changed = false;
+      const next: JobConfigMap = { ...existing };
+      for (const job of jobs) {
+        if (!(job.name in existing)) {
+          next[job.name] = {
+            backend: job.backend,
+            model: job.model ?? "",
+            enabled: job.enabled,
+          };
+          changed = true;
+        }
+      }
+      return changed ? { ...d, jobConfig: next } : d;
+    });
+  }, [jobs]);
 
   if (isLoading || !cfg) return <Skeleton className="h-64" />;
 
@@ -80,11 +104,22 @@ export function Config() {
   const set = (k: string, v: unknown) => setDraft((d) => ({ ...d, [k]: v }));
   const setNested = (parent: string, k: string, v: number) =>
     setDraft((d) => ({ ...d, [parent]: { ...(d[parent] as Record<string, number>), [k]: v } }));
+  const setJob = (name: string, patch: Partial<JobConfigMap[string]>) =>
+    setDraft((d) => {
+      const jobConfig = (d.jobConfig as JobConfigMap | undefined) ?? {};
+      const current = jobConfig[name];
+      if (!current) return d;
+      return { ...d, jobConfig: { ...jobConfig, [name]: { ...current, ...patch } } };
+    });
   const setAutonomyRows = (rows: AutonomyRow[]) => set("autonomyRows", rows);
   const rows = (draft.autonomyRows as AutonomyRow[] | undefined) ?? [];
+  const jobConfig = (draft.jobConfig as JobConfigMap | undefined) ?? {};
+  const jobRows = Object.entries(jobConfig).sort(([a], [b]) => a.localeCompare(b));
 
   const onSave = async () => {
     const d = draft;
+    const jc = (d.jobConfig as JobConfigMap | undefined) ?? {};
+    const jobNames = Object.keys(jc);
     const autonomy = Object.fromEntries(
       ((d.autonomyRows as AutonomyRow[] | undefined) ?? [])
         .map((row) => [row.repo.trim(), row.tier])
@@ -112,11 +147,17 @@ export function Config() {
       maxClaudeWorkers: Number(d.maxClaudeWorkers),
       maxCopilotWorkers: Number(d.maxCopilotWorkers),
       maxCodexWorkers: Number(d.maxCodexWorkers),
-      enabledJobs: toList(d.enabledJobs as string),
       allowedRepos: toList(d.allowedRepos as string),
       discordChannelId: d.discordChannelId,
       discordAllowedUsers: toList(d.discordAllowedUsers as string),
     };
+    if (jobNames.length > 0) {
+      payload.enabledJobs = jobNames.filter((name) => jc[name].enabled);
+      payload.jobAi = Object.fromEntries(jobNames.map((name) => {
+        const model = jc[name].model.trim();
+        return [name, model ? { backend: jc[name].backend, model } : { backend: jc[name].backend }];
+      }));
+    }
     if (d.discordBotToken) payload.discordBotToken = d.discordBotToken;
     if (d.authToken) payload.authToken = d.authToken;
     // Don't submit env-locked fields (the server ignores them anyway).
@@ -186,11 +227,53 @@ export function Config() {
         </TabPanel>
 
         <TabPanel value="ai">
-          <Card className="grid grid-cols-1 gap-4 p-4 md:grid-cols-3">
-            <Field label="Max Claude workers" envVar={lock("maxClaudeWorkers")}><TextInput type="number" value={String(draft.maxClaudeWorkers ?? 0)} disabled={!!lock("maxClaudeWorkers")} onChange={(e) => set("maxClaudeWorkers", e.target.value)} /></Field>
-            <Field label="Max Copilot workers" envVar={lock("maxCopilotWorkers")}><TextInput type="number" value={String(draft.maxCopilotWorkers ?? 0)} disabled={!!lock("maxCopilotWorkers")} onChange={(e) => set("maxCopilotWorkers", e.target.value)} /></Field>
-            <Field label="Max Codex workers" envVar={lock("maxCodexWorkers")}><TextInput type="number" value={String(draft.maxCodexWorkers ?? 0)} disabled={!!lock("maxCodexWorkers")} onChange={(e) => set("maxCodexWorkers", e.target.value)} /></Field>
-          </Card>
+          <div className="space-y-4">
+            <Card className="grid grid-cols-1 gap-4 p-4 md:grid-cols-3">
+              <Field label="Max Claude workers" envVar={lock("maxClaudeWorkers")}><TextInput type="number" value={String(draft.maxClaudeWorkers ?? 0)} disabled={!!lock("maxClaudeWorkers")} onChange={(e) => set("maxClaudeWorkers", e.target.value)} /></Field>
+              <Field label="Max Copilot workers" envVar={lock("maxCopilotWorkers")}><TextInput type="number" value={String(draft.maxCopilotWorkers ?? 0)} disabled={!!lock("maxCopilotWorkers")} onChange={(e) => set("maxCopilotWorkers", e.target.value)} /></Field>
+              <Field label="Max Codex workers" envVar={lock("maxCodexWorkers")}><TextInput type="number" value={String(draft.maxCodexWorkers ?? 0)} disabled={!!lock("maxCodexWorkers")} onChange={(e) => set("maxCodexWorkers", e.target.value)} /></Field>
+            </Card>
+            <Card className="p-4">
+              <SectionHeader label="Job Configuration" />
+              {jobRows.length === 0 ? (
+                <div className="rounded-md border border-dashed border-border px-3 py-4 text-[12px] text-muted">
+                  Loading jobs...
+                </div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <div className="min-w-[640px]">
+                    <div className="grid grid-cols-[minmax(0,1fr)_140px_minmax(180px,1fr)_92px] gap-2 text-[12px] font-medium text-secondary">
+                      <span>Job</span>
+                      <span>Backend</span>
+                      <span>Model</span>
+                      <span>Enabled</span>
+                    </div>
+                    <div className="mt-2 grid grid-cols-1 gap-2">
+                      {jobRows.map(([name, job]) => (
+                        <div key={name} className="grid grid-cols-[minmax(0,1fr)_140px_minmax(180px,1fr)_92px] items-center gap-2">
+                          <div className="truncate text-[13px] font-medium text-text" title={name}>{name}</div>
+                          <SelectInput
+                            aria-label={`${name} backend`}
+                            value={job.backend}
+                            onChange={(e) => setJob(name, { backend: e.target.value as AiBackend })}
+                          >
+                            {AI_BACKENDS.map((backend) => <option key={backend} value={backend}>{backend}</option>)}
+                          </SelectInput>
+                          <TextInput
+                            aria-label={`${name} model`}
+                            placeholder="default"
+                            value={job.model}
+                            onChange={(e) => setJob(name, { model: e.target.value })}
+                          />
+                          <Toggle label="Enabled" checked={job.enabled} onChange={(v) => setJob(name, { enabled: v })} />
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              )}
+            </Card>
+          </div>
         </TabPanel>
 
         <TabPanel value="integrations">
@@ -208,7 +291,6 @@ export function Config() {
             <Field label="Auth token" envVar={lock("authToken")} hint={isMasked(cfg.authToken) ? "A token is currently set." : undefined}>
               <TextInput type="password" placeholder={isMasked(cfg.authToken) ? MASK : "Not set"} value={draft.authToken as string ?? ""} disabled={!!lock("authToken")} onChange={(e) => set("authToken", e.target.value)} />
             </Field>
-            <Field label="Enabled jobs (comma-separated)"><TextInput value={draft.enabledJobs as string ?? ""} onChange={(e) => set("enabledJobs", e.target.value)} /></Field>
             <Field label="Allowed repos (comma-separated)" envVar={lock("allowedRepos")}><TextInput value={draft.allowedRepos as string ?? ""} disabled={!!lock("allowedRepos")} onChange={(e) => set("allowedRepos", e.target.value)} /></Field>
             <Field label="Default autonomy tier" hint="advisory: comments/labels only -> issues: can open issues -> pr: can push and open PRs -> automerge: can merge.">
               <SelectInput value={draft.defaultAutonomy as string ?? "pr"} onChange={(e) => set("defaultAutonomy", e.target.value)}>

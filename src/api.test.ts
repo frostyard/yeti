@@ -141,6 +141,34 @@ describe("buildConfigUpdate autonomy fields", () => {
   });
 });
 
+describe("buildConfigUpdate job fields", () => {
+  it("accepts enabled job updates, including an empty disable-all list", () => {
+    expect(buildConfigUpdate({ enabledJobs: ["issue-refiner"] }).updates.enabledJobs).toEqual(["issue-refiner"]);
+    expect(buildConfigUpdate({ enabledJobs: [] }).updates.enabledJobs).toEqual([]);
+  });
+
+  it("cleans per-job AI backend and model entries", () => {
+    const { updates } = buildConfigUpdate({
+      jobAi: {
+        "issue-refiner": { backend: "copilot", model: "claude-opus-4.7" },
+        "plan-reviewer": { backend: "wat", model: "" },
+      },
+    });
+
+    expect(updates.jobAi).toEqual({
+      "issue-refiner": { backend: "copilot", model: "claude-opus-4.7" },
+      "plan-reviewer": { model: undefined },
+    });
+  });
+
+  it("omits job updates when job keys are absent", () => {
+    const { updates } = buildConfigUpdate({ githubOwners: ["frostyard"] });
+
+    expect(updates).not.toHaveProperty("enabledJobs");
+    expect(updates).not.toHaveProperty("jobAi");
+  });
+});
+
 describe("computeTierBlock", () => {
   it("flags refined items when the repo tier cannot create PRs", () => {
     expect(computeTierBlock("refined", "advisory")).toEqual({
