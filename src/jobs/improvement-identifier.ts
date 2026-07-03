@@ -14,23 +14,9 @@ const MAX_IMPROVEMENTS_PER_RUN = 10;
 export function buildAnalysisPrompt(
   autonomy: Autonomy,
   fullName: string,
-  openIssueTitles: string[],
-  openPRTitles: string[],
 ): string {
-  const issueList =
-    openIssueTitles.length > 0
-      ? openIssueTitles.map((t) => `  - ${t}`).join("\n")
-      : "  (none)";
-
-  const prList =
-    openPRTitles.length > 0
-      ? openPRTitles.map((t) => `  - ${t}`).join("\n")
-      : "  (none)";
-
   return renderPolicy("improvement-identifier", autonomy, {
     REPO: fullName,
-    ISSUE_LIST: issueList,
-    PR_LIST: prList,
   });
 }
 
@@ -87,9 +73,6 @@ async function processRepo(repo: Repo): Promise<void> {
 
   const fullName = repo.fullName;
 
-  // Fetch open issue titles and PR titles for dedup context
-  const openIssues = await gh.listOpenIssues(fullName);
-  const openIssueTitles = openIssues.map((i) => i.title);
   const openPRs = await gh.listPRs(fullName);
 
   // Skip if improvement PRs are already open
@@ -97,8 +80,6 @@ async function processRepo(repo: Repo): Promise<void> {
     log.info(`[improvement-identifier] Skipping ${fullName} — open improvement PR(s) exist`);
     return;
   }
-
-  const openPRTitles = openPRs.map((p) => p.title);
 
   // Phase 1: Analysis — identify improvements via Claude
   const analysisBranch = `yeti/improve-${claude.randomSuffix()}`;
@@ -111,7 +92,7 @@ async function processRepo(repo: Repo): Promise<void> {
     db.updateTaskWorktree(analysisTaskId, analysisWt, analysisBranch);
 
     log.info(`[improvement-identifier] Analyzing ${fullName}`);
-    const prompt = buildAnalysisPrompt(repoAutonomy(repo), fullName, openIssueTitles, openPRTitles);
+    const prompt = buildAnalysisPrompt(repoAutonomy(repo), fullName);
     const aiOptions = JOB_AI["improvement-identifier"];
     const output = await claude.resolveEnqueue(aiOptions)(() => claude.runAI(prompt, analysisWt!, aiOptions));
 
