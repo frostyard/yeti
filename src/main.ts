@@ -28,7 +28,7 @@ import { setConsolidatorTrigger } from "./learnings.js";
 import * as discord from "./discord.js";
 import { isDiscordConfigured } from "./discord.js";
 import { setShuttingDown } from "./shutdown.js";
-import { cancelQueuedTasks, cancelCurrentTask } from "./claude.js";
+import { cancelQueuedTasks, cancelCurrentTask, warnZeroWorkerJobs } from "./claude.js";
 import { reportError } from "./error-reporter.js";
 import { VERSION } from "./version.js";
 import { announceIfNewVersion } from "./startup-announce.js";
@@ -293,6 +293,8 @@ if (enabledJobs.length === 0) {
   log.warn("No jobs enabled — yeti is running but idle. Set enabledJobs in config.");
 }
 
+warnZeroWorkerJobs(config.ENABLED_JOBS, config.JOB_AI);
+
 const scheduler = startJobs(enabledJobs, config.PAUSED_JOBS);
 
 setConsolidatorTrigger(() => {
@@ -372,6 +374,8 @@ onConfigChange(() => {
   }
 
   prevEnabledJobs = newEnabled;
+
+  warnZeroWorkerJobs(config.ENABLED_JOBS, config.JOB_AI);
 
   // Sync queue scan interval
   if (config.QUEUE_SCAN_INTERVAL_MS !== prevQueueScanIntervalMs) {
