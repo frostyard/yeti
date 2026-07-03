@@ -17,7 +17,7 @@
   },
   "dependencies": {
     "better-sqlite3": "^12",
-    "discord.js": "^14.25.1"
+    "discord.js": "^14.26.3"
   },
   "devDependencies": {
     "@fontsource-variable/inter": "^5.2.8",
