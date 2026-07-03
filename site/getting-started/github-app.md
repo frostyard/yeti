@@ -191,7 +191,7 @@ The login page will now show a "Sign in with GitHub" button. If `authToken` is a
 
 ## Webhooks (Optional)
 
-Webhooks give Yeti near-real-time event delivery. Instead of polling every 5--10 minutes, jobs trigger immediately when issues are labeled or CI checks fail. The dashboard queue also updates instantly.
+Webhooks give Yeti near-real-time event delivery. Instead of polling every 5--10 minutes, jobs trigger immediately when issues are labeled, humans comment, or CI checks fail. The dashboard queue also updates instantly.
 
 Webhooks supplement polling --- they don't replace it. Polling continues as a safety net for missed events, restarts, and reaction tracking.
 
@@ -224,7 +224,9 @@ In your GitHub App settings page (**Settings > Developer settings > GitHub Apps 
 1. Under **Webhook**, check **Active** and set the **Webhook URL** to any placeholder (Yeti will overwrite it on startup).
 2. Under **Subscribe to events**, check:
     - **Issues**
+    - **Issue comments**
     - **Check runs**
+    - **Pull request review comments**
 
 !!! note
     Yeti auto-configures the webhook URL and secret on startup via the GitHub API. You only need to enable the webhook and subscribe to events manually --- these cannot be set via API.

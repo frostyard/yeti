@@ -131,7 +131,7 @@ async function handleRequest(req: http.IncomingMessage, res: http.ServerResponse
       res.end(JSON.stringify({ error: "invalid JSON" }));
       return;
     }
-    const result = handleWebhookEvent(event, payload, scheduler);
+    const result = await handleWebhookEvent(event, payload, scheduler);
     res.writeHead(200, { "Content-Type": "application/json" });
     res.end(JSON.stringify({ result: result.action }));
     return;
