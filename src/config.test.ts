@@ -10,6 +10,24 @@ import os from "node:os";
 const tmpDir = path.join(os.tmpdir(), "yeti-config-test-" + process.pid);
 const configPath = path.join(tmpDir, "config.json");
 
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+async function waitFor(assertion: () => void, timeoutMs = 3_000): Promise<void> {
+  const started = Date.now();
+  let lastError: unknown;
+  while (Date.now() - started < timeoutMs) {
+    try {
+      assertion();
+      return;
+    } catch (err) {
+      lastError = err;
+      await sleep(50);
+    }
+  }
+  if (lastError) throw lastError;
+  assertion();
+}
+
 // Override WORK_DIR / CONFIG_PATH before importing config
 vi.stubEnv("HOME", tmpDir.replace("/.yeti", ""));
 
@@ -163,6 +181,44 @@ describe("config", () => {
 
     expect(mod.SELF_REPO).toBe("reloaded/repo");
     expect(mod.LOG_RETENTION_DAYS).toBe(42);
+  });
+
+  it("watchConfig reloads exported bindings after an external config.json edit", async () => {
+    const mod = await import("./config.js");
+
+    fs.mkdirSync(path.dirname(mod.CONFIG_PATH), { recursive: true });
+    fs.writeFileSync(mod.CONFIG_PATH, JSON.stringify({ logRetentionDays: 7 }));
+    mod.reloadConfig();
+
+    const listener = vi.fn();
+    mod.onConfigChange(listener);
+    const watcher = mod.watchConfig();
+
+    try {
+      await sleep(50);
+      fs.writeFileSync(mod.CONFIG_PATH, JSON.stringify({ logRetentionDays: 31 }));
+
+      await waitFor(() => {
+        expect(mod.LOG_RETENTION_DAYS).toBe(31);
+        expect(listener).toHaveBeenCalled();
+      });
+    } finally {
+      watcher?.close();
+      mod.offConfigChange(listener);
+    }
+  });
+
+  it("watchConfig creates the config directory when it is missing", async () => {
+    const mod = await import("./config.js");
+
+    fs.rmSync(path.dirname(mod.CONFIG_PATH), { recursive: true, force: true });
+    const watcher = mod.watchConfig();
+
+    try {
+      expect(fs.existsSync(path.dirname(mod.CONFIG_PATH))).toBe(true);
+    } finally {
+      watcher?.close();
+    }
   });
 
   it("onConfigChange fires listeners after writeConfig", async () => {

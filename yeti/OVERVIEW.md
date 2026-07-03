@@ -520,13 +520,16 @@ Controls whether forked repositories are included in discovery.
 - Affects both `listRepos()` (worker discovery) and `listAllOrgRepos()` (Repos onboarding page)
 - PRs created on forks stay within the fork — `gh pr create --repo <fork>` targets the fork, not the upstream parent
 
-Config changes made via the web UI (`POST /config`) take effect immediately
-at runtime — no restart required. The config module uses ESM live bindings
-(`export let`) so all consumers see updated values on their next access.
-Interval and schedule changes are propagated to the scheduler via
-`onConfigChange()` listeners that call `updateInterval()` /
-`updateScheduledHour()`. The only exception is `port` (requires socket
-re-bind), which is shown as read-only in the UI.
+Config changes made via the web UI (`POST /config`) and external edits to
+`~/.yeti/config.json` take effect immediately at runtime — no restart required.
+The config module uses ESM live bindings (`export let`) so all consumers see
+updated values on their next access. `writeConfig()` reloads after in-app
+writes, and `watchConfig()` uses a debounced `fs.watch` on the config file's
+directory so hand-edits and config-management pushes also call
+`reloadConfig()` and `onConfigChange()` listeners. Interval and schedule
+changes are propagated to the scheduler via listeners that call
+`updateInterval()` / `updateScheduledHour()`. The only exception is `port`
+(requires socket re-bind), which is shown as read-only in the UI.
 
 Env vars always take priority over `config.json`. Fields set via env var
 are shown as disabled in the config UI with a note indicating the override.

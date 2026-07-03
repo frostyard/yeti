@@ -27,6 +27,10 @@ descriptions for all six labels), `LEGACY_LABELS` (set of old labels cleaned up 
 and connection strings. `WORK_DIR` is always `~/.yeti`. Jobs must be listed in
 `ENABLED_JOBS` (the `enabledJobs` config field) to be registered with the
 scheduler — an empty or missing `enabledJobs` means no jobs start.
+`watchConfig()` installs a debounced `fs.watch` on the `CONFIG_PATH` directory
+and filters for `config.json`, so direct edits and atomic config-management
+pushes trigger `reloadConfig()` and `onConfigChange()` listeners without a
+restart.
 
 **`scheduler.ts`** — Manages job lifecycle. Each job runs immediately on
 startup, then repeats on its interval. If a prior run is still active, the
