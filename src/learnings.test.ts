@@ -75,6 +75,16 @@ describe("stripLearningsDeclaration", () => {
   it("returns output unchanged when there is no declaration", () => {
     expect(stripLearningsDeclaration("plain output")).toBe("plain output");
   });
+
+  it("preserves fenced code block blank lines byte-identically when there is no declaration", () => {
+    const out = "Here is the diff:\n\n```\nline1\n\n\n\nline2\n```\n";
+    expect(stripLearningsDeclaration(out)).toBe(out);
+  });
+
+  it("preserves fenced code block blank lines when removing trailing declarations", () => {
+    const out = "Here is the diff:\n\n```\nline1\n\n\n\nline2\n```\n\nLEARNINGS-REPO: none\nLEARNINGS-YETI: none\n";
+    expect(stripLearningsDeclaration(out)).toBe("Here is the diff:\n\n```\nline1\n\n\n\nline2\n```");
+  });
 });
 
 describe("enforceLearnings", () => {
