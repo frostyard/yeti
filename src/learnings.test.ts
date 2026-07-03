@@ -112,6 +112,21 @@ describe("enforceLearnings", () => {
     expect(mockDb.insertLearning).toHaveBeenCalledWith("issue-worker", "org/repo", "yeti", "use brew");
   });
 
+  it("caps environment learnings to five lines per run", async () => {
+    const lines = Array.from(
+      { length: 7 },
+      (_, i) => `LEARNINGS-YETI: learning ${i + 1}`,
+    );
+    await enforceLearnings(["LEARNINGS-REPO: none", ...lines].join("\n"), ctx);
+    expect(mockDb.insertLearning).toHaveBeenCalledTimes(5);
+    expect(mockDb.insertLearning).toHaveBeenLastCalledWith(
+      "issue-worker",
+      "org/repo",
+      "yeti",
+      "learning 5",
+    );
+  });
+
   it("missing declaration → retries once and captures the retry's learnings", async () => {
     mockClaude.runAI.mockResolvedValueOnce("LEARNINGS-REPO: none\nLEARNINGS-YETI: retry learning");
     await enforceLearnings("no declaration here", ctx);
@@ -136,7 +151,7 @@ describe("enforceLearnings", () => {
   it("threshold reached → fires the consolidator trigger", async () => {
     const trigger = vi.fn();
     setConsolidatorTrigger(trigger);
-    mockDb.countPendingLearnings.mockReturnValue(5);
+    mockDb.countPendingLearnings.mockReturnValueOnce(4).mockReturnValueOnce(5);
     await enforceLearnings("LEARNINGS-REPO: none\nLEARNINGS-YETI: hit threshold", ctx);
     expect(trigger).toHaveBeenCalled();
   });
@@ -144,8 +159,16 @@ describe("enforceLearnings", () => {
   it("below threshold → trigger not fired", async () => {
     const trigger = vi.fn();
     setConsolidatorTrigger(trigger);
-    mockDb.countPendingLearnings.mockReturnValue(3);
+    mockDb.countPendingLearnings.mockReturnValueOnce(3).mockReturnValueOnce(4);
     await enforceLearnings("LEARNINGS-REPO: none\nLEARNINGS-YETI: below threshold", ctx);
+    expect(trigger).not.toHaveBeenCalled();
+  });
+
+  it("already past threshold → trigger not fired again", async () => {
+    const trigger = vi.fn();
+    setConsolidatorTrigger(trigger);
+    mockDb.countPendingLearnings.mockReturnValueOnce(6).mockReturnValueOnce(7);
+    await enforceLearnings("LEARNINGS-REPO: none\nLEARNINGS-YETI: still above threshold", ctx);
     expect(trigger).not.toHaveBeenCalled();
   });
 

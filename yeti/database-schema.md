@@ -129,8 +129,8 @@ repo's own PR and never touch this table.
 | `id` | INTEGER | PRIMARY KEY AUTOINCREMENT | Unique learning identifier |
 | `job_name` | TEXT | NOT NULL | Job that reported the learning (e.g. `issue-worker`, `ci-fixer`) |
 | `repo` | TEXT | NOT NULL | Full repo name the agent was working in when it reported the learning |
-| `kind` | TEXT | NOT NULL | `"repo"` or `"yeti"` — only `"yeti"` rows are currently inserted by `enforceLearnings()`; `kind` is stored for future use if repo learnings ever need DB tracking |
-| `summary` | TEXT | NOT NULL | One-line summary of the learning (the text after `LEARNINGS-YETI:`) |
+| `kind` | TEXT | NOT NULL, CHECK `kind IN ('repo','yeti')` | `"repo"` or `"yeti"` — only `"yeti"` rows are currently inserted by `enforceLearnings()`; `kind` is stored for future use if repo learnings ever need DB tracking |
+| `summary` | TEXT | NOT NULL | One-line summary of the learning (the text after `LEARNINGS-YETI:`), capped to 500 characters by `insertLearning()` |
 | `status` | TEXT | NOT NULL, default `'pending'` | One of: `pending`, `consolidated`, `dismissed` |
 | `reason` | TEXT | nullable | Set by `dismissLearning()` when the consolidator's AI pass judges the learning not actionable (from a `DISMISSED: <id>: <reason>` output line) |
 | `pr_number` | INTEGER | nullable | Set by `markLearningsConsolidated()` — the PR number that folded this learning into policy/docs |
@@ -141,23 +141,29 @@ repo's own PR and never touch this table.
 - `idx_learnings_status` on `status` — used by `getPendingLearnings()` /
   `countPendingLearnings()` to find pending rows without a full scan
 
+Existing databases whose `learnings.kind` column predates the runtime CHECK are
+migrated by `initDb()` with a guarded SQLite table rebuild.
+
 ### Dedup on insert
 
-`insertLearning(jobName, repo, kind, summary)` first checks for an existing
-row with the same `kind` + `summary` and `status = 'pending'`; if found, it
-returns that row's `id` instead of inserting a duplicate. This means the same
-environment friction reported by multiple jobs (or the same job across
-multiple runs) collapses into a single pending row rather than spamming the
-consolidator with near-identical entries. Dedup is exact-match on `summary`
-text, not fuzzy — near-duplicate phrasing still inserts a new row.
+`insertLearning(jobName, repo, kind, summary)` caps `summary` to 500 characters,
+then checks for an existing row with the same `kind` + capped `summary` and
+`status = 'pending'`; if found, it returns that row's `id` instead of inserting
+a duplicate. This means the same environment friction reported by multiple jobs
+(or the same job across multiple runs) collapses into a single pending row
+rather than spamming the consolidator with near-identical entries. Dedup is
+exact-match on capped `summary` text, not fuzzy — near-duplicate phrasing still
+inserts a new row.
 
 ### Lifecycle
 
 1. **pending**: `insertLearning()` inserts (or dedups into) a row with
    `status = 'pending'` when a work job's gate parses a `LEARNINGS-YETI:`
-   line. `countPendingLearnings("yeti") >= LEARNINGS_PENDING_THRESHOLD`
-   (default 5, configurable via `learningsPendingThreshold`) triggers the
-   `learning-consolidator` job immediately, independent of its daily schedule.
+   line. `enforceLearnings()` records at most the first five `LEARNINGS-YETI:`
+   lines per run. Crossing from below `LEARNINGS_PENDING_THRESHOLD` to at or
+   above it (default 5, configurable via `learningsPendingThreshold`) triggers
+   the `learning-consolidator` job immediately, independent of its daily
+   schedule; staying above the threshold does not retrigger it on every insert.
 2. **consolidated**: `markLearningsConsolidated(ids, prNumber)` sets
    `status = 'consolidated'` and records `pr_number` when the consolidator
    successfully folds the learning into `_preamble.md`, a job policy, or a
