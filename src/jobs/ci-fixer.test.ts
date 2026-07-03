@@ -81,6 +81,13 @@ const { mockGh, mockClaude, mockDb, MockRateLimitError } = vi.hoisted(() => {
     regeneratePRDescription: vi.fn(),
     attemptMerge: vi.fn(),
     abortMerge: vi.fn(),
+    getHeadSha: vi.fn(),
+    getNewCommitShas: vi.fn(),
+    commitsOnBranch: vi.fn(),
+    getRevertedShas: vi.fn(),
+    revertCommit: vi.fn(),
+    abortRevert: vi.fn(),
+    resetHard: vi.fn(),
     git: vi.fn(),
   },
   mockDb: {
@@ -88,7 +95,9 @@ const { mockGh, mockClaude, mockDb, MockRateLimitError } = vi.hoisted(() => {
     updateTaskWorktree: vi.fn(),
     recordTaskComplete: vi.fn(),
     recordTaskFailed: vi.fn(),
+    recordTaskCommits: vi.fn(),
     hasPreviousCiFixerTasks: vi.fn(),
+    getCiFixerFixCommitShas: vi.fn(),
   },
 };});
 
@@ -124,9 +133,17 @@ describe("ci-fixer", () => {
     mockClaude.pushBranch.mockResolvedValue(undefined);
     mockClaude.removeWorktree.mockResolvedValue(undefined);
     mockClaude.regeneratePRDescription.mockResolvedValue("## Summary\nUpdated");
+    mockClaude.getHeadSha.mockResolvedValue("start-sha");
+    mockClaude.getNewCommitShas.mockResolvedValue(["fix-sha"]);
+    mockClaude.commitsOnBranch.mockResolvedValue([]);
+    mockClaude.getRevertedShas.mockResolvedValue([]);
+    mockClaude.revertCommit.mockResolvedValue({ clean: true });
+    mockClaude.abortRevert.mockResolvedValue(undefined);
+    mockClaude.resetHard.mockResolvedValue(undefined);
     mockClaude.git.mockResolvedValue("abc123 some commit");
     mockGh.updatePRBody.mockResolvedValue(undefined);
     mockDb.hasPreviousCiFixerTasks.mockReturnValue(false);
+    mockDb.getCiFixerFixCommitShas.mockReturnValue([]);
   });
 
   it("cancelled check — re-runs workflow, does NOT attempt code fix", async () => {
@@ -202,6 +219,8 @@ describe("ci-fixer", () => {
     expect(mockGh.getPRChangedFiles).toHaveBeenCalledWith(repo.fullName, pr.number);
     expect(mockClaude.createWorktreeFromBranch).toHaveBeenCalledWith(repo, pr.headRefName, "ci-fixer");
     expect(mockClaude.pushBranch).toHaveBeenCalled();
+    expect(mockClaude.getNewCommitShas).toHaveBeenCalledWith("/tmp/worktree", "start-sha");
+    expect(mockDb.recordTaskCommits).toHaveBeenCalledWith(1, ["fix-sha"]);
     expect(mockClaude.regeneratePRDescription).toHaveBeenCalledWith("/tmp/worktree", pr.baseRefName, pr, undefined);
     expect(mockGh.updatePRBody).toHaveBeenCalledWith(repo.fullName, pr.number, "## Summary\nUpdated");
     expect(mockNotify).toHaveBeenCalledWith(expect.objectContaining({
@@ -209,6 +228,28 @@ describe("ci-fixer", () => {
       message: expect.stringContaining("Pushed fix"),
     }));
     expect(mockDb.recordTaskComplete).toHaveBeenCalledWith(1);
+  });
+
+  it("related failure — captures SHAs produced by a pushed fix", async () => {
+    const pr = mockPR();
+    mockGh.listPRs.mockResolvedValue([pr]);
+    mockGh.getFailingCheck.mockResolvedValue({
+      name: "CI",
+      state: "FAILURE",
+      link: "https://github.com/org/repo/actions/runs/123",
+    });
+    mockGh.getFailedRunLog.mockResolvedValue("error: test failed");
+    mockClaude.runAI
+      .mockResolvedValueOnce('{"related": true, "fingerprint": "", "reason": "related"}')
+      .mockResolvedValueOnce("fixed");
+    mockClaude.getHeadSha.mockResolvedValue("pre-fix-sha");
+    mockClaude.getNewCommitShas.mockResolvedValue(["sha-one", "sha-two"]);
+
+    await run([repo]);
+
+    expect(mockClaude.getHeadSha).toHaveBeenCalledWith("/tmp/worktree");
+    expect(mockClaude.getNewCommitShas).toHaveBeenCalledWith("/tmp/worktree", "pre-fix-sha");
+    expect(mockDb.recordTaskCommits).toHaveBeenCalledWith(1, ["sha-one", "sha-two"]);
   });
 
   it("unrelated failure — files issue, does not attempt fix", async () => {
@@ -329,7 +370,7 @@ describe("ci-fixer", () => {
     );
   });
 
-  it("unrelated failure — reverts previous ci-fixer commits", async () => {
+  it("unrelated failure — reverts recorded ci-fixer commits and excludes human commits without AI", async () => {
     const pr = mockPR();
     mockGh.listPRs.mockResolvedValue([pr]);
     mockGh.getFailingCheck.mockResolvedValue({
@@ -344,8 +385,10 @@ describe("ci-fixer", () => {
     );
     // DB says there are previous ci-fixer tasks
     mockDb.hasPreviousCiFixerTasks.mockReturnValue(true);
-    // Revert Claude call
-    mockClaude.runAI.mockResolvedValueOnce("reverted commits");
+    mockDb.getCiFixerFixCommitShas.mockReturnValue(["yeti1", "yeti2"]);
+    mockClaude.commitsOnBranch.mockResolvedValue(["human1", "yeti2", "yeti1"]);
+    mockClaude.getRevertedShas.mockResolvedValue([]);
+    mockClaude.git.mockResolvedValue("0");
 
     await run([repo]);
 
@@ -355,12 +398,97 @@ describe("ci-fixer", () => {
       pr.headRefName,
       "ci-fixer-revert",
     );
-    expect(mockClaude.git).toHaveBeenCalledWith(
+    expect(mockClaude.revertCommit).toHaveBeenCalledTimes(2);
+    expect(mockClaude.revertCommit).toHaveBeenNthCalledWith(1, "/tmp/worktree", "yeti2");
+    expect(mockClaude.revertCommit).toHaveBeenNthCalledWith(2, "/tmp/worktree", "yeti1");
+    expect(mockClaude.revertCommit).not.toHaveBeenCalledWith("/tmp/worktree", "human1");
+    expect(mockClaude.git).not.toHaveBeenCalledWith(
       ["log", "--oneline", `origin/${pr.baseRefName}..HEAD`],
       "/tmp/worktree",
     );
-    // Should push the reverts
+    expect(mockClaude.runAI).toHaveBeenCalledTimes(1);
     expect(mockClaude.pushBranch).toHaveBeenCalled();
+  });
+
+  it("unrelated failure — excludes already reverted recorded commits", async () => {
+    const pr = mockPR();
+    mockGh.listPRs.mockResolvedValue([pr]);
+    mockGh.getFailingCheck.mockResolvedValue({
+      name: "CI",
+      state: "FAILURE",
+      link: "https://github.com/org/repo/actions/runs/123",
+    });
+    mockGh.getFailedRunLog.mockResolvedValue("error: flakey timeout");
+    mockClaude.runAI.mockResolvedValueOnce(
+      '{"related": false, "fingerprint": "flakey-test:timeout", "reason": "timeout"}',
+    );
+    mockDb.hasPreviousCiFixerTasks.mockReturnValue(true);
+    mockDb.getCiFixerFixCommitShas.mockReturnValue(["yeti1", "yeti2"]);
+    mockClaude.commitsOnBranch.mockResolvedValue(["yeti2", "yeti1"]);
+    mockClaude.getRevertedShas.mockResolvedValue(["yeti1"]);
+    mockClaude.git.mockResolvedValue("0");
+
+    await run([repo]);
+
+    expect(mockClaude.revertCommit).toHaveBeenCalledTimes(1);
+    expect(mockClaude.revertCommit).toHaveBeenCalledWith("/tmp/worktree", "yeti2");
+  });
+
+  it("unrelated failure — conflict during deterministic revert falls back to AI with explicit SHAs", async () => {
+    const pr = mockPR();
+    mockGh.listPRs.mockResolvedValue([pr]);
+    mockGh.getFailingCheck.mockResolvedValue({
+      name: "CI",
+      state: "FAILURE",
+      link: "https://github.com/org/repo/actions/runs/123",
+    });
+    mockGh.getFailedRunLog.mockResolvedValue("error: flakey timeout");
+    mockClaude.runAI
+      .mockResolvedValueOnce('{"related": false, "fingerprint": "flakey-test:timeout", "reason": "timeout"}')
+      .mockResolvedValueOnce("resolved revert conflict");
+    mockDb.hasPreviousCiFixerTasks.mockReturnValue(true);
+    mockDb.getCiFixerFixCommitShas.mockReturnValue(["yeti1", "yeti2"]);
+    mockClaude.commitsOnBranch.mockResolvedValue(["yeti2", "yeti1"]);
+    mockClaude.getRevertedShas.mockResolvedValue([]);
+    mockClaude.revertCommit.mockResolvedValueOnce({ clean: false });
+    mockClaude.getHeadSha.mockResolvedValue("revert-start");
+    mockClaude.git.mockResolvedValue("0");
+
+    await run([repo]);
+
+    expect(mockClaude.abortRevert).toHaveBeenCalledWith("/tmp/worktree");
+    expect(mockClaude.resetHard).toHaveBeenCalledWith("/tmp/worktree", "revert-start");
+    expect(mockClaude.runAI).toHaveBeenCalledTimes(2);
+    const prompt = mockClaude.runAI.mock.calls[1][0] as string;
+    expect(prompt).toContain("Revert exactly these commits");
+    expect(prompt).toContain("- yeti2");
+    expect(prompt).toContain("- yeti1");
+  });
+
+  it("unrelated failure — previous tasks without recorded SHAs do not trigger AI inference", async () => {
+    const pr = mockPR();
+    mockGh.listPRs.mockResolvedValue([pr]);
+    mockGh.getFailingCheck.mockResolvedValue({
+      name: "CI",
+      state: "FAILURE",
+      link: "https://github.com/org/repo/actions/runs/123",
+    });
+    mockGh.getFailedRunLog.mockResolvedValue("error: flakey timeout");
+    mockClaude.runAI.mockResolvedValueOnce(
+      '{"related": false, "fingerprint": "flakey-test:timeout", "reason": "timeout"}',
+    );
+    mockDb.hasPreviousCiFixerTasks.mockReturnValue(true);
+    mockDb.getCiFixerFixCommitShas.mockReturnValue([]);
+    mockClaude.git.mockResolvedValue("0");
+
+    await run([repo]);
+
+    expect(mockClaude.revertCommit).not.toHaveBeenCalled();
+    expect(mockClaude.runAI).toHaveBeenCalledTimes(1);
+    expect(mockClaude.git).not.toHaveBeenCalledWith(
+      ["log", "--oneline", `origin/${pr.baseRefName}..HEAD`],
+      "/tmp/worktree",
+    );
   });
 
   it("unrelated failure — no previous ci-fixer tasks, skip revert", async () => {
@@ -615,6 +743,7 @@ describe("ci-fixer", () => {
     expect(mockClaude.pushBranch).not.toHaveBeenCalled();
     expect(mockClaude.regeneratePRDescription).not.toHaveBeenCalled();
     expect(mockGh.updatePRBody).not.toHaveBeenCalled();
+    expect(mockDb.recordTaskCommits).not.toHaveBeenCalled();
   });
 
   it("conflict resolution — updates PR description after Claude-resolved push", async () => {
@@ -1054,9 +1183,9 @@ describe("buildFixPrompt (policy template)", () => {
 });
 
 describe("buildRevertPrompt (policy template)", () => {
-  function expected(pr: gh.PR, changedFiles: string[], gitLog: string): string {
+  function expected(pr: gh.PR, changedFiles: string[], shas: string[]): string {
     return [
-      `You are examining commits on a pull request branch to identify and revert automated CI fix attempts that were for issues UNRELATED to the PR's purpose.`,
+      `You are resolving conflicts while reverting Yeti ci-fixer commits on a pull request branch.`,
       ``,
       `PR #${pr.number}: ${pr.title}`,
       `Branch: ${pr.headRefName}`,
@@ -1064,28 +1193,22 @@ describe("buildRevertPrompt (policy template)", () => {
       `Files originally changed in this PR:`,
       changedFiles.map((f) => `- ${f}`).join("\n"),
       ``,
-      `Commit history on this branch (newest first):`,
-      "```",
-      gitLog,
-      "```",
+      `Revert exactly these commits, newest first:`,
+      shas.map((sha) => `- ${sha}`).join("\n"),
       ``,
-      `Identify any commits that appear to be automated CI fix attempts for issues that are NOT related to the PR's original purpose (the files listed above). These are typically commits that:`,
-      `- Fix flakey tests unrelated to the PR`,
-      `- Work around CI runner issues`,
-      `- Fix pre-existing problems not introduced by this PR`,
+      `Run \`git revert <sha> --no-edit\` for the listed commits only. If conflicts occur, resolve them while preserving the PR's intended changes to the files listed above.`,
       ``,
-      `For each such commit, run: git revert <sha> --no-edit`,
-      ``,
-      `If no unrelated fix commits are found, do nothing.`,
-      `Be conservative — only revert commits you are confident are unrelated automated fixes.`,
+      `Do not revert, reset, amend, squash, or otherwise modify any other commit. If a listed commit is already reverted, leave it alone and continue with the remaining listed commits.`,
     ].join("\n");
   }
 
-  it("matches the pre-migration inline builder", () => {
+  it("renders the explicit SHA list without log-inference instructions", () => {
     const pr = mockPR({ number: 23, title: "Add widget", headRefName: "widget-branch" });
     const changedFiles = ["src/widget.ts"];
-    const gitLog = "abc123 fix flakey test\ndef456 add widget feature";
-    const out = buildRevertPrompt("pr", pr, changedFiles, gitLog);
-    expect(stripPreamble(out).trimEnd()).toBe(expected(pr, changedFiles, gitLog).trimEnd());
+    const shas = ["abc123", "def456"];
+    const out = buildRevertPrompt("pr", pr, changedFiles, shas);
+    expect(stripPreamble(out).trimEnd()).toBe(expected(pr, changedFiles, shas).trimEnd());
+    expect(out).not.toContain("Commit history");
+    expect(out).not.toContain("Identify any commits");
   });
 });

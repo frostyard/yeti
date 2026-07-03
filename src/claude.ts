@@ -227,6 +227,11 @@ function repoDir(repo: Repo): string {
   return path.join(WORK_DIR, "repos", repo.owner, repo.name);
 }
 
+const YETI_GIT_IDENT = [
+  "-c", "user.email=yeti@users.noreply.github.com",
+  "-c", "user.name=Yeti",
+];
+
 /**
  * In-flight ensureClone promises, keyed by repo directory path.
  * Prevents concurrent git fetch operations on the same clone directory.
@@ -381,6 +386,40 @@ export async function getLastDocMaintainerSha(wtPath: string): Promise<string | 
 /** Return the current HEAD SHA. */
 export async function getHeadSha(wtPath: string): Promise<string> {
   return git(["rev-parse", "HEAD"], wtPath);
+}
+
+/** Return full SHAs introduced after sinceSha, newest first. */
+export async function getNewCommitShas(wtPath: string, sinceSha: string): Promise<string[]> {
+  const out = await git(["rev-list", `${sinceSha}..HEAD`], wtPath);
+  return out.split("\n").filter(Boolean);
+}
+
+/** Return full SHAs currently on the PR branch compared to origin/baseBranch, newest first. */
+export async function commitsOnBranch(wtPath: string, baseBranch: string): Promise<string[]> {
+  const out = await git(["rev-list", `origin/${baseBranch}..HEAD`], wtPath);
+  return out.split("\n").filter(Boolean);
+}
+
+/** Return SHAs already reverted on the branch, parsed from git's standard revert body. */
+export async function getRevertedShas(wtPath: string, baseBranch: string): Promise<string[]> {
+  const bodies = await git(["log", `origin/${baseBranch}..HEAD`, "--format=%b"], wtPath);
+  return [...bodies.matchAll(/This reverts commit ([0-9a-f]{40})\./gi)].map((m) => m[1]);
+}
+
+/** Revert one commit, returning clean:false when git reports a conflict/failure. */
+export async function revertCommit(wtPath: string, sha: string): Promise<{ clean: boolean }> {
+  const result = await gitRaw([...YETI_GIT_IDENT, "revert", sha, "--no-edit"], wtPath);
+  return { clean: result.code === 0 };
+}
+
+/** Abort an in-progress revert, best effort. */
+export async function abortRevert(wtPath: string): Promise<void> {
+  await gitRaw(["revert", "--abort"], wtPath);
+}
+
+/** Reset the worktree to an exact commit. */
+export async function resetHard(wtPath: string, sha: string): Promise<void> {
+  await git(["reset", "--hard", sha], wtPath);
 }
 
 /** Check if the worktree has new commits compared to origin. */
