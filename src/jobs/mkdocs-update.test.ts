@@ -30,6 +30,7 @@ const { mockFs, mockGh, mockClaude, mockDb } = vi.hoisted(() => ({
   },
   mockGh: {
     listPRs: vi.fn(),
+    getRemoteHead: vi.fn(),
     createPR: vi.fn(),
     pullUrl: (fullName: string, number: number) => `https://github.com/${fullName}/pull/${number}`,
   },
@@ -53,6 +54,8 @@ const { mockFs, mockGh, mockClaude, mockDb } = vi.hoisted(() => ({
     updateTaskWorktree: vi.fn(),
     recordTaskComplete: vi.fn(),
     recordTaskFailed: vi.fn(),
+    getLastJobSha: vi.fn(),
+    recordJobSha: vi.fn(),
   },
 }));
 
@@ -85,7 +88,9 @@ describe("mkdocs-update", () => {
     vi.clearAllMocks();
     for (const k in __tier) delete __tier[k];
     mockGh.listPRs.mockResolvedValue([]);
+    mockGh.getRemoteHead.mockResolvedValue({ sha: "headsha", message: "source changes" });
     mockGh.createPR.mockResolvedValue(100);
+    mockDb.getLastJobSha.mockReturnValue(null);
     mockClaude.createWorktree.mockResolvedValue("/tmp/worktree");
     mockClaude.enqueue.mockImplementation((fn: () => Promise<string>) => fn());
     mockClaude.enqueueCopilot.mockImplementation((fn: () => Promise<string>) => fn());
@@ -129,6 +134,7 @@ describe("mkdocs-update", () => {
 
     await run([repo]);
 
+    expect(mockGh.getRemoteHead).not.toHaveBeenCalled();
     expect(mockClaude.createWorktree).not.toHaveBeenCalled();
   });
 
@@ -145,6 +151,7 @@ describe("mkdocs-update", () => {
   it("creates PR when Claude produces commits with tree diff", async () => {
     await run([repo]);
 
+    expect(mockGh.getRemoteHead).toHaveBeenCalledWith(repo.fullName, repo.defaultBranch);
     expect(mockClaude.enqueue).toHaveBeenCalled();
     expect(mockClaude.runAI).toHaveBeenCalledWith(
       expect.stringContaining("source code is the single source of truth"),
@@ -166,7 +173,59 @@ describe("mkdocs-update", () => {
       jobName: "mkdocs-update",
       message: expect.stringContaining("Created PR #100"),
     }));
+    expect(mockDb.recordJobSha).toHaveBeenCalledWith("mkdocs-update", repo.fullName, "headsha");
     expect(mockDb.recordTaskComplete).toHaveBeenCalledWith(1);
+  });
+
+  it("skips before worktree and AI when head SHA was already processed", async () => {
+    mockGh.getRemoteHead.mockResolvedValue({ sha: "same-sha", message: "source changes" });
+    mockDb.getLastJobSha.mockReturnValue("same-sha");
+
+    await run([repo]);
+
+    expect(mockDb.recordTaskStart).not.toHaveBeenCalled();
+    expect(mockClaude.createWorktree).not.toHaveBeenCalled();
+    expect(mockClaude.runAI).not.toHaveBeenCalled();
+    expect(mockDb.recordJobSha).toHaveBeenCalledWith("mkdocs-update", repo.fullName, "same-sha");
+  });
+
+  it("runs when head SHA changed since the last mkdocs update", async () => {
+    mockGh.getRemoteHead.mockResolvedValue({ sha: "new-sha", message: "source changes" });
+    mockDb.getLastJobSha.mockReturnValue("old-sha");
+
+    await run([repo]);
+
+    expect(mockGh.getRemoteHead).toHaveBeenCalledWith(repo.fullName, repo.defaultBranch);
+    expect(mockClaude.createWorktree).toHaveBeenCalled();
+    expect(mockClaude.runAI).toHaveBeenCalled();
+    expect(mockGh.createPR).toHaveBeenCalled();
+    expect(mockDb.recordJobSha).toHaveBeenCalledWith("mkdocs-update", repo.fullName, "new-sha");
+  });
+
+  it("runs on first mkdocs update when no SHA was recorded", async () => {
+    mockGh.getRemoteHead.mockResolvedValue({ sha: "first-sha", message: "source changes" });
+    mockDb.getLastJobSha.mockReturnValue(null);
+
+    await run([repo]);
+
+    expect(mockClaude.createWorktree).toHaveBeenCalled();
+    expect(mockClaude.runAI).toHaveBeenCalled();
+    expect(mockDb.recordJobSha).toHaveBeenCalledWith("mkdocs-update", repo.fullName, "first-sha");
+  });
+
+  it("skips and records head when own mkdocs-update merge is at repo head", async () => {
+    mockGh.getRemoteHead.mockResolvedValue({
+      sha: "merge-sha",
+      message: "docs: update mkdocs content [mkdocs-update]",
+    });
+    mockDb.getLastJobSha.mockReturnValue("old-sha");
+
+    await run([repo]);
+
+    expect(mockDb.recordTaskStart).not.toHaveBeenCalled();
+    expect(mockClaude.createWorktree).not.toHaveBeenCalled();
+    expect(mockClaude.runAI).not.toHaveBeenCalled();
+    expect(mockDb.recordJobSha).toHaveBeenCalledWith("mkdocs-update", repo.fullName, "merge-sha");
   });
 
   it("does not create PR when Claude produces no commits", async () => {

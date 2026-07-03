@@ -26,6 +26,8 @@ import {
   getRecentWorkItems,
   getRecentActions,
   getRecentTasksForItem,
+  getLastJobSha,
+  recordJobSha,
   searchRunsByItem,
   insertJobRun,
   completeJobRun,
@@ -122,6 +124,22 @@ describe("db", () => {
     expect(tasks.map((task) => task.id)).toEqual([third, second, first]);
     expect(getRecentTasksForItem("issue-refiner", "org/repo", 42, 2).map((task) => task.id))
       .toEqual([third, second]);
+  });
+
+  it("records and updates the last processed SHA per job and repo", () => {
+    expect(getLastJobSha("mkdocs-update", "org/repo")).toBeNull();
+
+    recordJobSha("mkdocs-update", "org/repo", "sha-1");
+    recordJobSha("doc-maintainer", "org/repo", "doc-sha");
+    recordJobSha("mkdocs-update", "org/other", "other-sha");
+
+    expect(getLastJobSha("mkdocs-update", "org/repo")).toBe("sha-1");
+    expect(getLastJobSha("doc-maintainer", "org/repo")).toBe("doc-sha");
+    expect(getLastJobSha("mkdocs-update", "org/other")).toBe("other-sha");
+
+    recordJobSha("mkdocs-update", "org/repo", "sha-2");
+
+    expect(getLastJobSha("mkdocs-update", "org/repo")).toBe("sha-2");
   });
 
   it("getOrphanedTasks returns only running tasks", () => {

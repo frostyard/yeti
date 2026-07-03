@@ -951,6 +951,21 @@ export async function getPRLatestCommitDate(repo: string, prNumber: number): Pro
   return raw.trim();
 }
 
+export interface RemoteHead {
+  sha: string;
+  message: string;
+}
+
+export async function getRemoteHead(repo: string, branch: string): Promise<RemoteHead> {
+  const raw = await gh([
+    "api",
+    `repos/${repo}/commits/${encodeURIComponent(branch)}`,
+    "--jq",
+    "{sha: .sha, message: .commit.message}",
+  ]);
+  return safeJsonParse(raw, "remote head commit") as RemoteHead;
+}
+
 function isMergeFromBase(
   commit: { message: string; parents: unknown[] },
   baseBranch: string,
