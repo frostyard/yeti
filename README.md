@@ -151,7 +151,7 @@ By default, Yeti uses your personal `gh` CLI credentials. If you enable branch p
 
 ## Jobs
 
-Yeti runs 11 jobs on timers. Each job scans repos under the configured `githubOwners`, filtered by `allowedRepos` if set. Understanding what triggers each job is important — **most jobs do not require labels** and will discover work based on PR/issue state.
+Yeti runs 14 jobs on timers. Each job scans repos under the configured `githubOwners`, filtered by `allowedRepos` if set. Understanding what triggers each job is important — **most jobs do not require labels** and will discover work based on PR/issue state.
 
 Every job listed under **`enabledJobs`** must be added explicitly — see [`enabledJobs` migration](#enabledjobs-migration-required) above. This includes `learning-consolidator`: the self-improvement loop's gate (agents declaring environment/tooling friction after each work session) is always active for issue-worker, ci-fixer, review-addresser, and improvement-identifier whenever those jobs run, but the consolidation half — folding accumulated learnings into policies/docs via a PR — only runs if `learning-consolidator` is itself in `enabledJobs`.
 
@@ -170,6 +170,7 @@ These only fire when Yeti has already created branches or issues:
 | **review-addresser** | `yeti/` branch PR with review comments | Addresses reviewer feedback on Yeti-created PRs |
 | **triage-yeti-errors** | Issue with `[yeti-error]` in title | Investigates Yeti error issues |
 | **repo-standards** | Periodic (daily) | Syncs label definitions — does not create PRs or issues |
+| **prompt-evaluator** | Periodic (daily) | A/B tests plan-producing prompts against AI-generated variants, files issues for improvements |
 | **learning-consolidator** | Periodic (daily), or immediately when pending environment learnings reach `learningsPendingThreshold` | Folds agent-reported environment/tooling learnings into `_preamble.md`, job policies, or `yeti/` docs via a PR against the self repo |
 
 ### Jobs that act on ANY matching issue or PR
@@ -184,6 +185,7 @@ These scan all open issues/PRs and will do work without any Yeti-specific labels
 | **improvement-identifier** | Periodic scan of codebase | Creates PRs for code improvement opportunities |
 | **issue-auditor** | All open issues | Audits and classifies issue state, applies labels |
 | **doc-maintainer** | Code changes since last doc update | Updates documentation (only on already-cloned repos) |
+| **mkdocs-update** | Periodic (daily) | Daily MkDocs documentation update from recent changes |
 
 ### Auto-merge behaviour
 
@@ -254,4 +256,3 @@ src/
 ## Attribution
 
 Based on [claws-snapshot](https://github.com/stjohnb/claws-snapshot) from the blog post [Building an AI-powered GitHub automation tool](https://www.bstjohn.net/blog/claws/).
-
