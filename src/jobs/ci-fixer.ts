@@ -103,6 +103,89 @@ interface Classification {
   reason: string;
 }
 
+function normalizeFailingPath(path: string): string {
+  return path
+    .trim()
+    .replace(/^["'`([{<]+/, "")
+    .replace(/[)"'`>\]},.;:]+$/, "")
+    .replace(/^\.\/+/, "")
+    .replace(/^[ab]\//, "");
+}
+
+export function extractFailingPaths(failLog: string): string[] {
+  const paths = new Set<string>();
+  const addPath = (raw: string | undefined) => {
+    if (!raw) return;
+    const normalized = normalizeFailingPath(raw);
+    if (!normalized || normalized.includes("://") || normalized.includes("node_modules/")) return;
+    paths.add(normalized);
+  };
+
+  for (const match of failLog.matchAll(/^\s*(?:FAIL|❯|×)\s+(\S+)/gm)) {
+    addPath(match[1]);
+  }
+
+  for (const match of failLog.matchAll(/([\w./-]+\.[\w]+):\d+(?::\d+)?/g)) {
+    addPath(match[1]);
+  }
+
+  for (const match of failLog.matchAll(/(?:^|[\s"'(])([\w.-]+(?:\/[\w.-]+)*\.[\w]+)\b/gm)) {
+    addPath(match[1]);
+  }
+
+  for (const match of failLog.matchAll(/(?:^|[\s"'([])(Dockerfile|Makefile|Procfile|Rakefile|Gemfile)\b/gm)) {
+    addPath(match[1]);
+  }
+
+  return [...paths].sort();
+}
+
+function normalizeChangedFile(path: string): string {
+  return path.trim().replace(/^\.\/+/, "").replace(/^[ab]\//, "");
+}
+
+export function hasFileOverlap(failingPaths: string[], changedFiles: string[]): boolean {
+  if (failingPaths.length === 0 || changedFiles.length === 0) return false;
+
+  const normalizedFailingPaths = failingPaths.map(normalizeFailingPath).filter(Boolean);
+  const normalizedChangedFiles = changedFiles.map(normalizeChangedFile).filter(Boolean);
+
+  return normalizedFailingPaths.some((failingPath) => normalizedChangedFiles.some((changedFile) => {
+    if (failingPath === changedFile) return true;
+    // Logs can include an absolute workspace prefix before a repo-relative
+    // changed path. Do not match the reverse direction or root-level basenames.
+    return changedFile.includes("/") && failingPath.endsWith(`/${changedFile}`);
+  }));
+}
+
+export function deriveFingerprint(checkName: string, failingPath: string | undefined): string {
+  const checkSlug = checkName
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .replace(/-+/g, "-") || "ci";
+  const normalizedPath = failingPath ? normalizeFailingPath(failingPath) : "";
+  return normalizedPath ? `${checkSlug}:${normalizedPath}` : checkSlug;
+}
+
+export function parseClassification(response: string): { related: boolean; reason: string } | null {
+  const jsonMatch = response.trim().match(/^\{[\s\S]*\}$/) ?? response.match(/\{[\s\S]*?"related"[\s\S]*?\}/);
+  if (!jsonMatch) return null;
+
+  try {
+    const parsed: unknown = JSON.parse(jsonMatch[0]);
+    if (!parsed || typeof parsed !== "object") return null;
+    const classification = parsed as { related?: unknown; reason?: unknown };
+    if (typeof classification.related !== "boolean") return null;
+    return {
+      related: classification.related,
+      reason: typeof classification.reason === "string" ? classification.reason : String(classification.reason ?? ""),
+    };
+  } catch {
+    return null;
+  }
+}
+
 export function buildClassifyPrompt(autonomy: Autonomy, pr: gh.PR, failLog: string, changedFiles: string[]): string {
   return renderPolicy("ci-fixer.classify", autonomy, {
     PR_NUMBER: String(pr.number),
@@ -118,39 +201,36 @@ async function classifyCIFailure(
   pr: gh.PR,
   failLog: string,
   changedFiles: string[],
+  checkName: string,
 ): Promise<Classification> {
+  const failingPaths = extractFailingPaths(failLog);
+  if (hasFileOverlap(failingPaths, changedFiles)) {
+    return { related: true, fingerprint: "", reason: "failure in a file the PR changed" };
+  }
+
   const prompt = buildClassifyPrompt(repoAutonomy(repo), pr, failLog, changedFiles);
 
   try {
     const aiOptions = JOB_AI["ci-fixer"];
     const response = await claude.resolveEnqueue(aiOptions)(() => claude.runAI(prompt, process.cwd(), aiOptions), gh.hasPriorityLabel(pr.labels));
+    const parsed = parseClassification(response);
 
-    // Try to parse JSON from response
-    const jsonMatch = response.match(/\{[\s\S]*?"related"[\s\S]*?\}/);
-    if (jsonMatch) {
-      const parsed = JSON.parse(jsonMatch[0]) as Classification;
-      if (typeof parsed.related === "boolean") {
-        return {
-          related: parsed.related,
-          fingerprint: String(parsed.fingerprint || ""),
-          reason: String(parsed.reason || ""),
-        };
-      }
+    if (!parsed) {
+      log.warn("[ci-fixer] Unparseable classification response; defaulting to related");
+      // Conservative default: a malformed residual classification should lead
+      // to an attempted fix, not silently ignore a potentially real PR breakage.
+      return { related: true, fingerprint: "", reason: "unparseable classification response; defaulted to related" };
     }
 
-    // Regex fallback: look for "related": false
-    if (/"related"\s*:\s*false/.test(response)) {
-      const fpMatch = response.match(/"fingerprint"\s*:\s*"([^"]*)"/);
-      const reasonMatch = response.match(/"reason"\s*:\s*"([^"]*)"/);
-      return {
-        related: false,
-        fingerprint: fpMatch?.[1] ?? "",
-        reason: reasonMatch?.[1] ?? "",
-      };
+    if (parsed.related) {
+      return { related: true, fingerprint: "", reason: parsed.reason };
     }
 
-    // Default to related (safe fallback)
-    return { related: true, fingerprint: "", reason: "classification parsing fallback" };
+    return {
+      related: false,
+      fingerprint: deriveFingerprint(checkName, failingPaths[0]),
+      reason: parsed.reason,
+    };
   } catch (err) {
     log.warn(`[ci-fixer] Classification failed: ${err}`);
     return { related: true, fingerprint: "", reason: "classification failed" };
@@ -194,7 +274,7 @@ async function identifyPRWork(repo: Repo, pr: gh.PR): Promise<WorkItem | null> {
   }
 
   const changedFiles = await gh.getPRChangedFiles(fullName, pr.number);
-  const classification = await classifyCIFailure(repo, pr, failLog, changedFiles);
+  const classification = await classifyCIFailure(repo, pr, failLog, changedFiles, failedCheck.name);
 
   if (classification.related) {
     return { kind: "fix", repo, pr, failLog };

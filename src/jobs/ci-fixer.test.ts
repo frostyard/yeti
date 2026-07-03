@@ -105,7 +105,56 @@ vi.mock("../github.js", () => mockGh);
 vi.mock("../claude.js", () => mockClaude);
 vi.mock("../db.js", () => mockDb);
 
-import { run, buildConflictPrompt, buildClassifyPrompt, buildFixPrompt, buildRevertPrompt } from "./ci-fixer.js";
+import {
+  run,
+  buildConflictPrompt,
+  buildClassifyPrompt,
+  buildFixPrompt,
+  buildRevertPrompt,
+  deriveFingerprint,
+  extractFailingPaths,
+  hasFileOverlap,
+  parseClassification,
+} from "./ci-fixer.js";
+
+describe("ci-fixer classification helpers", () => {
+  it("extractFailingPaths finds common test, diagnostic, root, and extensionless paths", () => {
+    expect(extractFailingPaths([
+      " FAIL src/foo.test.ts > suite",
+      "src/bar.ts:12:3 - error TS2322",
+      "npm ERR! package.json failed validation",
+      "make: *** [Makefile:10: test] Error 2",
+    ].join("\n"))).toEqual(["Makefile", "package.json", "src/bar.ts", "src/foo.test.ts"]);
+    expect(extractFailingPaths("error: no file paths here")).toEqual([]);
+  });
+
+  it("hasFileOverlap uses strict full-path intersection with one-way prefixed log matching", () => {
+    expect(hasFileOverlap(["src/app.ts"], ["src/app.ts"])).toBe(true);
+    expect(hasFileOverlap(["/home/runner/work/repo/repo/src/app.ts"], ["src/app.ts"])).toBe(true);
+    expect(hasFileOverlap(["src/b/index.ts"], ["src/a/index.ts"])).toBe(false);
+    expect(hasFileOverlap(["package.json"], ["packages/foo/package.json"])).toBe(false);
+    expect(hasFileOverlap(["src/x/package.json"], ["package.json"])).toBe(false);
+    expect(hasFileOverlap(["package.json"], ["package.json"])).toBe(true);
+    expect(hasFileOverlap(["src/app.ts"], ["src/other.ts"])).toBe(false);
+    expect(hasFileOverlap([], ["src/app.ts"])).toBe(false);
+    expect(hasFileOverlap(["src/app.ts"], [])).toBe(false);
+  });
+
+  it("deriveFingerprint is deterministic from check name and sorted failing path", () => {
+    expect(deriveFingerprint("CI / Unit Tests", "src/app.test.ts")).toBe("ci-unit-tests:src/app.test.ts");
+    expect(deriveFingerprint("CI / Unit Tests", "src/app.test.ts")).toBe(deriveFingerprint("CI / Unit Tests", "src/app.test.ts"));
+
+    const firstPath = extractFailingPaths("src/z.test.ts:1:1\nsrc/a.test.ts:1:1")[0];
+    expect(deriveFingerprint("CI", firstPath)).toBe("ci:src/a.test.ts");
+    expect(deriveFingerprint("CI", undefined)).toBe("ci");
+  });
+
+  it("parseClassification accepts schema-valid JSON and rejects malformed output", () => {
+    expect(parseClassification('{"related":false,"reason":"flaky"}')).toEqual({ related: false, reason: "flaky" });
+    expect(parseClassification('{"related":"false","reason":"flaky"}')).toBeNull();
+    expect(parseClassification("not json")).toBeNull();
+  });
+});
 
 describe("ci-fixer", () => {
   const repo = mockRepo();
@@ -252,6 +301,47 @@ describe("ci-fixer", () => {
     expect(mockDb.recordTaskCommits).toHaveBeenCalledWith(1, ["sha-one", "sha-two"]);
   });
 
+  it("overlapping changed source file — skips AI classification and proceeds with fix", async () => {
+    const pr = mockPR();
+    mockGh.listPRs.mockResolvedValue([pr]);
+    mockGh.getFailingCheck.mockResolvedValue({
+      name: "CI",
+      state: "FAILURE",
+      link: "https://github.com/org/repo/actions/runs/123",
+    });
+    mockGh.getFailedRunLog.mockResolvedValue("src/app.ts:12:3 - error TS2322");
+    mockGh.getPRChangedFiles.mockResolvedValue(["src/app.ts"]);
+    mockClaude.runAI.mockResolvedValueOnce("fixed");
+
+    await run([repo]);
+
+    expect(mockClaude.runAI).toHaveBeenCalledTimes(1);
+    expect(mockClaude.runAI.mock.calls[0][0]).toContain("The CI checks have failed");
+    expect(mockClaude.runAI.mock.calls[0][0]).not.toContain("after a deterministic file-overlap check was inconclusive");
+    expect(mockClaude.createWorktreeFromBranch).toHaveBeenCalledWith(repo, pr.headRefName, "ci-fixer");
+    expect(mockGh.createIssue).not.toHaveBeenCalled();
+  });
+
+  it("overlapping changed root file — skips AI classification and proceeds with fix", async () => {
+    const pr = mockPR();
+    mockGh.listPRs.mockResolvedValue([pr]);
+    mockGh.getFailingCheck.mockResolvedValue({
+      name: "CI",
+      state: "FAILURE",
+      link: "https://github.com/org/repo/actions/runs/123",
+    });
+    mockGh.getFailedRunLog.mockResolvedValue("npm ERR! package.json failed validation");
+    mockGh.getPRChangedFiles.mockResolvedValue(["package.json"]);
+    mockClaude.runAI.mockResolvedValueOnce("fixed");
+
+    await run([repo]);
+
+    expect(mockClaude.runAI).toHaveBeenCalledTimes(1);
+    expect(mockClaude.runAI.mock.calls[0][0]).not.toContain("after a deterministic file-overlap check was inconclusive");
+    expect(mockClaude.createWorktreeFromBranch).toHaveBeenCalledWith(repo, pr.headRefName, "ci-fixer");
+    expect(mockGh.createIssue).not.toHaveBeenCalled();
+  });
+
   it("unrelated failure — files issue, does not attempt fix", async () => {
     const pr = mockPR();
     mockGh.listPRs.mockResolvedValue([pr]);
@@ -263,7 +353,7 @@ describe("ci-fixer", () => {
     mockGh.getFailedRunLog.mockResolvedValue("error: flakey timeout");
     // Classification returns unrelated
     mockClaude.runAI.mockResolvedValueOnce(
-      '{"related": false, "fingerprint": "flakey-test:auth-timeout", "reason": "intermittent timeout unrelated to PR"}',
+      '{"related": false, "reason": "intermittent timeout unrelated to PR"}',
     );
 
     await run([repo]);
@@ -279,7 +369,7 @@ describe("ci-fixer", () => {
     expect(mockGh.commentOnIssue).toHaveBeenCalledWith(
       repo.fullName,
       99,
-      expect.stringContaining("flakey-test:auth-timeout"),
+      expect.stringContaining("### ci"),
     );
     expect(mockGh.commentOnIssue).toHaveBeenCalledWith(
       repo.fullName,
@@ -294,6 +384,28 @@ describe("ci-fixer", () => {
     );
   });
 
+  it("inconclusive overlap with valid unrelated JSON — files issue with derived fingerprint", async () => {
+    const pr = mockPR();
+    mockGh.listPRs.mockResolvedValue([pr]);
+    mockGh.getFailingCheck.mockResolvedValue({
+      name: "CI / Unit",
+      state: "FAILURE",
+      link: "https://github.com/org/repo/actions/runs/123",
+    });
+    mockGh.getFailedRunLog.mockResolvedValue("FAIL tests/auth.test.ts\nError: timeout");
+    mockGh.getPRChangedFiles.mockResolvedValue(["src/app.ts"]);
+    mockClaude.runAI.mockResolvedValueOnce('{"related": false, "reason": "flaky timeout"}');
+
+    await run([repo]);
+
+    expect(mockClaude.runAI).toHaveBeenCalledTimes(1);
+    expect(mockGh.commentOnIssue).toHaveBeenCalledWith(
+      repo.fullName,
+      99,
+      expect.stringContaining("ci-unit:tests/auth.test.ts"),
+    );
+  });
+
   it("unrelated failure — updates existing issue instead of creating duplicate", async () => {
     const pr = mockPR();
     mockGh.listPRs.mockResolvedValue([pr]);
@@ -304,7 +416,7 @@ describe("ci-fixer", () => {
     });
     mockGh.getFailedRunLog.mockResolvedValue("error: flakey timeout");
     mockClaude.runAI.mockResolvedValueOnce(
-      '{"related": false, "fingerprint": "flakey-test:auth-timeout", "reason": "timeout"}',
+      '{"related": false, "reason": "timeout"}',
     );
     // Existing issue found
     mockGh.searchIssues.mockResolvedValue([
@@ -316,7 +428,7 @@ describe("ci-fixer", () => {
     expect(mockGh.commentOnIssue).toHaveBeenCalledWith(
       repo.fullName,
       50,
-      expect.stringContaining("flakey-test:auth-timeout"),
+      expect.stringContaining("### ci"),
     );
     expect(mockGh.commentOnIssue).toHaveBeenCalledWith(
       repo.fullName,
@@ -335,11 +447,13 @@ describe("ci-fixer", () => {
       state: "FAILURE",
       link: "https://github.com/org/repo/actions/runs/123",
     });
-    mockGh.getFailedRunLog.mockResolvedValue("error: some failure");
-    // First PR: flakey-test fingerprint, second PR: runner fingerprint
+    mockGh.getFailedRunLog
+      .mockResolvedValueOnce("FAIL tests/auth.test.ts\nerror: some failure")
+      .mockResolvedValueOnce("FAIL tests/api.test.ts\nerror: some failure");
+    // Fingerprints are derived from the check name and extracted failing path.
     mockClaude.runAI
-      .mockResolvedValueOnce('{"related": false, "fingerprint": "flakey-test:timeout", "reason": "timeout"}')
-      .mockResolvedValueOnce('{"related": false, "fingerprint": "runner:disk-space", "reason": "disk space"}');
+      .mockResolvedValueOnce('{"related": false, "reason": "timeout"}')
+      .mockResolvedValueOnce('{"related": false, "reason": "disk space"}');
     // Structural grouping: single search, no existing issue
     mockGh.searchIssues.mockResolvedValueOnce([]);
     mockGh.createIssue.mockResolvedValue(99);
@@ -356,12 +470,12 @@ describe("ci-fixer", () => {
     expect(mockGh.commentOnIssue).toHaveBeenCalledWith(
       repo.fullName,
       99,
-      expect.stringContaining("flakey-test:timeout"),
+      expect.stringContaining("ci:tests/auth.test.ts"),
     );
     expect(mockGh.commentOnIssue).toHaveBeenCalledWith(
       repo.fullName,
       99,
-      expect.stringContaining("runner:disk-space"),
+      expect.stringContaining("ci:tests/api.test.ts"),
     );
     expect(mockGh.commentOnIssue).toHaveBeenCalledWith(
       repo.fullName,
@@ -632,6 +746,7 @@ describe("ci-fixer", () => {
     await run([repo]);
 
     // Should proceed with fix (default to related)
+    expect(mockLog.warn).toHaveBeenCalledWith("[ci-fixer] Unparseable classification response; defaulting to related");
     expect(mockClaude.createWorktreeFromBranch).toHaveBeenCalledWith(repo, pr.headRefName, "ci-fixer");
     expect(mockGh.createIssue).not.toHaveBeenCalled();
   });
@@ -1108,7 +1223,8 @@ describe("buildConflictPrompt (policy template)", () => {
 describe("buildClassifyPrompt (policy template)", () => {
   function expected(pr: gh.PR, failLog: string, changedFiles: string[]): string {
     return [
-      `You are classifying a CI failure to determine whether it was caused by the changes in this pull request.`,
+      `You are classifying a CI failure after a deterministic file-overlap check was inconclusive.`,
+      `Decide only whether this is flaky / runner-infra / pre-existing on the base branch versus a genuine failure caused by this pull request.`,
       ``,
       `PR #${pr.number}: ${pr.title}`,
       `Branch: ${pr.headRefName}`,
@@ -1124,24 +1240,18 @@ describe("buildClassifyPrompt (policy template)", () => {
       `Classify this failure. Respond with ONLY a JSON object (no markdown, no explanation):`,
       `{`,
       `  "related": true/false,`,
-      `  "fingerprint": "short-stable-id",`,
       `  "reason": "1-2 sentence explanation"`,
       `}`,
       ``,
       `Classification rules:`,
-      `- "related": true if the failure is caused by or related to the PR's changes`,
-      `  - Failures in files the PR modified → related`,
-      `  - Test failures testing code the PR changed → related`,
-      `  - Build errors from the PR's changes → related`,
+      `- "related": true if this appears to be a genuine failure caused by this PR`,
+      `  - Test failures exercising behavior the PR changed → related`,
+      `  - Build errors caused by the PR's changes → related`,
       `- "related": false if the failure is NOT caused by the PR`,
       `  - Flakey tests (timeouts, race conditions, intermittent failures) → unrelated`,
       `  - CI runner issues (disk space, network, docker pull limits) → unrelated`,
       `  - Pre-existing failures that exist on the base branch → unrelated`,
       `- When in doubt, classify as related (safe default)`,
-      ``,
-      `- "fingerprint": a short, stable, human-readable identifier for this class of failure`,
-      `  Examples: "flakey-test:auth-timeout", "runner:disk-space", "preexisting:lint-config"`,
-      `  Use category:detail format. Be consistent — the same issue should get the same fingerprint.`,
       ``,
       `- "reason": brief explanation of why you classified it this way`,
     ].join("\n");
