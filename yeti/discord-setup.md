@@ -205,7 +205,7 @@ Send these commands in the `#yeti` channel. Only users in `discordAllowedUsers` 
 ### Notifications are not arriving
 
 - Confirm the bot is online (green status in the member list)
-- Check `GET /status` on the Yeti HTTP server — the `discord` field should show `configured: true` and `connected: true`
+- Check `GET /api/overview` on the Yeti HTTP server — the `discord` field should show `configured: true` and `connected: true`
 
 ---
 
