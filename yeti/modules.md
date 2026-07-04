@@ -477,6 +477,12 @@ runs both pipelines and returns a combined prompt section. Used by
 issue-refiner, issue-worker, and review-addresser to give Claude visual and
 file context.
 
+`images.test.ts` mocks `gh auth token` as `ghp_testtoken123`, but the runtime
+helper deliberately prefers `GH_TOKEN` when it is set. When running the full
+Yeti test suite in an environment that exports an ambient GitHub token, set
+`GH_TOKEN=ghp_testtoken123` for the test command so the image and attachment
+authorization-header assertions use the expected placeholder token.
+
 **`startup-announce.ts`** — Announces new deployments. Compares the current
 `VERSION` against `~/.yeti/last-version`; if they differ (or the file doesn't
 exist), sends a notification via `notify()` and updates the file. Skips the
