@@ -164,12 +164,14 @@ The config page (`/config`) lets you view and edit Yeti's configuration directly
 |-----|----------|
 | **General** | GitHub owners, self repo, allowed repos, forks, log level, queue scan interval, log retention, plan review loop (`maxPlanRounds`), and the learnings PR threshold |
 | **Scheduling** | Job intervals and daily schedule hours |
-| **AI** | Worker concurrency, timeouts, and per-job backend/model overrides |
+| **AI** | Worker concurrency plus a **Job Configuration** table with a per-job row for backend (Claude/Copilot/Codex), model override, and an enabled toggle |
 | **Integrations** | Discord bot, GitHub App, and OAuth settings |
-| **Security** | Auth token, webhook secret, enabled jobs, and **autonomy tiers** (default tier plus per-repo overrides) |
+| **Security** | Auth token, webhook secret, and **autonomy tiers** (default tier plus per-repo overrides) |
 
 - **View** --- All current configuration values are displayed. Sensitive fields like tokens are masked. Fields overridden by environment variables are shown as disabled with a note.
 - **Edit** --- Modify `config.json` in-place. Changes are saved to disk and trigger a live reload --- no restart needed for most fields. The active tab is preserved across saves.
+
+The **Job Configuration** table on the AI tab is populated from the registered jobs. Toggling **Enabled** writes the `enabledJobs` list, and changing a job's backend or model writes the [`jobAi`](../reference/configuration.md#example-per-job-ai-overrides) map --- so you can enable, disable, and route jobs without hand-editing arrays.
 
 See the [Configuration](../getting-started/configuration.md) guide for details on which fields reload live and which require a restart.
 

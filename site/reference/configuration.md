@@ -163,6 +163,9 @@ The `jobAi` field lets you route specific jobs to different AI backends or model
 
 Supported backends: `claude` (default), `copilot`, and `codex`. When a `backend` is specified, the job's work is queued through that backend's worker pool (respecting its own concurrency limits and timeouts). When only a `model` is specified, the job still uses the default Claude backend but passes the model name through.
 
+!!! note "Copilot backend and GitHub App auth"
+    When [GitHub App authentication](../getting-started/github-app.md) is enabled, Yeti sets `GH_TOKEN` to the installation token so `gh`/`git` subprocesses use the App identity. Copilot resolves auth from `GH_TOKEN` before its own stored `/login` credentials, and installation tokens carry no Copilot entitlement --- so Yeti strips `GH_TOKEN` from Copilot child processes, letting the CLI fall back to its stored login. Claude and Codex children keep the inherited token. Make sure the Copilot CLI is logged in (`copilot` `/login`) on the host running Yeti before routing jobs to the `copilot` backend.
+
 ---
 
 ## Example: Minimal Config
