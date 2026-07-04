@@ -199,42 +199,53 @@ ci-fixer uses `recordTaskCommits()` and `getCiFixerFixCommitShas()` to revert
 its own previous fix commits deterministically. See
 [Database Schema](database-schema.md).
 
-**`server.ts`** — Minimal `http.Server` with an embedded HTML/CSS/JS dashboard.
-Routes:
+**`server.ts`** — Minimal `http.Server` that owns cross-cutting HTTP
+boundaries and delegates feature data to `api.ts`. It handles:
 
-- `GET /` — Dashboard: job status with Last Run/Next Run columns, "Run" buttons, queue overview
-- `GET /repos` — Repos page: per-repo view of active queue items and recently completed tasks, Add Repo dialog for onboarding new repos
-- `POST /repos/add` — Add a repo to the allowedRepos config
-- `GET /jobs` — Jobs page: all jobs with descriptions, enabled/disabled state, AI backend/model, schedule, Run/Pause controls
-- `GET /health` — JSON health check
-- `GET /status` — JSON with jobs (including `jobSchedules` with per-job `nextRunIn` countdowns), `jobAi` (per-job backend/model config for live dashboard updates), uptime, queue, integrations
-- `GET /login` / `POST /login` — Token-based authentication (also shows "Sign in with GitHub" when OAuth is configured)
-- `GET /auth/github` — Initiate GitHub OAuth flow (redirect to GitHub)
-- `GET /auth/callback` — OAuth callback (exchange code, set session cookie)
-- `GET /auth/logout` — Clear session cookie, redirect to login
-- `POST /trigger/:job` — Manual job trigger (returns 200/409/404)
-- `POST /pause/:job` — Toggle pause/resume for a job
-- `POST /cancel` — Cancel current Claude task
-- `GET /queue` — Work queue page (PRs first, CI status, squash & merge)
-- `POST /queue/merge` — Squash-merge a PR from the queue page
-- `POST /queue/skip` — Skip an issue/PR (excluded from all job processing)
-- `POST /queue/unskip` — Remove skip for an issue/PR
-- `POST /queue/prioritize` — Prioritize an issue/PR (processed first)
-- `POST /queue/deprioritize` — Remove priority for an issue/PR
-- `POST /api/update/check` — Touch the update-check sentinel so systemd starts
-  the updater service via `yeti-updater-trigger.path`
-- `GET /logs` — Log viewer with per-job filtering and item search
-- `GET /logs/:runId` — Individual run detail page with task list
-- `GET /logs/:runId/tail` — Live log tail (JSON, polls for new entries)
-- `GET /logs/issue` — Issue-specific logs page (`?repo=...&number=...`)
-- `GET /config` / `POST /config` — Config viewer/editor (tabbed HTML form with General, Scheduling, AI Backends, Integrations, Security tabs; supports `?tab=` param for direct tab linking; progressive enhancement with JS tab switching and `<a>` fallback)
-- `GET /config/api` — JSON config (sensitive fields masked)
-- `POST /webhooks/github` — GitHub webhook endpoint (HMAC-SHA256 verified, no auth required — see `webhooks.ts`)
+- `POST /webhooks/github` — HMAC-SHA256 verified GitHub webhook endpoint,
+  intentionally outside normal dashboard auth (see `webhooks.ts`)
+- `GET /api/notifications/stream` — authenticated Server-Sent Events stream
+  for notification toasts, replaying rows after `Last-Event-ID`
+- `/api/*` — delegated to `handleApi()` in `api.ts`
+- `GET /health` — JSON deploy/quiesce health check with version, active task
+  count, and update-pending flag
+- `GET /auth/github`, `/auth/callback`, `/auth/logout` — server-side OAuth
+  redirects and cookie setup/clearing
+- Built SPA assets and client-side route fallback via `static.ts`
 
-Supports dark/light/system themes. Auth is enabled when `authToken` is set
-or OAuth is configured (either or both). Accepts `Authorization: Bearer
-<token>` header, `yeti_token` cookie (token auth), or `yeti_session` cookie
-(OAuth). Token comparison uses `crypto.timingSafeEqual`.
+Auth is enabled when `authToken` is set or OAuth is configured (either or
+both). API requests accept `Authorization: Bearer <token>`, `yeti_token`
+cookie (token auth), or `yeti_session` cookie (OAuth). Token comparison uses
+`crypto.timingSafeEqual`. Static SPA routes are served for unauthenticated GETs;
+the client-side router probes `/api/session` and redirects to `/login` when
+auth is required.
+
+**`api.ts`** — JSON API used by the React dashboard. Public endpoints are
+`GET /api/session`, `POST /api/login`, and `POST /api/logout`; every other
+API route calls `requireApiAuth()`. Major read endpoints:
+
+- `GET /api/overview` — status, queues, recent counts, system stats, update
+  state, and pending learning count
+- `GET /api/jobs` — canonical list of every job, including enabled/paused
+  flags, backend/model, schedule, last run, and next-run countdown
+- `GET /api/policies` — loaded policy sources plus per-repo autonomy and job
+  gates
+- `GET /api/queue`, `/api/runs`, `/api/runs/:runId`,
+  `/api/runs/:runId/tail`, `/api/runs/issue` — queue and log data
+- `GET /api/notifications`, `/api/learnings`, `/api/config`, `/api/repos`
+
+Mutation endpoints cover job trigger/pause, task cancellation, update checks,
+queue merge/skip/priority actions, repo onboarding, config saves, and learning
+dismissal. `buildConfigUpdate()` validates incoming JSON by field and only
+writes keys present in the request, so SPA saves can intentionally omit
+unloaded optional sections. Environment-overridden fields are stripped before
+`writeConfig()` to avoid writing values that cannot take effect.
+
+**`static.ts`** — Serves the Vite dashboard build from `dist/public`.
+Concrete files win over SPA fallback. Hashed files under `/assets/` are cached
+with `immutable`, `index.html` is `no-cache`, missing asset requests return
+404 instead of the shell, and path traversal is rejected. If the build output
+is absent, `serve()` returns `false` so `server.ts` can return a normal 404.
 
 **`webhooks.ts`** — GitHub webhook handler for near-real-time event processing.
 Receives events via `POST /webhooks/github` with HMAC-SHA256 signature
@@ -492,3 +503,12 @@ when Discord is not connected at announcement time.
 ## Dashboard (`web/`)
 
 The web dashboard is a first-class consumer of job, config, queue, policy, and autonomy data. It is a React + Vite SPA in `web/`, served by `src/static.ts`; `src/api.ts` provides the JSON API. Navigation includes Overview, Queue, Jobs, Policies, Logs, Repos, Notifications, Learnings, and Config. The Policies page (`web/src/routes/Policies.tsx`, `GET /api/policies`) is read-only and shows loaded policy templates, their resolved override/bundled paths, per-repo effective autonomy (`AUTONOMY_MAP[fullName] ?? DEFAULT_AUTONOMY`), and the pre-flight-gated jobs that would skip at each tier. Any changes to config fields, job states, queue categories, policy/autonomy status, or log/task schemas must be reflected in the corresponding API payload and SPA route — the dashboard is not optional.
+
+`web/src/routes/Config.tsx` treats `GET /api/jobs` as the canonical source for
+job rows. It seeds the local `jobConfig` draft merge-only because the jobs
+query refetches every 10 seconds and includes volatile timing/running fields;
+refreshes must add newly discovered jobs without overwriting unsaved
+backend/model/enabled edits. The global Save button omits `enabledJobs` and
+`jobAi` from `POST /api/config` until at least one job row has loaded, relying
+on `buildConfigUpdate()`'s "only present keys are updated" behavior to avoid
+turning a still-loading job list into `enabledJobs: []`.

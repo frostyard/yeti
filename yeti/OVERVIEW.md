@@ -1,11 +1,9 @@
 # Yeti — Overview
 
-Yeti is a self-hosted
-GitHub automation service. It polls GitHub repositories on configurable timers
-(and optionally receives GitHub webhooks for near-real-time triggers),
-identifies work items via comment analysis, reactions, and PR state, and
-delegates tasks to the Claude CLI in isolated git worktrees. It runs as a
-Linux systemd service.
+Yeti is a self-hosted GitHub automation service. It polls repositories on
+configurable timers (and optionally receives webhooks for near-real-time triggers),
+identifies work items via comment analysis, reactions, and PR state, and runs
+Claude CLI tasks in isolated git worktrees under a Linux systemd service.
 
 ## Architecture
 
@@ -19,7 +17,15 @@ src/
 ├── oauth.ts             Optional GitHub OAuth for dashboard sign-in (stateless sessions, org membership)
 ├── claude.ts            Multi-backend AI dispatch (Claude + Copilot + Codex), BoundedQueue class, worktree helpers
 ├── db.ts                SQLite task tracking (better-sqlite3)
-├── server.ts            HTTP server — dashboard, health, status, manual triggers
+├── server.ts            HTTP server — webhooks, health, OAuth redirects, API/static routing
+├── api.ts               JSON API for the React dashboard and job/config/queue mutations
+├── static.ts            Built SPA static-file server with client-route fallback
+├── http-util.ts         Shared HTTP body, auth, cookie, and JSON helpers
+├── policy.ts            Bundled/user policy template loading and override resolution
+├── capability.ts        Autonomy tier model and action gates
+├── job-meta.ts          Job metadata and dashboard descriptions
+├── quiesce.ts           Update-pending sentinel used by deploy health checks
+├── sysstats.ts          Dashboard system metrics collection
 ├── log.ts               Timestamped logging
 ├── notify.ts            Notification dispatcher — forwards to Discord
 ├── discord.ts           Discord bot — notifications + job control commands (!yeti …)
@@ -34,16 +40,6 @@ src/
 ├── startup-announce.ts  Announces new deployments via notify (version-change detection)
 ├── shutdown.ts          Graceful shutdown flag + ShutdownError class (shared across modules)
 ├── test-helpers.ts      Test factories (mockRepo, mockIssue, mockPR)
-├── pages/
-│   ├── dashboard.ts     Main status page HTML builder
-│   ├── jobs.ts          Jobs page HTML builder (all jobs with backend/model/schedule)
-│   ├── repos.ts         Repos page HTML builder (per-repo active/completed items, add repo dialog)
-│   ├── queue.ts         Work queue page HTML builder
-│   ├── logs.ts          Log list, detail, and issue logs page HTML builders
-│   ├── config.ts        Config editor page HTML builder (tabbed: General, Scheduling, AI, Integrations, Security)
-│   ├── login.ts         Login page HTML builder
-│   ├── notifications.ts Notifications page HTML builder (recent notification history)
-│   └── layout.ts        Shared layout (header, theme, siteTitle, formatters, TOAST_SCRIPT)
 └── jobs/
     ├── issue-refiner.ts        Discovers issues needing plans via comment analysis
     ├── plan-reviewer.ts        Adversarial plan review with thread context; Blocking/Advisory verdict contract
@@ -60,46 +56,49 @@ src/
     ├── prompt-evaluator.ts     Weekly self-improvement: A/B tests prompts, files issues for winners
     └── learning-consolidator.ts  Daily/threshold-triggered: folds pending environment learnings into policies/docs via PR
 
-scripts/
-└── ab-agent-test.sh       A/B test harness comparing AI backends (Claude vs Codex) on real issues
-
-deploy/
-├── yeti.service           systemd service unit
-├── yeti-updater.service   systemd updater service
-├── yeti-updater.timer     systemd timer (hourly)
-├── yeti-updater-trigger.path  systemd path unit for manual update checks
-├── install.sh              One-shot bootstrap installer (repo-aware)
-├── deploy.sh               Auto-update with health check + rollback (repo-aware)
-└── uninstall.sh            Service removal
+`scripts/` contains the AI backend A/B harness; `deploy/` contains systemd service/updater units and repo-aware install/update/rollback/uninstall scripts.
 ```
 
 ### Module Responsibilities
 
-See [Modules](modules.md) for detailed descriptions of each module. Key relationships:
-
-- **`main.ts`** wires everything: DB init, crash recovery, job registration, config reload, graceful shutdown
-- **`config.ts`** loads config (env > config.json > defaults); exports `LABELS`, `INTERVALS`, `SCHEDULES`, `ENABLED_JOBS`
-- **`capability.ts`** enforces autonomy tiers (`advisory` → `issues` → `pr` → `automerge`) for comment/issue/PR/push/merge actions
-- **`scheduler.ts`** runs jobs on intervals or daily schedules with skip-if-busy semantics
-- **`github.ts`** wraps `gh` CLI with retry, rate-limit circuit breaker, TTL cache, and queue cache
-- **`github-app.ts`** optional GitHub App auth (JWT signing, installation tokens, `GH_TOKEN` injection)
-- **`oauth.ts`** optional GitHub OAuth for dashboard sign-in (stateless HMAC cookies, org membership check)
-- **`claude.ts`** multi-backend AI dispatch (3 bounded queues) + git worktree helpers
-- **`db.ts`** SQLite with `tasks`, `job_runs`, `job_logs`, `notifications` tables — see [Database Schema](database-schema.md)
-- **`server.ts`** HTTP dashboard + API routes + webhook endpoint + SSE notifications stream
-- **`webhooks.ts`** GitHub webhook handler (HMAC-verified, routes issues/check_run/comment/pull_request_review/pull_request events to job triggers, auto-merger triggering, and queue cache updates)
-- **`log.ts`** level-gated logging captured to DB via `AsyncLocalStorage`
-- **`error-reporter.ts`** deduplicating error reporter (GitHub issues + Discord, 30-min cooldown)
-- **`learnings.ts`** self-improvement loop gate (`enforceLearnings()`, `stripLearningsDeclaration()`) — persists environment learnings to the `learnings` table and triggers `learning-consolidator.ts`; see [Modules](modules.md) and the "Self-Improvement Loop" section below
-- **`images.ts`** extracts/downloads images and file attachments for AI context
-- **`update-check.ts`** writes the manual update-check sentinel consumed by the systemd path unit
-- **`plan-parser.ts`** parses multi-PR implementation plans into phases; exports shared `PLAN_HEADER` constant
-- **`notify.ts`** / **`discord.ts`** notification dispatch (DB + SSE + Discord) and Discord bot commands
-- **`startup-announce.ts`** announces new deployments; **`shutdown.ts`** shared shutdown flag
+See [Modules](modules.md) for detailed descriptions. At a high level:
+`main.ts` wires DB init, crash recovery, job registration, config reload, and
+shutdown; `config.ts`, `capability.ts`, and `scheduler.ts` define runtime
+settings, autonomy gates, and job cadence; `github.ts`, `github-app.ts`,
+`oauth.ts`, and `claude.ts` provide external GitHub/auth/AI/worktree
+integration; `server.ts`, `api.ts`, `static.ts`, and `webhooks.ts` expose the
+dashboard API, built SPA, health/OAuth routes, SSE, and webhook triggers; and
+`db.ts`, `log.ts`, `error-reporter.ts`, `learnings.ts`, `images.ts`,
+`plan-parser.ts`, `notify.ts`, `discord.ts`, `startup-announce.ts`, and
+`shutdown.ts` provide persistence, observability, self-improvement, prompt
+context, notifications, and lifecycle support.
 
 ### Dashboard (`web/`)
 
-The web dashboard is a first-class consumer of job, config, queue, policy, and autonomy data. It is a React + Vite SPA in `web/`, served by `src/static.ts`; `src/api.ts` provides the JSON API. Navigation includes Overview, Queue, Jobs, Policies, Logs, Repos, Notifications, Learnings, and Config. The Policies page (`web/src/routes/Policies.tsx`, `GET /api/policies`) is read-only and shows loaded policy templates, their resolved override/bundled paths, per-repo effective autonomy (`AUTONOMY_MAP[fullName] ?? DEFAULT_AUTONOMY`), and the pre-flight-gated jobs that would skip at each tier. Any changes to config fields, job states, queue categories, policy/autonomy status, or log/task schemas must be reflected in the corresponding API payload and SPA route — the dashboard is not optional.
+The web dashboard is a React + Vite SPA in `web/`, served by `src/static.ts`;
+`src/api.ts` provides the JSON API under `/api/*`. `server.ts` keeps only
+cross-cutting HTTP concerns: webhook verification, OAuth redirects, health,
+notification SSE, API dispatch, and static SPA fallback. Navigation includes
+Overview, Queue, Jobs, Policies, Logs, Repos, Notifications, Learnings, and
+Config.
+
+The dashboard is a first-class consumer of job, config, queue, policy, and
+autonomy data. Any changes to config fields, job states, queue categories,
+policy/autonomy status, or log/task schemas must be reflected in the
+corresponding `src/api.ts` payload, `web/src/lib/types.ts` type, and SPA route.
+The Policies page (`web/src/routes/Policies.tsx`, `GET /api/policies`) is
+read-only and shows loaded policy templates, their override/bundled source,
+per-repo effective autonomy (`AUTONOMY_MAP[fullName] ?? DEFAULT_AUTONOMY`),
+and the pre-flight-gated jobs that would skip at each tier.
+
+The Config page saves JSON to `POST /api/config`. Its Job Configuration section
+uses `GET /api/jobs` as the canonical job list and edits per-job
+`enabledJobs`/`jobAi` state in the AI tab. Because `useJobs()` refetches every
+10 seconds and includes volatile fields (`running`, `lastRun`, `nextRunIn`),
+job draft state is seeded merge-only: new jobs are added without overwriting
+unsaved edits for existing jobs. Saves omit `enabledJobs` and `jobAi` until the
+job list has loaded, preventing an early global Save from accidentally writing
+an empty enabled-job set.
 
 ## Jobs
 
@@ -361,7 +360,7 @@ Prioritized items are processed before others in job queues via
 
 ### Job Pause/Resume
 
-Individual jobs can be paused and resumed via the dashboard (`POST /pause/:job`)
+Individual jobs can be paused and resumed via the dashboard (`POST /api/jobs/:job/pause`)
 or pre-configured via `pausedJobs` in `config.json`. Paused jobs skip their
 scheduled ticks but can still be triggered manually.
 
@@ -422,6 +421,9 @@ defaults.
 | `defaultAutonomy` | — | `"pr"` (default autonomy tier for repos not listed in `autonomy`) |
 | `autonomy` | — | `{}` (per-repo `owner/repo` autonomy overrides; dashboard saves replace the whole map) |
 | `authToken` | `YETI_AUTH_TOKEN` | *(empty — auth disabled)* |
+| `githubAppId` | `YETI_GITHUB_APP_ID` | *(empty — GitHub App auth disabled)* |
+| `githubAppInstallationId` | `YETI_GITHUB_APP_INSTALLATION_ID` | *(empty)* |
+| `githubAppPrivateKeyPath` | `YETI_GITHUB_APP_PRIVATE_KEY_PATH` | *(empty)* |
 | `githubAppClientId` | `YETI_GITHUB_APP_CLIENT_ID` | *(empty — OAuth disabled)* |
 | `githubAppClientSecret` | `YETI_GITHUB_APP_CLIENT_SECRET` | *(empty — OAuth disabled)* |
 | `externalUrl` | `YETI_EXTERNAL_URL` | *(empty — OAuth disabled; must start with http:// or https://)* |
@@ -457,7 +459,7 @@ When false, Yeti discovers only source repos via `gh repo list --source`. When
 true, forks are included in both worker discovery and the Repos onboarding
 page; PRs created on forks target the fork, not the upstream parent.
 
-Config changes made via the web UI (`POST /config`) and external edits to
+Config changes made via the web UI (`POST /api/config`) and external edits to
 `~/.yeti/config.json` take effect immediately at runtime — no restart required.
 The config module uses ESM live bindings (`export let`) so all consumers see
 updated values on their next access. `writeConfig()` reloads after in-app
